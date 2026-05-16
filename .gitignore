@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.hypothesis/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Secrets and env files — only .env.example is committed
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+
+# Database / backups
+*.sqlite
+*.sqlite3
+*.db
+dumps/
+backups/
+*.sql.gz
+*.dump
+
+# Docker / persistent volumes (named volumes only; never commit data dirs)
+caddy_data/
+caddy_config/
+postgres_data/
+ollama_data/
+
+# IDEs / editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
+
+# Tooling caches
+.ruff_cache/
+.mypy_cache/
+.pytype/
+.pyre/
+
+# Logs
+*.log
+logs/
+
+# Jupyter
+.ipynb_checkpoints/
