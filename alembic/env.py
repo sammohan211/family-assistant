@@ -8,6 +8,7 @@ from alembic import context
 
 # Import each module's models so they're registered with Base.metadata.
 # Add new lines here as modules introduce models.
+from family_assistant.ai_gateway import models as _ai_gateway_models  # noqa: F401
 from family_assistant.auth import models as _auth_models  # noqa: F401
 from family_assistant.db import Base
 from family_assistant.exercise import models as _exercise_models  # noqa: F401

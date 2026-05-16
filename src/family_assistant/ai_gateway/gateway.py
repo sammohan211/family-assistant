@@ -1,12 +1,183 @@
-"""AI Gateway entry point (PRD Section 16.7).
+"""AI Gateway entry point (PRD Sections 11, 16.7).
 
-The single internal entry consumed by the assistant router. Will orchestrate
-prompt loading, Ollama LLM calls, retrieval (pgvector + keyword), tool
-schema validation and dispatch, the confirmation policy (Section 11.6),
-and AssistantInteraction logging (Section 11.10).
+`process_command` is the single internal entry consumed by the assistant
+router. Orchestrates: build prompt → call LLM → validate tool calls →
+classify risk → execute (low-risk auto, medium/high stage for confirmation)
+→ log AssistantInteraction.
 """
 
+import time
+from dataclasses import dataclass, field
+from typing import Any
 
-def process_command(user_id: int, input_text: str):
-    """Parse and dispatch a user command. See PRD Section 11."""
-    raise NotImplementedError
+from sqlalchemy.orm import Session as DbSession
+
+from family_assistant.ai_gateway.llm import LLMClient, OllamaClient
+from family_assistant.ai_gateway.models import AssistantInteraction
+from family_assistant.ai_gateway.prompt import build_context, render_messages
+from family_assistant.ai_gateway.risk import RiskTier, classify
+from family_assistant.ai_gateway.tools import (
+    ToolResult,
+    ToolValidationError,
+    ValidatedToolCall,
+    execute_tool_call,
+    validate_tool_call,
+)
+from family_assistant.auth.models import User
+
+
+@dataclass
+class GatewayResult:
+    interaction_id: int
+    reply: str
+    confirmation_status: str
+    risk: RiskTier
+    proposed_tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    executed_tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    validation_errors: list[dict[str, Any]] = field(default_factory=list)
+    error: str | None = None
+
+
+def _serialize_proposed(
+    calls: list[ValidatedToolCall], errors: list[ToolValidationError]
+) -> list[dict[str, Any]]:
+    serialized: list[dict[str, Any]] = []
+    for call in calls:
+        serialized.append({"name": call.name, "args": call.raw_args, "validation": "ok"})
+    for err in errors:
+        serialized.append(
+            {"name": err.name, "args": err.raw_args, "validation": "error", "error": err.error}
+        )
+    return serialized
+
+
+def _serialize_executed(
+    calls: list[ValidatedToolCall], results: list[ToolResult]
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "name": call.name,
+            "args": call.raw_args,
+            "outcome": result.outcome,
+            "affected_table": result.affected_table,
+            "affected_ids": result.affected_ids,
+            "error": result.error,
+        }
+        for call, result in zip(calls, results, strict=True)
+    ]
+
+
+def _affected_record_ids(
+    calls: list[ValidatedToolCall], results: list[ToolResult]
+) -> dict[str, list[int]]:
+    grouped: dict[str, list[int]] = {}
+    for _call, result in zip(calls, results, strict=True):
+        if result.outcome != "success" or not result.affected_table:
+            continue
+        grouped.setdefault(result.affected_table, []).extend(result.affected_ids)
+    return grouped
+
+
+def process_command(
+    user: User,
+    input_text: str,
+    db: DbSession,
+    llm: LLMClient | None = None,
+) -> GatewayResult:
+    started = time.monotonic()
+    llm = llm or OllamaClient()
+
+    context = build_context(db, input_text)
+    messages = render_messages(context, input_text)
+
+    error_log: str | None = None
+    reply: str = ""
+    raw_calls: list[dict[str, Any]] = []
+
+    try:
+        response = llm.chat_json(messages)
+        reply = str(response.get("reply", "") or "")
+        raw_calls = list(response.get("tool_calls") or [])
+    except Exception as exc:
+        error_log = f"LLM call failed: {type(exc).__name__}: {exc}"
+
+    validated: list[ValidatedToolCall] = []
+    validation_errors: list[ToolValidationError] = []
+    for raw in raw_calls:
+        if not isinstance(raw, dict):
+            validation_errors.append(
+                ToolValidationError(
+                    name="<malformed>", raw_args={}, error=f"Not an object: {raw!r}"
+                )
+            )
+            continue
+        name = str(raw.get("name", ""))
+        args = raw.get("args") or {}
+        if not isinstance(args, dict):
+            validation_errors.append(
+                ToolValidationError(
+                    name=name, raw_args={}, error=f"args is not an object: {args!r}"
+                )
+            )
+            continue
+        outcome = validate_tool_call(name, args)
+        if isinstance(outcome, ToolValidationError):
+            validation_errors.append(outcome)
+        else:
+            validated.append(outcome)
+
+    risk: RiskTier = classify(validated)
+    proposed = _serialize_proposed(validated, validation_errors)
+
+    executed_serialized: list[dict[str, Any]] = []
+    affected: dict[str, list[int]] = {}
+    confirmation_status: str
+
+    if error_log is not None:
+        confirmation_status = "auto"
+        if not reply:
+            reply = "Sorry, I couldn't reach the assistant right now. Please try again."
+    elif not validated and not validation_errors:
+        confirmation_status = "auto"
+    elif risk == "low" and validated and not validation_errors:
+        results = [execute_tool_call(call, db, user) for call in validated]
+        executed_serialized = _serialize_executed(validated, results)
+        affected = _affected_record_ids(validated, results)
+        confirmation_status = "auto"
+        if any(r.outcome != "success" for r in results):
+            error_log = "; ".join(r.error for r in results if r.error) or None
+    else:
+        confirmation_status = "pending_confirmation"
+        if not reply:
+            reply = "I need your confirmation before doing this. See the proposed actions above."
+
+    latency_ms = int((time.monotonic() - started) * 1000)
+
+    interaction = AssistantInteraction(
+        user_id=user.id,
+        input_text=input_text,
+        parsed_intent=None,
+        parsed_entities=None,
+        proposed_tool_calls=proposed,
+        confirmation_status=confirmation_status,
+        executed_tool_calls=executed_serialized,
+        affected_record_ids=affected,
+        latency_ms=latency_ms,
+        error_log=error_log,
+    )
+    db.add(interaction)
+    db.commit()
+    db.refresh(interaction)
+
+    return GatewayResult(
+        interaction_id=interaction.id,
+        reply=reply,
+        confirmation_status=confirmation_status,
+        risk=risk,
+        proposed_tool_calls=proposed,
+        executed_tool_calls=executed_serialized,
+        validation_errors=[
+            {"name": e.name, "args": e.raw_args, "error": e.error} for e in validation_errors
+        ],
+        error=error_log,
+    )
