@@ -1,0 +1,16 @@
+# Reverse proxy for the Family Assistant app.
+# CADDY_TLS values:
+#   internal       -> use Caddy's internal CA (home / Tailscale / LAN)
+#   <email>        -> use Let's Encrypt with this contact email (cloud)
+{$APP_HOSTNAME} {
+    tls {$CADDY_TLS}
+
+    encode gzip
+
+    reverse_proxy app:8000
+
+    log {
+        output stdout
+        format json
+    }
+}

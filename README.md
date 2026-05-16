@@ -31,6 +31,37 @@ cp .env.example .env         # fill in values; never commit a populated .env
 
 Run commands inside the project env with `uv run <cmd>` (e.g., `uv run pytest`), or activate the env once with `source .venv/bin/activate`.
 
+## Running the stack with Docker
+
+The Docker Compose stack runs identically at home and in the cloud (PRD Section 17). Only `.env` and the choice of compose overrides differ.
+
+**Home (with NVIDIA GPU):**
+
+```bash
+cp .env.example .env       # fill in POSTGRES_PASSWORD, SESSION_SECRET, etc.
+docker compose -f compose.yml -f compose.gpu.yml up -d --build
+docker compose exec ollama ollama pull llama3.1:8b         # one-time
+docker compose exec ollama ollama pull nomic-embed-text    # one-time
+```
+
+**Cloud (CPU-only or any host without NVIDIA):**
+
+```bash
+cp .env.example .env       # set CADDY_TLS=you@email.com, APP_HOSTNAME=your.domain
+docker compose up -d --build
+docker compose exec ollama ollama pull llama3.2:3b         # smaller model for CPU
+docker compose exec ollama ollama pull nomic-embed-text
+```
+
+Verify:
+
+```bash
+curl -k https://${APP_HOSTNAME}/health
+# {"status":"ok"}
+```
+
+Caddy serves HTTPS on port 443 (internal CA at home, Let's Encrypt in cloud). Postgres and Ollama are only reachable from within the Compose network — never published to the host.
+
 ## Repo layout (populated as modules land)
 
 ```
