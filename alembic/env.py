@@ -10,6 +10,7 @@ from alembic import context
 # Add new lines here as modules introduce models.
 from family_assistant.auth import models as _auth_models  # noqa: F401
 from family_assistant.db import Base
+from family_assistant.family_member import models as _family_member_models  # noqa: F401
 from family_assistant.settings import get_settings
 
 config = context.config

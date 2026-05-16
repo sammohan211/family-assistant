@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from family_assistant.auth.models import User
 from family_assistant.auth.services import hash_password
 from family_assistant.db import Base, get_session
+from family_assistant.family_member import models as _family_member_models  # noqa: F401
 from family_assistant.main import app
 from family_assistant.settings import get_settings
 
@@ -86,3 +87,14 @@ def seeded_user(db_session: Session, user_password: str) -> User:
     db_session.add(user)
     db_session.commit()
     return user
+
+
+@pytest.fixture
+def authenticated_client(client: TestClient, seeded_user: User, user_password: str) -> TestClient:
+    """TestClient that has already logged in as seeded_user (session cookie set)."""
+    client.post(
+        "/auth/login",
+        data={"email": seeded_user.email, "password": user_password},
+        follow_redirects=False,
+    )
+    return client

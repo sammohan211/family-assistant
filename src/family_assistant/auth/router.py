@@ -1,11 +1,9 @@
 """Auth router (PRD Section 10.1)."""
 
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Cookie, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session as DbSession
 
 from family_assistant.auth.dependencies import SESSION_COOKIE_NAME
@@ -16,11 +14,9 @@ from family_assistant.auth.services import (
     delete_session,
 )
 from family_assistant.db import get_session
+from family_assistant.templating import templates
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-_TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
-templates = Jinja2Templates(directory=_TEMPLATES_DIR)
 
 
 @router.get("/login", response_class=HTMLResponse)
