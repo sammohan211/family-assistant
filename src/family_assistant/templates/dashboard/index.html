@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard · Family Assistant{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto px-4 py-8 space-y-6">
+  <div>
+    <h1 class="text-2xl font-semibold">Dashboard</h1>
+    <p class="text-sm text-gray-500">{{ today.strftime('%A, %B %-d, %Y') }}</p>
+  </div>
+
+  <div class="grid gap-6 md:grid-cols-2">
+    <section class="rounded-lg border border-gray-200 bg-white p-6 space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-semibold">Today's meals</h2>
+        <a href="/meal-plan" class="text-sm text-blue-600 hover:underline">Meal plan</a>
+      </div>
+      {% if todays_meals %}
+      <ul class="divide-y divide-gray-200">
+        {% for meal in todays_meals %}
+        <li class="py-2 flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <p class="font-medium truncate">{{ meal.title }}</p>
+            {% if meal.notes %}<p class="text-xs text-gray-500 truncate">{{ meal.notes }}</p>{% endif %}
+          </div>
+          <span class="text-xs uppercase tracking-wide bg-gray-100 text-gray-600 px-2 py-1 rounded-full shrink-0">{{ meal.meal_type }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="text-sm text-gray-500">Nothing planned for today.</p>
+      {% endif %}
+    </section>
+
+    <section class="rounded-lg border border-gray-200 bg-white p-6 space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-semibold">School lunches this week</h2>
+        <a href="/lunch-plan" class="text-sm text-blue-600 hover:underline">Lunch plan</a>
+      </div>
+      {% if lunch_summary %}
+      <ul class="divide-y divide-gray-200">
+        {% for row in lunch_summary %}
+        <li class="py-2 flex items-center justify-between gap-3">
+          <span class="font-medium">{{ row.member.name }}</span>
+          {% if row.total %}
+          <span class="text-sm text-gray-600">
+            {{ row.packed }} packed
+            <span class="text-gray-400">·</span>
+            {{ row.planned }} planned
+          </span>
+          {% else %}
+          <span class="text-sm text-gray-400">No lunches this week</span>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="text-sm text-gray-500">
+        No family members yet.
+        <a href="/family/new" class="text-blue-600 hover:underline">Add one</a>.
+      </p>
+      {% endif %}
+    </section>
+
+    <section class="rounded-lg border border-gray-200 bg-white p-6 space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-semibold">Grocery</h2>
+        <a href="/grocery" class="text-sm text-blue-600 hover:underline">{{ open_count }} open</a>
+      </div>
+      <form method="post" action="/dashboard/grocery/quick-add" class="flex gap-2">
+        {{ csrf_input() }}
+        <input type="text" name="name" required placeholder="Add an item"
+               class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+        <button type="submit" class="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">Add</button>
+      </form>
+      {% if open_items %}
+      <ul class="text-sm text-gray-700 space-y-1">
+        {% for item in open_items[:5] %}
+        <li class="flex items-center justify-between gap-3">
+          <span class="truncate">{{ item.name }}</span>
+          {% if item.quantity %}<span class="text-xs text-gray-500 shrink-0">{{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}</span>{% endif %}
+        </li>
+        {% endfor %}
+        {% if open_count > 5 %}
+        <li class="text-xs text-gray-500">+{{ open_count - 5 }} more</li>
+        {% endif %}
+      </ul>
+      {% else %}
+      <p class="text-sm text-gray-500">No open items.</p>
+      {% endif %}
+    </section>
+
+    <section class="rounded-lg border border-gray-200 bg-white p-6 space-y-3">
+      <h2 class="text-lg font-semibold">Recent assistant activity</h2>
+      <p class="text-sm text-gray-500">Coming soon — the assistant module is not wired up yet.</p>
+    </section>
+  </div>
+</div>
+{% endblock %}

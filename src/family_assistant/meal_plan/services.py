@@ -30,6 +30,15 @@ def list_week_entries(db: DbSession, *, week_start: date) -> list[MealPlanEntry]
     return list(db.scalars(_with_user(statement)).all())
 
 
+def list_entries_for_date(db: DbSession, *, day: date) -> list[MealPlanEntry]:
+    statement = (
+        select(MealPlanEntry)
+        .where(MealPlanEntry.date == day)
+        .order_by(MealPlanEntry.meal_type, MealPlanEntry.id)
+    )
+    return list(db.scalars(_with_user(statement)).all())
+
+
 def list_recent_entries(
     db: DbSession, limit: int = 12, favorites_only: bool = False
 ) -> list[MealPlanEntry]:

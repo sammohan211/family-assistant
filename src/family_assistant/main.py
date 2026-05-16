@@ -53,5 +53,5 @@ def root(
     session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE_NAME)] = None,
 ) -> RedirectResponse:
     if session_token and get_session_user(db, session_token) is not None:
-        return RedirectResponse(url="/grocery", status_code=303)
+        return RedirectResponse(url="/dashboard", status_code=303)
     return RedirectResponse(url="/auth/login", status_code=303)

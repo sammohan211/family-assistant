@@ -41,7 +41,7 @@ def login(
             status_code=401,
         )
     session = create_session(db, user)
-    redirect = RedirectResponse(url="/grocery", status_code=303)
+    redirect = RedirectResponse(url="/dashboard", status_code=303)
     redirect.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=session.token,

@@ -44,7 +44,7 @@ def test_login_correct_credentials_redirects_and_sets_cookie(
         follow_redirects=False,
     )
     assert response.status_code == 303
-    assert response.headers["location"] == "/grocery"
+    assert response.headers["location"] == "/dashboard"
     assert SESSION_COOKIE_NAME in response.cookies
 
 
