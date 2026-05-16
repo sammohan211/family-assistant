@@ -7,20 +7,30 @@ stay isolated and get rolled back when the test finishes.
 """
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from family_assistant.auth.models import User
+from alembic import command
+from alembic.config import Config
+from family_assistant.auth.models import User, UserSession
 from family_assistant.auth.services import hash_password
-from family_assistant.db import Base, get_session
-from family_assistant.family_member import models as _family_member_models  # noqa: F401
+from family_assistant.db import get_session
 from family_assistant.main import app
 from family_assistant.settings import get_settings
+
+ALEMBIC_INI = Path(__file__).resolve().parent.parent / "alembic.ini"
+
+
+def _alembic_config(database_url: str) -> Config:
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", database_url)
+    return cfg
 
 
 @pytest.fixture(scope="session")
@@ -28,8 +38,10 @@ def engine() -> Iterator[Engine]:
     url = make_url(get_settings().database_url).set(database="family_assistant_test")
     engine = create_engine(url, future=True)
     try:
-        with engine.connect():
-            pass
+        with engine.connect() as conn:
+            conn.execute(text("DROP SCHEMA public CASCADE"))
+            conn.execute(text("CREATE SCHEMA public"))
+            conn.commit()
     except OperationalError as e:
         pytest.fail(
             f"Test database not reachable at {url}.\n"
@@ -37,9 +49,8 @@ def engine() -> Iterator[Engine]:
             f"  docker compose exec postgres createdb -U family_assistant family_assistant_test\n"
             f"Underlying error: {e}"
         )
-    Base.metadata.create_all(engine)
+    command.upgrade(_alembic_config(str(url)), "head")
     yield engine
-    Base.metadata.drop_all(engine)
     engine.dispose()
 
 
@@ -83,18 +94,35 @@ def user_password() -> str:
 
 @pytest.fixture
 def seeded_user(db_session: Session, user_password: str) -> User:
-    user = User(email="alice@example.com", password_hash=hash_password(user_password))
+    user = User(name="Alice", email="alice@example.com", password_hash=hash_password(user_password))
     db_session.add(user)
     db_session.commit()
     return user
 
 
 @pytest.fixture
-def authenticated_client(client: TestClient, seeded_user: User, user_password: str) -> TestClient:
-    """TestClient that has already logged in as seeded_user (session cookie set)."""
+def authenticated_client(
+    client: TestClient, seeded_user: User, user_password: str, db_session: Session
+) -> TestClient:
+    """TestClient logged in as seeded_user. POSTs auto-include the session's CSRF token."""
     client.post(
         "/auth/login",
         data={"email": seeded_user.email, "password": user_password},
         follow_redirects=False,
     )
+    session_row = db_session.scalar(
+        select(UserSession).where(UserSession.user_id == seeded_user.id)
+    )
+    assert session_row is not None
+    csrf_token = session_row.csrf_token
+    client.csrf_token = csrf_token  # type: ignore[attr-defined]
+
+    original_post = client.post
+
+    def post_with_csrf(url, *args, data=None, **kwargs):
+        merged = dict(data or {})
+        merged.setdefault("_csrf", csrf_token)
+        return original_post(url, *args, data=merged, **kwargs)
+
+    client.post = post_with_csrf  # type: ignore[method-assign]
     return client

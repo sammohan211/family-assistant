@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Lunch Plan · Family Assistant{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-8 space-y-8">
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-semibold">Lunch plan</h1>
+      <p class="text-sm text-gray-500">Week of {{ week_start.strftime("%b %-d") }} to {{ week_end.strftime("%b %-d") }}</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="/lunch-plan?week_start={{ prev_week.isoformat() }}"
+         class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:border-gray-400">
+        Previous week
+      </a>
+      <a href="/lunch-plan?week_start={{ next_week.isoformat() }}"
+         class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:border-gray-400">
+        Next week
+      </a>
+      <a href="/lunch-plan/new"
+         class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+        Add lunch
+      </a>
+    </div>
+  </div>
+
+  {% if family_members %}
+  <section class="space-y-6">
+    {% for member in family_members %}
+    {% set grid = member_grids[member.id] %}
+    <article class="space-y-4">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h2 class="text-lg font-semibold">{{ member.name }}</h2>
+          {% if member.school_days %}
+          <p class="text-sm text-gray-500">School days: {{ member.school_days | join(", ") | title }}</p>
+          {% endif %}
+          {% if member.notes %}
+          <p class="text-sm text-gray-500">{{ member.notes }}</p>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if grid.days %}
+      <div class="grid gap-4 lg:grid-cols-5">
+        {% for day in grid.days %}
+        <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm space-y-3">
+          <div class="flex items-center justify-between gap-2">
+            <div>
+              <h3 class="font-medium">{{ day.strftime("%A") }}</h3>
+              <p class="text-xs text-gray-500">{{ day.strftime("%b %-d") }}</p>
+            </div>
+            <a href="/lunch-plan/new?date={{ day.isoformat() }}&family_member_id={{ member.id }}"
+               class="text-xs text-blue-600 hover:underline">
+              Add
+            </a>
+          </div>
+
+          {% set entries = grid.entries_by_day[day] %}
+          {% if entries %}
+          <div class="space-y-3">
+            {% for entry in entries %}
+            <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
+              <div class="flex items-start justify-between gap-2">
+                <div class="text-xs uppercase tracking-wide {% if entry.packed_status == 'packed' %}text-green-700{% else %}text-amber-700{% endif %}">
+                  {{ entry.packed_status }}
+                </div>
+                <a href="/lunch-plan/{{ entry.id }}/edit" class="text-xs text-blue-600 hover:underline">Edit</a>
+              </div>
+              <ul class="list-disc pl-5 text-sm text-gray-700">
+                {% for item in entry.items %}
+                <li>
+                  {{ item.name }}
+                  {% if item.notes %}
+                  <span class="text-gray-500">({{ item.notes }})</span>
+                  {% endif %}
+                </li>
+                {% endfor %}
+              </ul>
+              {% if entry.notes %}
+              <p class="text-sm text-gray-600">{{ entry.notes }}</p>
+              {% endif %}
+              <div class="flex items-center justify-between gap-2 text-xs">
+                <span class="text-gray-500">{{ entry.created_by_user.name }}</span>
+                <form method="post" action="/lunch-plan/{{ entry.id }}/status">
+                  {{ csrf_input() }}
+                  {% if entry.packed_status == "planned" %}
+                  <input type="hidden" name="packed_status" value="packed">
+                  <button type="submit" class="text-green-700 hover:underline">Mark packed</button>
+                  {% else %}
+                  <input type="hidden" name="packed_status" value="planned">
+                  <button type="submit" class="text-blue-600 hover:underline">Mark planned</button>
+                  {% endif %}
+                </form>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="text-sm text-gray-400">No lunch planned.</p>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="text-sm text-gray-500">
+        No school days configured for {{ member.name }}.
+        <a href="/family/{{ member.id }}/edit" class="text-blue-600 hover:underline">Add some</a>
+        to plan lunches.
+      </p>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </section>
+  {% else %}
+  <div class="rounded-lg border border-gray-200 bg-white p-6 text-gray-500">
+    Add family members first so lunches can be planned by child.
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -37,9 +37,9 @@ def authenticate(db: DbSession, email: str, password: str) -> User | None:
 
 
 def create_session(db: DbSession, user: User) -> UserSession:
-    token = secrets.token_urlsafe(32)
     session = UserSession(
-        token=token,
+        token=secrets.token_urlsafe(32),
+        csrf_token=secrets.token_urlsafe(32),
         user_id=user.id,
         expires_at=datetime.now(UTC) + SESSION_DURATION,
     )
@@ -69,16 +69,20 @@ def delete_session(db: DbSession, token: str) -> None:
 def seed_users(db: DbSession) -> None:
     """Idempotent: ensure the two pre-seeded users from env exist with current password hashes."""
     settings = get_settings()
-    pairs = [
-        (settings.user1_email, settings.user1_password_hash),
-        (settings.user2_email, settings.user2_password_hash),
+    triples = [
+        (settings.user1_email, settings.user1_password_hash, settings.user1_name),
+        (settings.user2_email, settings.user2_password_hash, settings.user2_name),
     ]
-    for email, password_hash in pairs:
+    for email, password_hash, name in triples:
         if not email or not password_hash:
             continue
+        resolved_name = name or email.split("@", 1)[0]
         existing = db.scalar(select(User).where(User.email == email))
         if existing is None:
-            db.add(User(email=email, password_hash=password_hash))
-        elif existing.password_hash != password_hash:
-            existing.password_hash = password_hash
+            db.add(User(name=resolved_name, email=email, password_hash=password_hash))
+        else:
+            if existing.password_hash != password_hash:
+                existing.password_hash = password_hash
+            if name and existing.name != name:
+                existing.name = name
     db.commit()

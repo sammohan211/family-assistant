@@ -10,14 +10,19 @@ from alembic import context
 # Add new lines here as modules introduce models.
 from family_assistant.auth import models as _auth_models  # noqa: F401
 from family_assistant.db import Base
+from family_assistant.exercise import models as _exercise_models  # noqa: F401
 from family_assistant.family_member import models as _family_member_models  # noqa: F401
+from family_assistant.grocery import models as _grocery_models  # noqa: F401
+from family_assistant.lunch_plan import models as _lunch_plan_models  # noqa: F401
+from family_assistant.meal_plan import models as _meal_plan_models  # noqa: F401
 from family_assistant.settings import get_settings
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+if not config.get_main_option("sqlalchemy.url"):
+    config.set_main_option("sqlalchemy.url", get_settings().database_url)
 
 target_metadata = Base.metadata
 

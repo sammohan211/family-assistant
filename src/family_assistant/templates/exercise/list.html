@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Exercise · Family Assistant{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8 space-y-8">
+  <div class="flex items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-semibold">Exercise log</h1>
+      <p class="text-sm text-gray-500">Shared history across both adult accounts.</p>
+    </div>
+    <a href="/exercise/new"
+       class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+      Log activity
+    </a>
+  </div>
+
+  {% if entries %}
+  <ul class="divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
+    {% for entry in entries %}
+    <li class="flex items-start justify-between gap-4 px-4 py-4">
+      <div>
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="font-medium">{{ entry.activity_type }}</span>
+          <span class="text-sm text-gray-500">{{ entry.duration_minutes }} min</span>
+        </div>
+        <p class="text-sm text-gray-500">{{ entry.date.isoformat() }} · {{ entry.user.name }}</p>
+        {% if entry.notes %}
+        <p class="mt-1 text-sm text-gray-600">{{ entry.notes }}</p>
+        {% endif %}
+      </div>
+      <a href="/exercise/{{ entry.id }}/edit" class="text-sm text-blue-600 hover:underline">Edit</a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-gray-500">No exercise logged yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -44,7 +44,7 @@ def test_login_correct_credentials_redirects_and_sets_cookie(
         follow_redirects=False,
     )
     assert response.status_code == 303
-    assert response.headers["location"] == "/"
+    assert response.headers["location"] == "/grocery"
     assert SESSION_COOKIE_NAME in response.cookies
 
 
@@ -69,10 +69,44 @@ def test_logout_deletes_session_and_clears_cookie(
         "/auth/login",
         data={"email": seeded_user.email, "password": user_password},
     )
-    response = client.post("/auth/logout", follow_redirects=False)
+    session_row = db_session.scalar(
+        select(UserSession).where(UserSession.user_id == seeded_user.id)
+    )
+    assert session_row is not None
+    response = client.post(
+        "/auth/logout",
+        data={"_csrf": session_row.csrf_token},
+        follow_redirects=False,
+    )
     assert response.status_code == 303
     assert response.headers["location"] == "/auth/login"
     sessions = db_session.scalars(
         select(UserSession).where(UserSession.user_id == seeded_user.id)
     ).all()
     assert len(sessions) == 0
+
+
+def test_post_without_csrf_token_is_rejected(authenticated_client: TestClient) -> None:
+    # Bypass the fixture's auto-injection by calling the underlying TestClient post.
+    response = TestClient.post(
+        authenticated_client,
+        "/grocery",
+        data={"name": "Milk"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 403
+
+
+def test_post_with_wrong_csrf_token_is_rejected(authenticated_client: TestClient) -> None:
+    response = TestClient.post(
+        authenticated_client,
+        "/grocery",
+        data={"name": "Milk", "_csrf": "not-the-right-token"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 403
+
+
+def test_post_without_session_is_rejected(client: TestClient) -> None:
+    response = client.post("/grocery", data={"name": "Milk"}, follow_redirects=False)
+    assert response.status_code == 403

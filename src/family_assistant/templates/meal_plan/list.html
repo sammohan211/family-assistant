@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Meal Plan · Family Assistant{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-8 space-y-8">
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-semibold">Meal plan</h1>
+      <p class="text-sm text-gray-500">Week of {{ week_start.strftime("%b %-d") }} to {{ week_end.strftime("%b %-d") }}</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="/meal-plan?week_start={{ prev_week.isoformat() }}"
+         class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:border-gray-400">
+        Previous week
+      </a>
+      <a href="/meal-plan?week_start={{ next_week.isoformat() }}"
+         class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:border-gray-400">
+        Next week
+      </a>
+      <a href="/meal-plan/new"
+         class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+        Add meal
+      </a>
+    </div>
+  </div>
+
+  <section class="grid gap-4 lg:grid-cols-7">
+    {% for day in days %}
+    <article class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm space-y-4">
+      <div>
+        <h2 class="font-semibold">{{ day.strftime("%A") }}</h2>
+        <p class="text-sm text-gray-500">{{ day.strftime("%b %-d") }}</p>
+      </div>
+      {% for meal_type in meal_types %}
+      <div class="space-y-2">
+        <div class="flex items-center justify-between gap-2">
+          <h3 class="text-sm font-medium capitalize text-gray-700">{{ meal_type }}</h3>
+          <a href="/meal-plan/new?meal_date={{ day.isoformat() }}&meal_type={{ meal_type }}"
+             class="text-xs text-blue-600 hover:underline">
+            Add
+          </a>
+        </div>
+        {% set entries = grouped_entries[day][meal_type] %}
+        {% if entries %}
+        <div class="space-y-2">
+          {% for entry in entries %}
+          <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
+            <div class="flex items-start justify-between gap-2">
+              <div>
+                <div class="font-medium">{{ entry.title }}</div>
+                {% if entry.is_favorite %}
+                <div class="text-xs uppercase tracking-wide text-amber-600">Favorite</div>
+                {% endif %}
+              </div>
+              <a href="/meal-plan/{{ entry.id }}/edit" class="text-xs text-blue-600 hover:underline">Edit</a>
+            </div>
+            {% if entry.notes %}
+            <p class="text-sm text-gray-600">{{ entry.notes }}</p>
+            {% endif %}
+            <div class="flex items-center justify-between gap-2 text-xs text-gray-500">
+              <span>{{ entry.created_by_user.name }}</span>
+              <form method="post" action="/meal-plan/{{ entry.id }}/duplicate">
+                {{ csrf_input() }}
+                <input type="hidden" name="date" value="{{ day.isoformat() }}">
+                <button type="submit" class="text-blue-600 hover:underline">Reuse</button>
+              </form>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-400">Nothing planned.</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </article>
+    {% endfor %}
+  </section>
+
+  <section class="grid gap-6 lg:grid-cols-2">
+    <div class="space-y-3">
+      <h2 class="text-lg font-semibold">Favorite meals</h2>
+      {% if favorite_entries %}
+      <ul class="divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
+        {% for entry in favorite_entries %}
+        <li class="flex items-center justify-between gap-4 px-4 py-3">
+          <div>
+            <div class="font-medium">{{ entry.title }}</div>
+            <div class="text-sm text-gray-500 capitalize">{{ entry.meal_type }}</div>
+          </div>
+          <form method="post" action="/meal-plan/{{ entry.id }}/duplicate" class="flex items-center gap-2">
+            {{ csrf_input() }}
+            <input type="date" name="date" value="{{ week_start.isoformat() }}" class="rounded-md border border-gray-300 px-2 py-1 text-sm">
+            <button type="submit" class="text-sm text-blue-600 hover:underline">Reuse</button>
+          </form>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="text-gray-500">Mark a meal as favorite to reuse it faster.</p>
+      {% endif %}
+    </div>
+
+    <div class="space-y-3">
+      <h2 class="text-lg font-semibold">Recent meals</h2>
+      {% if recent_entries %}
+      <ul class="divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
+        {% for entry in recent_entries %}
+        <li class="flex items-center justify-between gap-4 px-4 py-3">
+          <div>
+            <div class="font-medium">{{ entry.title }}</div>
+            <div class="text-sm text-gray-500">{{ entry.date.isoformat() }} · {{ entry.meal_type }}</div>
+          </div>
+          <a href="/meal-plan/{{ entry.id }}/edit" class="text-sm text-blue-600 hover:underline">Edit</a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="text-gray-500">Recent meals appear once you start planning.</p>
+      {% endif %}
+    </div>
+  </section>
+</div>
+{% endblock %}

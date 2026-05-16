@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     database_url: str
     session_secret: str
     app_base_url: str
+    cookie_secure: bool = True
 
     ollama_base_url: str = "http://ollama:11434"
     ollama_model: str = "llama3.1:8b"
@@ -18,8 +19,10 @@ class Settings(BaseSettings):
 
     user1_email: str | None = None
     user1_password_hash: str | None = None
+    user1_name: str | None = None
     user2_email: str | None = None
     user2_password_hash: str | None = None
+    user2_name: str | None = None
 
 
 @lru_cache

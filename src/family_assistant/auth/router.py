@@ -14,6 +14,7 @@ from family_assistant.auth.services import (
     delete_session,
 )
 from family_assistant.db import get_session
+from family_assistant.settings import get_settings
 from family_assistant.templating import templates
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -40,13 +41,13 @@ def login(
             status_code=401,
         )
     session = create_session(db, user)
-    redirect = RedirectResponse(url="/", status_code=303)
+    redirect = RedirectResponse(url="/grocery", status_code=303)
     redirect.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=session.token,
         max_age=int(SESSION_DURATION.total_seconds()),
         httponly=True,
-        secure=True,
+        secure=get_settings().cookie_secure,
         samesite="lax",
         path="/",
     )

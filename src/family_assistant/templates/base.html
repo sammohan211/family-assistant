@@ -8,6 +8,25 @@
   <script src="https://unpkg.com/htmx.org@2.0.3" defer></script>
 </head>
 <body class="bg-gray-50 text-gray-900 min-h-screen flex flex-col">
+  {% if request.url.path != "/auth/login" %}
+  <header class="bg-white border-b border-gray-200">
+    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+      <a href="/grocery" class="font-semibold text-gray-900">Family Assistant</a>
+      <nav class="flex items-center gap-4 text-sm">
+        <a href="/grocery" class="text-gray-600 hover:text-gray-900">Grocery</a>
+        <a href="/meal-plan" class="text-gray-600 hover:text-gray-900">Meal plan</a>
+        <a href="/lunch-plan" class="text-gray-600 hover:text-gray-900">Lunch plan</a>
+        <a href="/exercise" class="text-gray-600 hover:text-gray-900">Exercise</a>
+        <a href="/family" class="text-gray-600 hover:text-gray-900">Family</a>
+        <a href="/memory" class="text-gray-600 hover:text-gray-900">Memory</a>
+        <form method="post" action="/auth/logout">
+          {{ csrf_input() }}
+          <button type="submit" class="text-gray-600 hover:text-gray-900">Log out</button>
+        </form>
+      </nav>
+    </div>
+  </header>
+  {% endif %}
   <main class="flex-1">
     {% block content %}{% endblock %}
   </main>
