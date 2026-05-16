@@ -2,7 +2,8 @@
 
 from datetime import date, datetime
 
-from sqlalchemy import JSON, Date, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from family_assistant.auth.models import User
@@ -16,7 +17,7 @@ class LunchPlanEntry(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     family_member_id: Mapped[int] = mapped_column(ForeignKey("family_members.id"), index=True)
     date: Mapped[date] = mapped_column(Date())
-    items: Mapped[list[dict[str, str]]] = mapped_column(JSON(), default=list)
+    items: Mapped[list[dict[str, str]]] = mapped_column(JSONB(), default=list)
     notes: Mapped[str | None] = mapped_column(Text(), nullable=True)
     packed_status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="planned", server_default="planned"
