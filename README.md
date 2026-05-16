@@ -92,6 +92,26 @@ docker compose restart app
 
 You can now sign in at `https://${APP_HOSTNAME}/auth/login`.
 
+## Running tests
+
+Tests run against a real Postgres database (`family_assistant_test`) so SQL, ORM mappings, and pgvector behavior are exercised honestly. Each test runs inside a transaction that rolls back when it finishes — commits inside request handlers become SAVEPOINTs.
+
+**One-time:** create the test database (the app's Postgres user owns it).
+
+```bash
+docker compose exec postgres createdb -U family_assistant family_assistant_test
+```
+
+**Run the suite:**
+
+```bash
+uv run pytest          # all tests
+uv run pytest -v       # verbose
+uv run pytest tests/test_auth.py::test_login_creates_session_row   # single test
+```
+
+`DATABASE_URL` must point at the same Postgres instance (the test DB name is derived by swapping the database component). The test suite does not run any Alembic migrations — it builds the schema directly from `Base.metadata` so tests are decoupled from migration history.
+
 ## Repo layout (populated as modules land)
 
 ```
