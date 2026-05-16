@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Sign in · Family Assistant{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-center min-h-screen px-4">
+  <div class="w-full max-w-sm">
+    <h1 class="text-2xl font-semibold mb-6 text-center">Family Assistant</h1>
+    <form method="post" action="/auth/login" class="space-y-4 bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+      {% if error %}
+        <div class="text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">{{ error }}</div>
+      {% endif %}
+      <div>
+        <label for="email" class="block text-sm font-medium text-gray-700">Email</label>
+        <input id="email" name="email" type="email" required autocomplete="email"
+               class="mt-1 block w-full rounded-md border border-gray-300 shadow-sm px-3 py-2 focus:border-blue-500 focus:ring-blue-500">
+      </div>
+      <div>
+        <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+        <input id="password" name="password" type="password" required autocomplete="current-password"
+               class="mt-1 block w-full rounded-md border border-gray-300 shadow-sm px-3 py-2 focus:border-blue-500 focus:ring-blue-500">
+      </div>
+      <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md">
+        Sign in
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

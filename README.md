@@ -62,6 +62,36 @@ curl -k https://${APP_HOSTNAME}/health
 
 Caddy serves HTTPS on port 443 (internal CA at home, Let's Encrypt in cloud). Postgres and Ollama are only reachable from within the Compose network — never published to the host.
 
+## First-run database setup
+
+Once the stack is up, run migrations and seed users.
+
+**1. Generate password hashes for the two adults** and paste them into `.env`:
+
+```bash
+uv run python -c "from argon2 import PasswordHasher; from getpass import getpass; print(PasswordHasher().hash(getpass('Password: ')))"
+```
+
+Set `USER1_EMAIL` / `USER1_PASSWORD_HASH` and `USER2_EMAIL` / `USER2_PASSWORD_HASH` in `.env`.
+
+**2. Apply migrations:**
+
+```bash
+# from inside the app container
+docker compose exec app alembic upgrade head
+
+# or locally if running outside Docker
+uv run alembic upgrade head
+```
+
+**3. Restart the app container** so the lifespan handler seeds the users from `.env`:
+
+```bash
+docker compose restart app
+```
+
+You can now sign in at `https://${APP_HOSTNAME}/auth/login`.
+
 ## Repo layout (populated as modules land)
 
 ```
