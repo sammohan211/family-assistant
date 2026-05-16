@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}Assistant · Family Assistant{% endblock %}
+
+{% macro status_badge(status) -%}
+{% set palette = {
+  'auto':                   'bg-green-100 text-green-800',
+  'approved':               'bg-green-100 text-green-800',
+  'pending_confirmation':   'bg-amber-100 text-amber-800',
+  'cancelled':              'bg-gray-200 text-gray-700',
+} -%}
+<span class="text-xs uppercase tracking-wide px-2 py-1 rounded-full {{ palette.get(status, 'bg-gray-100 text-gray-600') }}">
+  {{ status.replace('_', ' ') }}
+</span>
+{%- endmacro %}
+
+{% macro tool_summary(call) -%}
+<code class="text-xs bg-gray-50 border border-gray-200 px-1.5 py-0.5 rounded">{{ call.name }}</code>
+{%- endmacro %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 py-8 space-y-6">
+  <div>
+    <h1 class="text-2xl font-semibold">Assistant</h1>
+    <p class="text-sm text-gray-500">Type a command in plain English.</p>
+  </div>
+
+  <form method="post" action="/assistant" class="space-y-3">
+    {{ csrf_input() }}
+    <textarea name="input_text" rows="3" required
+              placeholder="Add milk and bread to the grocery list. Or: what's planned for dinner?"
+              class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
+    <div class="flex justify-end">
+      <button type="submit"
+              class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+        Send
+      </button>
+    </div>
+  </form>
+
+  {% if latest %}
+  <section class="rounded-lg border border-gray-200 bg-white p-6 space-y-3">
+    <div class="flex items-start justify-between gap-3">
+      <div class="min-w-0">
+        <p class="text-xs text-gray-500">{{ latest.created_at.strftime('%a %b %-d, %-I:%M %p') }}</p>
+        <p class="font-medium truncate">"{{ latest.input_text }}"</p>
+      </div>
+      {{ status_badge(latest.confirmation_status) }}
+    </div>
+
+    {% if latest.executed_tool_calls %}
+    <div class="space-y-2">
+      <p class="text-sm font-medium text-gray-700">Did:</p>
+      <ul class="text-sm space-y-1">
+        {% for call in latest.executed_tool_calls %}
+        <li class="flex items-start gap-2">
+          {{ tool_summary(call) }}
+          <span class="text-gray-600">
+            {% if call.outcome == 'success' %}
+              ✓ {{ call.affected_table }} #{{ call.affected_ids | join(', #') }}
+            {% else %}
+              ⚠ {{ call.outcome }}{% if call.error %} — {{ call.error }}{% endif %}
+            {% endif %}
+          </span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if latest.confirmation_status == 'pending_confirmation' %}
+    <div class="rounded-md border border-amber-200 bg-amber-50 p-4 space-y-3">
+      <p class="text-sm font-medium text-amber-900">Confirm before doing this:</p>
+      <ul class="text-sm space-y-1">
+        {% for call in latest.proposed_tool_calls %}
+        <li class="flex items-start gap-2">
+          {{ tool_summary(call) }}
+          {% if call.validation == 'ok' %}
+          <code class="text-xs text-gray-700 break-all">{{ call.args | tojson }}</code>
+          {% else %}
+          <span class="text-red-700">invalid: {{ call.error }}</span>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      <div class="flex gap-2">
+        <form method="post" action="/assistant/{{ latest.id }}/confirm">
+          {{ csrf_input() }}
+          <button type="submit"
+                  class="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">
+            Approve
+          </button>
+        </form>
+        <form method="post" action="/assistant/{{ latest.id }}/cancel">
+          {{ csrf_input() }}
+          <button type="submit"
+                  class="rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            Cancel
+          </button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if latest.error_log %}
+    <p class="text-sm text-red-700">{{ latest.error_log }}</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if history %}
+  <section class="space-y-2">
+    <h2 class="text-sm font-medium text-gray-700 uppercase tracking-wide">History</h2>
+    <ul class="rounded-lg border border-gray-200 bg-white divide-y divide-gray-200">
+      {% for entry in history %}
+      <li class="px-4 py-3 flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <p class="text-xs text-gray-500">{{ entry.created_at.strftime('%a %b %-d, %-I:%M %p') }}</p>
+          <p class="text-sm truncate">"{{ entry.input_text }}"</p>
+          {% if entry.executed_tool_calls %}
+          <p class="text-xs text-gray-500 mt-1">
+            {% for call in entry.executed_tool_calls %}
+              {{ call.name }}{% if not loop.last %}, {% endif %}
+            {% endfor %}
+          </p>
+          {% endif %}
+        </div>
+        {{ status_badge(entry.confirmation_status) }}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

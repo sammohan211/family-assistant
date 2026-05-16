@@ -181,3 +181,38 @@ def process_command(
         ],
         error=error_log,
     )
+
+
+def confirm_pending(
+    interaction: AssistantInteraction, db: DbSession, user: User
+) -> AssistantInteraction:
+    """Execute the previously-validated tool calls on a pending interaction."""
+    if interaction.confirmation_status != "pending_confirmation":
+        return interaction
+    validated: list[ValidatedToolCall] = []
+    for proposed in interaction.proposed_tool_calls:
+        if proposed.get("validation") != "ok":
+            continue
+        outcome = validate_tool_call(str(proposed.get("name", "")), proposed.get("args") or {})
+        if isinstance(outcome, ValidatedToolCall):
+            validated.append(outcome)
+    results = [execute_tool_call(call, db, user) for call in validated]
+    interaction.executed_tool_calls = _serialize_executed(validated, results)
+    interaction.affected_record_ids = _affected_record_ids(validated, results)
+    interaction.confirmation_status = "approved"
+    errors = [r.error for r in results if r.error]
+    if errors:
+        interaction.error_log = "; ".join(errors)
+    db.commit()
+    db.refresh(interaction)
+    return interaction
+
+
+def cancel_pending(interaction: AssistantInteraction, db: DbSession) -> AssistantInteraction:
+    """Mark a pending interaction as cancelled without executing anything."""
+    if interaction.confirmation_status != "pending_confirmation":
+        return interaction
+    interaction.confirmation_status = "cancelled"
+    db.commit()
+    db.refresh(interaction)
+    return interaction

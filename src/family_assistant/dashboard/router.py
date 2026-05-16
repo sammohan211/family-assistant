@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session as DbSession
 
+from family_assistant.ai_gateway.services import list_recent_interactions
 from family_assistant.auth.dependencies import require_user
 from family_assistant.auth.models import User
 from family_assistant.db import get_session
@@ -74,6 +75,7 @@ def index(
             "week_start": week_start,
             "open_items": open_items,
             "open_count": len(open_items),
+            "recent_interactions": list_recent_interactions(db, limit=5),
         },
     )
 
