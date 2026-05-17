@@ -4,14 +4,7 @@ Review basis: [`family_assistant_prd.md`](family_assistant_prd.md), [`ARCHITECTU
 
 ## Findings
 
-### 1. Medium: Import-time settings loading makes the app and tests fail before startup when `.env` is absent
-
-- Evidence:
-  - [`src/family_assistant/db.py:15`](src/family_assistant/db.py#L15) calls `get_settings()` at import time and builds the engine immediately.
-  - Running `uv run pytest` fails during import with a `Settings` validation error for `database_url`, `session_secret`, and `app_base_url`, before test collection begins.
-- Impact:
-  - The test suite is not runnable in a clean checkout unless a fully populated `.env` already exists.
-  - This is inconsistent with the documented testing flow and makes local verification brittle because configuration errors surface during module import rather than controlled startup.
+No outstanding findings.
 
 ## Resolved
 
@@ -20,3 +13,4 @@ Review basis: [`family_assistant_prd.md`](family_assistant_prd.md), [`ARCHITECTU
 - **Hard-restriction memories editable or deletable with no confirmation gate** — `update_memory`/`delete_memory` require `confirmed=True`; the UI routes hard-restriction deletes through a dedicated confirmation page and renders a required acknowledgement checkbox on the edit form.
 - **Any authenticated user could approve or cancel any pending assistant interaction** — `get_interaction` now scopes by `user_id`; confirm/cancel routes pass the current user.
 - **Deleting a family member with lunch-plan rows failed at commit time** — `delete_family_member` raises `FamilyMemberInUseError` with the dependent count; the router catches it and re-renders the edit form with a `409` and a friendly message.
+- **Import-time settings loading broke test collection without `.env`** — `db.py` now exposes `get_engine()` and `get_sessionmaker()` (lazy, `lru_cache`'d); engine construction happens at first use, not at module import. `main.py` updated to match. `tests/test_settings_bootstrap.py` is a subprocess-level regression guard.

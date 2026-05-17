@@ -13,7 +13,7 @@ from family_assistant.auth import router as auth_router
 from family_assistant.auth.dependencies import SESSION_COOKIE_NAME, require_csrf
 from family_assistant.auth.services import get_session_user, seed_users
 from family_assistant.dashboard import router as dashboard_router
-from family_assistant.db import SessionLocal, get_session
+from family_assistant.db import get_session, get_sessionmaker
 from family_assistant.exercise import router as exercise_router
 from family_assistant.family_member import router as family_member_router
 from family_assistant.grocery import router as grocery_router
@@ -24,7 +24,7 @@ from family_assistant.memory import router as memory_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    with SessionLocal() as db:
+    with get_sessionmaker()() as db:
         seed_users(db)
     yield
 
