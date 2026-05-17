@@ -165,6 +165,7 @@ def process_command(
     interaction = AssistantInteraction(
         user_id=user.id,
         input_text=input_text,
+        reply=reply,
         parsed_intent=None,
         parsed_entities=None,
         proposed_tool_calls=proposed,

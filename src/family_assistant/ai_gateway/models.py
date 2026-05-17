@@ -18,6 +18,7 @@ class AssistantInteraction(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     input_text: Mapped[str] = mapped_column(Text())
+    reply: Mapped[str] = mapped_column(Text(), nullable=False, default="", server_default="")
     parsed_intent: Mapped[dict[str, Any] | None] = mapped_column(JSONB(), nullable=True)
     parsed_entities: Mapped[dict[str, Any] | None] = mapped_column(JSONB(), nullable=True)
     proposed_tool_calls: Mapped[list[dict[str, Any]]] = mapped_column(

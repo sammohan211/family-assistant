@@ -48,6 +48,12 @@
       {{ status_badge(latest.confirmation_status) }}
     </div>
 
+    {% if latest.reply %}
+    <div class="rounded-md bg-gray-50 border border-gray-200 p-4">
+      <p class="text-sm whitespace-pre-wrap">{{ latest.reply }}</p>
+    </div>
+    {% endif %}
+
     {% if latest.executed_tool_calls %}
     <div class="space-y-2">
       <p class="text-sm font-medium text-gray-700">Did:</p>
