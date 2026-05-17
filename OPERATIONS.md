@@ -35,6 +35,31 @@ docker compose exec ollama ollama list
 
 ---
 
+## Cold start: both machines were off
+
+If desktop and laptop have both been shut down (power outage, away for a while, deliberate shutdown):
+
+1. **Power on the desktop.** Let it finish booting (~30 s).
+2. **Wait ~1 minute, do nothing.** Docker starts on boot via systemd, then brings every service back up because of `restart: unless-stopped` in `compose.yml`. You don't need to SSH in or run any commands.
+3. **Power on the laptop.** Tailscale reconnects automatically on most Linux setups (it's a systemd service — `sudo systemctl enable tailscaled` once, stays on across reboots).
+4. **Open the app URL in the browser** — whatever you set as `APP_BASE_URL` (e.g. `https://omarchy.tail38845d.ts.net`).
+
+The **first request** after a cold start takes ~20–40 s while Ollama loads the model into VRAM. After that it's fast.
+
+**If the page doesn't load after ~2 minutes**, SSH into the desktop (`ssh sam@omarchy.tail38845d.ts.net`) and triage:
+
+```bash
+docker compose ps                              # everything should be Up or Up (healthy)
+sudo systemctl status docker                   # Docker itself running?
+sudo tailscale status                          # tailnet up on the desktop?
+```
+
+- A service stuck in `Restarting`: `docker compose logs --tail=50 <service>` (most likely `app` — usually a `.env` problem).
+- Docker not running: `sudo systemctl start docker`.
+- Can't SSH at all: Tailscale is down on the desktop. Hook up keyboard + monitor, `sudo tailscale up`.
+
+---
+
 ## Update the app after a `git pull`
 
 The flow whenever you pull new code:
