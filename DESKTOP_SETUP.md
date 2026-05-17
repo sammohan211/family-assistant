@@ -126,8 +126,22 @@ docker compose exec postgres createdb -U family_assistant family_assistant_test
 
 ## 8. Verify end-to-end
 
-- Health: `curl -k https://family.local/health` (or whatever `APP_HOSTNAME` resolves to). For LAN access, add `<desktop-ip> family.local` to your laptop's `/etc/hosts`.
-- Hit the login page in a browser; once you've added user hashes to `.env` and restarted (`docker compose restart app`), you can log in.
+- Health: `curl -k https://family.local/health` (or whatever `APP_HOSTNAME` resolves to). For LAN access, add `<desktop-ip> family.local` to your laptop's `/etc/hosts`. From inside the box, `docker compose exec app python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/health').read())"` bypasses Caddy entirely.
+- Create login credentials so you can hit the UI. The app container has `argon2` installed, so generate the hash there:
+
+  ```bash
+  docker compose exec app python -c "from argon2 import PasswordHasher; print(PasswordHasher().hash('your-password'))"
+  ```
+
+  Paste the hash into `.env` as `USER1_PASSWORD_HASH=...`, **with every `$` doubled** (Compose treats a single `$` as a variable reference and will silently blank out parts of the hash with `WARN ... variable is not set`). Example: `$argon2id$v=19$m=...$salt$hash` becomes `$$argon2id$$v=19$$m=...$$salt$$hash`. Also fill `USER1_EMAIL` and (optionally) `USER1_NAME`. Then:
+
+  ```bash
+  docker compose restart app
+  docker compose logs --tail=20 app
+  ```
+
+  No `WARN ... variable is not set` lines = hash made it through intact.
+- Hit the login page in a browser and sign in with the plaintext password you chose (not the hash).
 - Send an assistant command and watch `docker compose logs -f app ollama` — confirms the LLM round-trip works on the GPU.
 
 ## 9. Optional: Tailscale for remote access from the laptop
