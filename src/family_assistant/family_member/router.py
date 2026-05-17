@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session as DbSession
 from family_assistant.auth.dependencies import require_user
 from family_assistant.db import get_session
 from family_assistant.family_member.services import (
+    FamilyMemberInUseError,
     create_family_member,
     delete_family_member,
     get_family_member,
@@ -108,8 +109,18 @@ def update_view(
 
 @router.post("/{member_id}/delete")
 def delete_view(
+    request: Request,
     member_id: int,
     db: Annotated[DbSession, Depends(get_session)],
 ) -> Response:
-    delete_family_member(db, member_id)
+    try:
+        delete_family_member(db, member_id)
+    except FamilyMemberInUseError as exc:
+        member = get_family_member(db, member_id)
+        return templates.TemplateResponse(
+            request,
+            "family_member/form.html",
+            {"member": member, "weekdays": WEEKDAYS, "error": str(exc)},
+            status_code=409,
+        )
     return RedirectResponse(url="/family", status_code=303)

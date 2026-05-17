@@ -175,6 +175,69 @@ def test_assistant_confirm_idempotent_for_non_pending(
     assert len(db_session.scalars(select(GroceryItem)).all()) == 1
 
 
+def test_assistant_confirm_rejects_other_users_interaction(
+    authenticated_client: TestClient, fake_llm: FakeLLM, db_session: Session
+) -> None:
+    from family_assistant.auth.models import User
+    from family_assistant.auth.services import hash_password
+
+    other = User(name="Bob", email="bob@example.com", password_hash=hash_password("nope"))
+    db_session.add(other)
+    db_session.commit()
+    pending = AssistantInteraction(
+        user_id=other.id,
+        input_text="add five things",
+        proposed_tool_calls=[
+            {
+                "name": "grocery.add_items",
+                "args": {"items": [{"name": n} for n in ["a", "b", "c", "d", "e"]]},
+                "validation": "ok",
+            }
+        ],
+        confirmation_status="pending_confirmation",
+        executed_tool_calls=[],
+        affected_record_ids={},
+    )
+    db_session.add(pending)
+    db_session.commit()
+
+    response = authenticated_client.post(f"/assistant/{pending.id}/confirm", follow_redirects=False)
+    assert response.status_code == 303
+    db_session.expire_all()
+    refreshed = db_session.get(AssistantInteraction, pending.id)
+    assert refreshed is not None
+    assert refreshed.confirmation_status == "pending_confirmation"
+    assert db_session.scalars(select(GroceryItem)).all() == []
+
+
+def test_assistant_cancel_rejects_other_users_interaction(
+    authenticated_client: TestClient, db_session: Session
+) -> None:
+    from family_assistant.auth.models import User
+    from family_assistant.auth.services import hash_password
+
+    other = User(name="Bob", email="bob@example.com", password_hash=hash_password("nope"))
+    db_session.add(other)
+    db_session.commit()
+    pending = AssistantInteraction(
+        user_id=other.id,
+        input_text="something",
+        proposed_tool_calls=[],
+        confirmation_status="pending_confirmation",
+        executed_tool_calls=[],
+        affected_record_ids={},
+    )
+    db_session.add(pending)
+    db_session.commit()
+
+    response = authenticated_client.post(f"/assistant/{pending.id}/cancel", follow_redirects=False)
+    assert response.status_code == 303
+    db_session.expire_all()
+    refreshed = db_session.get(AssistantInteraction, pending.id)
+    assert refreshed is not None
+    assert refreshed.confirmation_status == "pending_confirmation"
+
+
 def test_dashboard_shows_recent_interactions(
     authenticated_client: TestClient, fake_llm: FakeLLM
 ) -> None:

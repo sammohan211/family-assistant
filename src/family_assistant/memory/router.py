@@ -15,6 +15,7 @@ from family_assistant.memory.models import Memory
 from family_assistant.memory.services import (
     MEMORY_TYPES,
     SUBJECT_TYPES,
+    MemoryConfirmationRequiredError,
     create_memory,
     delete_memory,
     format_tags,
@@ -304,6 +305,7 @@ def update_view(
     family_member_subject_id: Annotated[int | None, Form()] = None,
     is_hard_restriction: Annotated[bool, Form()] = False,
     tags: Annotated[str, Form()] = "",
+    confirm_hard_restriction: Annotated[bool, Form()] = False,
 ) -> Response:
     item = get_memory(db, memory_id)
     users = _all_users(db)
@@ -354,23 +356,56 @@ def update_view(
             status_code=400,
         )
 
-    update_memory(
-        db,
-        memory_id=memory_id,
-        subject_type=subject_type,
-        subject_id=resolved_subject_id,
-        memory_type=memory_type,
-        content=content,
-        is_hard_restriction=is_hard_restriction,
-        tags=parse_tags(tags),
-    )
+    try:
+        update_memory(
+            db,
+            memory_id=memory_id,
+            subject_type=subject_type,
+            subject_id=resolved_subject_id,
+            memory_type=memory_type,
+            content=content,
+            is_hard_restriction=is_hard_restriction,
+            tags=parse_tags(tags),
+            confirmed=confirm_hard_restriction,
+        )
+    except MemoryConfirmationRequiredError as exc:
+        return _render_form(
+            request,
+            item=item,
+            users=users,
+            family_members=family_members,
+            error=str(exc),
+            form_data=form_data,
+            status_code=400,
+        )
     return RedirectResponse(url="/memory", status_code=303)
+
+
+@router.get("/{memory_id}/delete", response_class=HTMLResponse)
+def delete_confirm(
+    request: Request,
+    memory_id: int,
+    db: Annotated[DbSession, Depends(get_session)],
+) -> Response:
+    item = get_memory(db, memory_id)
+    if item is None:
+        return RedirectResponse(url="/memory", status_code=303)
+    return templates.TemplateResponse(
+        request,
+        "memory/delete_confirm.html",
+        {"item": item},
+    )
 
 
 @router.post("/{memory_id}/delete")
 def delete_view(
+    request: Request,
     memory_id: int,
     db: Annotated[DbSession, Depends(get_session)],
+    confirm: Annotated[str, Form()] = "",
 ) -> Response:
-    delete_memory(db, memory_id)
+    try:
+        delete_memory(db, memory_id, confirmed=(confirm == "yes"))
+    except MemoryConfirmationRequiredError:
+        return RedirectResponse(url=f"/memory/{memory_id}/delete", status_code=303)
     return RedirectResponse(url="/memory", status_code=303)

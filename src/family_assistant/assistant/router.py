@@ -55,7 +55,7 @@ def confirm(
     db: Annotated[DbSession, Depends(get_session)],
     user: Annotated[User, Depends(require_user)],
 ) -> Response:
-    interaction = get_interaction(db, interaction_id)
+    interaction = get_interaction(db, interaction_id, user_id=user.id)
     if interaction is not None:
         confirm_pending(interaction, db, user)
     return RedirectResponse(url="/assistant", status_code=303)
@@ -65,8 +65,9 @@ def confirm(
 def cancel(
     interaction_id: int,
     db: Annotated[DbSession, Depends(get_session)],
+    user: Annotated[User, Depends(require_user)],
 ) -> Response:
-    interaction = get_interaction(db, interaction_id)
+    interaction = get_interaction(db, interaction_id, user_id=user.id)
     if interaction is not None:
         cancel_pending(interaction, db)
     return RedirectResponse(url="/assistant", status_code=303)

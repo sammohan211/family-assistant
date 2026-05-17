@@ -86,6 +86,14 @@
       <span>Hard restriction (allergy, dietary, religious — high-risk to edit/delete)</span>
     </label>
 
+    {% if item and (item.is_hard_restriction or form_data.is_hard_restriction) %}
+    <label class="flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
+      <input type="checkbox" name="confirm_hard_restriction" value="true" required
+             class="mt-0.5 rounded border-gray-300 text-red-600 focus:ring-red-500">
+      <span>I understand this is a hard restriction and want to save these changes.</span>
+    </label>
+    {% endif %}
+
     <div class="flex items-center justify-between pt-2">
       <button type="submit" class="rounded-md bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700">
         {% if item %}Save{% else %}Add{% endif %}
@@ -95,14 +103,20 @@
   </form>
 
   {% if item %}
+  {% if item.is_hard_restriction %}
+  <a href="/memory/{{ item.id }}/delete" class="mt-4 inline-block text-sm text-red-600 hover:text-red-700">
+    Delete memory
+  </a>
+  {% else %}
   <form method="post" action="/memory/{{ item.id }}/delete" class="mt-4">
     {{ csrf_input() }}
     <button type="submit"
             class="text-sm text-red-600 hover:text-red-700"
-            onclick="return confirm('{% if item.is_hard_restriction %}This is a hard restriction. Delete anyway?{% else %}Delete this memory?{% endif %}');">
+            onclick="return confirm('Delete this memory?');">
       Delete memory
     </button>
   </form>
+  {% endif %}
   {% endif %}
 </div>
 {% endblock %}

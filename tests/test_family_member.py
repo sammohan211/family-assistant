@@ -97,3 +97,37 @@ def test_delete_family_member(authenticated_client: TestClient, db_session: Sess
     )
     assert response.status_code == 303
     assert db_session.get(FamilyMember, member_id) is None
+
+
+def test_delete_family_member_blocked_when_lunch_entries_exist(
+    authenticated_client: TestClient, db_session: Session
+) -> None:
+    from datetime import date
+
+    from family_assistant.auth.models import User
+    from family_assistant.lunch_plan.models import LunchPlanEntry
+
+    member = FamilyMember(name="Lila", notes=None, school_days=["monday"])
+    db_session.add(member)
+    db_session.commit()
+    user = db_session.scalars(select(User)).first()
+    assert user is not None
+    db_session.add(
+        LunchPlanEntry(
+            family_member_id=member.id,
+            date=date.today(),
+            items=[{"name": "sandwich"}],
+            created_by_user_id=user.id,
+        )
+    )
+    db_session.commit()
+    member_id = member.id
+
+    response = authenticated_client.post(
+        f"/family/{member_id}/delete",
+        follow_redirects=False,
+    )
+    assert response.status_code == 409
+    assert b"lunch plan entries" in response.content
+    db_session.expire_all()
+    assert db_session.get(FamilyMember, member_id) is not None

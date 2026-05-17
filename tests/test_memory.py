@@ -332,6 +332,137 @@ def test_list_filters_by_tag(
     assert b"Untagged memory" not in response.content
 
 
+def test_delete_hard_restriction_requires_confirmation(
+    authenticated_client: TestClient, db_session: Session, seeded_user: User
+) -> None:
+    memory = Memory(
+        subject_type="household",
+        memory_type="restriction",
+        content="No raw shellfish",
+        is_hard_restriction=True,
+        source="user",
+        tags=[],
+        created_by_user_id=seeded_user.id,
+    )
+    db_session.add(memory)
+    db_session.commit()
+    memory_id = memory.id
+
+    response = authenticated_client.post(f"/memory/{memory_id}/delete", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/memory/{memory_id}/delete"
+    db_session.expire_all()
+    assert db_session.get(Memory, memory_id) is not None
+
+
+def test_delete_hard_restriction_with_confirm_succeeds(
+    authenticated_client: TestClient, db_session: Session, seeded_user: User
+) -> None:
+    memory = Memory(
+        subject_type="household",
+        memory_type="restriction",
+        content="No raw shellfish",
+        is_hard_restriction=True,
+        source="user",
+        tags=[],
+        created_by_user_id=seeded_user.id,
+    )
+    db_session.add(memory)
+    db_session.commit()
+    memory_id = memory.id
+
+    response = authenticated_client.post(
+        f"/memory/{memory_id}/delete", data={"confirm": "yes"}, follow_redirects=False
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/memory"
+    db_session.expire_all()
+    assert db_session.get(Memory, memory_id) is None
+
+
+def test_delete_confirm_page_renders(
+    authenticated_client: TestClient, db_session: Session, seeded_user: User
+) -> None:
+    memory = Memory(
+        subject_type="household",
+        memory_type="restriction",
+        content="Peanut allergy across household",
+        is_hard_restriction=True,
+        source="user",
+        tags=[],
+        created_by_user_id=seeded_user.id,
+    )
+    db_session.add(memory)
+    db_session.commit()
+
+    response = authenticated_client.get(f"/memory/{memory.id}/delete")
+    assert response.status_code == 200
+    assert b"Peanut allergy across household" in response.content
+    assert b"Yes, delete this memory" in response.content
+
+
+def test_update_hard_restriction_requires_confirmation(
+    authenticated_client: TestClient, db_session: Session, seeded_user: User
+) -> None:
+    memory = Memory(
+        subject_type="household",
+        memory_type="restriction",
+        content="Peanut allergy",
+        is_hard_restriction=True,
+        source="user",
+        tags=[],
+        created_by_user_id=seeded_user.id,
+    )
+    db_session.add(memory)
+    db_session.commit()
+
+    response = authenticated_client.post(
+        f"/memory/{memory.id}",
+        data={
+            "subject_type": "household",
+            "memory_type": "restriction",
+            "content": "Tree-nut allergy too",
+            "is_hard_restriction": "true",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 400
+    assert b"confirmation" in response.content.lower()
+    db_session.refresh(memory)
+    assert memory.content == "Peanut allergy"
+
+
+def test_update_hard_restriction_with_confirm_succeeds(
+    authenticated_client: TestClient, db_session: Session, seeded_user: User
+) -> None:
+    memory = Memory(
+        subject_type="household",
+        memory_type="restriction",
+        content="Peanut allergy",
+        is_hard_restriction=True,
+        source="user",
+        tags=[],
+        created_by_user_id=seeded_user.id,
+    )
+    db_session.add(memory)
+    db_session.commit()
+
+    response = authenticated_client.post(
+        f"/memory/{memory.id}",
+        data={
+            "subject_type": "household",
+            "memory_type": "restriction",
+            "content": "Tree-nut allergy too",
+            "is_hard_restriction": "true",
+            "confirm_hard_restriction": "true",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    db_session.refresh(memory)
+    assert memory.content == "Tree-nut allergy too"
+
+
 def test_hard_restriction_renders_badge(
     authenticated_client: TestClient, db_session: Session, seeded_user: User
 ) -> None:

@@ -98,13 +98,17 @@
         </div>
         <div class="flex items-center gap-3 shrink-0">
           <a href="/memory/{{ m.id }}/edit" class="text-sm text-blue-600 hover:underline">Edit</a>
+          {% if m.is_hard_restriction %}
+          <a href="/memory/{{ m.id }}/delete" class="text-sm text-red-600 hover:text-red-700">Delete</a>
+          {% else %}
           <form method="post" action="/memory/{{ m.id }}/delete">
             {{ csrf_input() }}
             <button type="submit" class="text-sm text-red-600 hover:text-red-700"
-                    onclick="return confirm('{% if m.is_hard_restriction %}This is a hard restriction. Delete anyway?{% else %}Delete this memory?{% endif %}');">
+                    onclick="return confirm('Delete this memory?');">
               Delete
             </button>
           </form>
+          {% endif %}
         </div>
       </div>
       <div class="text-xs text-gray-400">

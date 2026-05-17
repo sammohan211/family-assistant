@@ -173,7 +173,7 @@ def test_process_command_medium_risk_stages_without_executing(
     assert interaction.proposed_tool_calls[0]["validation"] == "ok"
 
 
-def test_process_command_validation_error_stages_and_logs(
+def test_process_command_validation_errors_only_does_not_stage(
     db_session: Session, seeded_user: User
 ) -> None:
     llm = FakeLLM(
@@ -184,11 +184,69 @@ def test_process_command_validation_error_stages_and_logs(
     )
     result = process_command(seeded_user, "broken", db_session, llm=llm)
 
-    assert result.confirmation_status == "pending_confirmation"
+    assert result.confirmation_status == "auto"
+    assert result.error is not None and "validation" in result.error.lower()
+    assert "rephrase" in result.reply.lower()
     assert db_session.scalars(select(GroceryItem)).all() == []
     interaction = db_session.get(AssistantInteraction, result.interaction_id)
     assert interaction is not None
+    assert interaction.confirmation_status == "auto"
     assert interaction.proposed_tool_calls[0]["validation"] == "error"
+    assert interaction.error_log is not None
+
+
+def test_process_command_memory_create_rejects_unknown_family_member(
+    db_session: Session, seeded_user: User
+) -> None:
+    llm = FakeLLM(
+        {
+            "tool_calls": [
+                {
+                    "name": "memory.create",
+                    "args": {
+                        "subject_type": "family_member",
+                        "subject_id": 9999,
+                        "memory_type": "preference",
+                        "content": "anything",
+                    },
+                }
+            ],
+            "reply": "",
+        }
+    )
+    result = process_command(seeded_user, "remember this for nobody", db_session, llm=llm)
+
+    assert db_session.scalars(select(Memory)).all() == []
+    interaction = db_session.get(AssistantInteraction, result.interaction_id)
+    assert interaction is not None
+    assert interaction.executed_tool_calls[0]["outcome"] == "validation_error"
+    assert "9999" in interaction.executed_tool_calls[0]["error"]
+
+
+def test_process_command_memory_create_rejects_user_subject_without_id(
+    db_session: Session, seeded_user: User
+) -> None:
+    llm = FakeLLM(
+        {
+            "tool_calls": [
+                {
+                    "name": "memory.create",
+                    "args": {
+                        "subject_type": "user",
+                        "memory_type": "preference",
+                        "content": "anything",
+                    },
+                }
+            ],
+            "reply": "",
+        }
+    )
+    result = process_command(seeded_user, "remember this for nobody", db_session, llm=llm)
+
+    assert db_session.scalars(select(Memory)).all() == []
+    interaction = db_session.get(AssistantInteraction, result.interaction_id)
+    assert interaction is not None
+    assert interaction.executed_tool_calls[0]["outcome"] == "validation_error"
 
 
 def test_process_command_no_tool_calls_is_a_read(db_session: Session, seeded_user: User) -> None:

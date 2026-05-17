@@ -139,6 +139,15 @@ def process_command(
             reply = "Sorry, I couldn't reach the assistant right now. Please try again."
     elif not validated and not validation_errors:
         confirmation_status = "auto"
+    elif validation_errors and not validated:
+        # Every proposed call failed validation — nothing safe to confirm or execute.
+        confirmation_status = "auto"
+        error_log = "Tool validation failed: " + "; ".join(e.error for e in validation_errors)
+        if not reply:
+            reply = (
+                "I couldn't act on that — the assistant produced an invalid action. "
+                "Please rephrase."
+            )
     elif risk == "low" and validated and not validation_errors:
         results = [execute_tool_call(call, db, user) for call in validated]
         executed_serialized = _serialize_executed(validated, results)
@@ -196,6 +205,9 @@ def confirm_pending(
         outcome = validate_tool_call(str(proposed.get("name", "")), proposed.get("args") or {})
         if isinstance(outcome, ValidatedToolCall):
             validated.append(outcome)
+    if not validated:
+        # Nothing valid to execute — don't pretend we approved anything.
+        return interaction
     results = [execute_tool_call(call, db, user) for call in validated]
     interaction.executed_tool_calls = _serialize_executed(validated, results)
     interaction.affected_record_ids = _affected_record_ids(validated, results)

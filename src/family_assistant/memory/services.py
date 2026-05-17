@@ -10,7 +10,17 @@ from sqlalchemy.orm import Session as DbSession
 from sqlalchemy.orm import selectinload
 
 from family_assistant.auth.models import User
+from family_assistant.family_member.models import FamilyMember
 from family_assistant.memory.models import Memory
+
+
+class MemoryValidationError(ValueError):
+    """Raised when a memory's subject doesn't match a real user/family member."""
+
+
+class MemoryConfirmationRequiredError(ValueError):
+    """Raised when a hard-restriction edit/delete is attempted without explicit confirmation."""
+
 
 SUBJECT_TYPES = ("household", "user", "family_member")
 MEMORY_TYPES = (
@@ -27,6 +37,23 @@ SOURCES = ("user", "assistant", "deployment_seed")
 def normalize_subject(subject_type: str, subject_id: int | None) -> tuple[str, int | None]:
     if subject_type == "household":
         return "household", None
+    return subject_type, subject_id
+
+
+def _validate_subject(
+    db: DbSession, subject_type: str, subject_id: int | None
+) -> tuple[str, int | None]:
+    """Backstop FK check. Raises MemoryValidationError if subject doesn't resolve."""
+    if subject_type not in SUBJECT_TYPES:
+        raise MemoryValidationError(f"Unknown subject_type: {subject_type!r}")
+    if subject_type == "household":
+        return "household", None
+    if subject_id is None:
+        raise MemoryValidationError(f"{subject_type} memories require a subject_id")
+    if subject_type == "user" and db.get(User, subject_id) is None:
+        raise MemoryValidationError(f"Unknown user id: {subject_id}")
+    if subject_type == "family_member" and db.get(FamilyMember, subject_id) is None:
+        raise MemoryValidationError(f"Unknown family_member id: {subject_id}")
     return subject_type, subject_id
 
 
@@ -83,7 +110,7 @@ def create_memory(
     tags: list[str],
     source: str = "user",
 ) -> Memory:
-    subject_type, subject_id = normalize_subject(subject_type, subject_id)
+    subject_type, subject_id = _validate_subject(db, subject_type, subject_id)
     memory = Memory(
         subject_type=subject_type,
         subject_id=subject_id,
@@ -110,11 +137,16 @@ def update_memory(
     content: str,
     is_hard_restriction: bool,
     tags: list[str],
+    confirmed: bool = False,
 ) -> Memory | None:
     memory = db.get(Memory, memory_id)
     if memory is None:
         return None
-    subject_type, subject_id = normalize_subject(subject_type, subject_id)
+    if (memory.is_hard_restriction or is_hard_restriction) and not confirmed:
+        raise MemoryConfirmationRequiredError(
+            "Hard-restriction memories require explicit confirmation to edit."
+        )
+    subject_type, subject_id = _validate_subject(db, subject_type, subject_id)
     memory.subject_type = subject_type
     memory.subject_id = subject_id
     memory.memory_type = memory_type
@@ -126,10 +158,14 @@ def update_memory(
     return memory
 
 
-def delete_memory(db: DbSession, memory_id: int) -> bool:
+def delete_memory(db: DbSession, memory_id: int, *, confirmed: bool = False) -> bool:
     memory = db.get(Memory, memory_id)
     if memory is None:
         return False
+    if memory.is_hard_restriction and not confirmed:
+        raise MemoryConfirmationRequiredError(
+            "Hard-restriction memories require explicit confirmation to delete."
+        )
     db.delete(memory)
     db.commit()
     return True

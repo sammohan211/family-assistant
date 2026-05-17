@@ -31,6 +31,7 @@ from family_assistant.meal_plan.services import MEAL_TYPES, create_meal_plan_ent
 from family_assistant.memory.services import (
     MEMORY_TYPES,
     SUBJECT_TYPES,
+    MemoryValidationError,
     create_memory,
     list_memories,
 )
@@ -219,17 +220,20 @@ def _handle_exercise_log_activity(
 
 
 def _handle_memory_create(args: MemoryCreateArgs, db: DbSession, user: User) -> ToolResult:
-    row = create_memory(
-        db,
-        user=user,
-        subject_type=args.subject_type,
-        subject_id=args.subject_id,
-        memory_type=args.memory_type,
-        content=args.content,
-        is_hard_restriction=args.is_hard_restriction,
-        tags=args.tags,
-        source="assistant",
-    )
+    try:
+        row = create_memory(
+            db,
+            user=user,
+            subject_type=args.subject_type,
+            subject_id=args.subject_id,
+            memory_type=args.memory_type,
+            content=args.content,
+            is_hard_restriction=args.is_hard_restriction,
+            tags=args.tags,
+            source="assistant",
+        )
+    except MemoryValidationError as exc:
+        return ToolResult(outcome="validation_error", affected_table="memories", error=str(exc))
     return ToolResult(outcome="success", affected_table="memories", affected_ids=[row.id])
 
 
