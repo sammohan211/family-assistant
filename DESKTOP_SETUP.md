@@ -167,14 +167,4 @@ Two patterns, pick whichever fits the moment:
 
 ---
 
-## Reference: useful commands once it's running
-
-```bash
-docker compose ps                                  # service status
-docker compose logs -f app                         # tail app logs
-docker compose exec app alembic upgrade head       # run migrations
-docker compose exec postgres psql -U family_assistant
-docker compose exec ollama ollama list             # installed models
-docker compose down                                # stop everything (volumes preserved)
-docker compose down -v                             # nuke including data — careful
-```
+For day-to-day operations once the stack is running (updates, logs, database, backups, model switching, common issues), see `OPERATIONS.md`.
