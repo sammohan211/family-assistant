@@ -37,7 +37,7 @@ This is also the page to come back to first thing in the morning — it answers 
 - `grocery.mark_purchased` — mark items as purchased.
 - `meal_plan.create_entry` — schedule a meal on a date.
 - `lunch_plan.create_entry` — plan a school lunch for one family member on a date.
-- `exercise.log_activity` — log an exercise for you.
+- `exercise.log_activity` — log one session against a catalog exercise (referenced by name). Unknown names return an error — add to the catalog first.
 - `memory.create` — save a household / user / family-member preference or restriction.
 - `memory.search` — look up existing memories.
 
@@ -110,11 +110,59 @@ Family members need their `school_days` set (in the family page) for the dashboa
 
 ## Exercise
 
-`/exercise` — log workouts for yourself (the logged-in user).
+Three pages, reachable from the tab bar at the top of any exercise screen:
 
-**Add an entry:** activity (free text, e.g. "Running", "Yoga"), duration in minutes, date, optional notes. Each user only sees their own log.
+- **Log** (`/exercise`) — your workout history.
+- **Catalog** (`/exercise/catalog`) — household-shared list of named exercises (Bench press, Run, etc.) with their classification.
+- **Weekly** (`/exercise/weekly`) — aggregated work-score totals for the current ISO week with a delta vs. the previous week.
 
-There are no aggregations yet (weekly totals, streaks) — it's a plain log.
+Every page has a **Body weight** indicator at the top (collapsed by default — click to expand and edit). This value is per-user and feeds into score formulas for distance and bodyweight-fraction exercises. Set it once; update when it changes.
+
+### Catalog (household-shared)
+
+The catalog is where you define each exercise once. Logs reference catalog entries by name. Catalog is empty by default — populate as you go.
+
+Each exercise has:
+
+- **Name** (unique across the household).
+- **Body group** — one of `upper`, `lower`, `core`, `cardio`. Used by the weekly view.
+- **Muscle groups** — comma-separated tags (e.g. `chest, triceps, shoulders`). Used by the weekly view; free-form for now.
+- **Scoring type** — picks the formula used to compute a session's work score:
+  - `weighted` → `weight × reps × sets` (e.g. bench press, squat).
+  - `distance` → `distance_km × your body weight` (e.g. run, hike, rowing machine, walk).
+  - `bodyweight_fraction` → `body_weight × fraction × reps × sets` (e.g. captain's chair, dips, pull-ups).
+- **Bodyweight fraction** — decimal (default `1.000`). Only matters when scoring type is `bodyweight_fraction`. Examples: pull-ups = `1.0`, captain's chair = `0.5`.
+
+Add a few exercises before you start logging — the log form needs at least one to pick from.
+
+### Log
+
+The log form shows only the inputs the picked exercise's scoring type needs:
+
+- Pick `Bench press (weighted)` → form asks for **sets, reps, weight**.
+- Pick `Run (distance)` → form asks for **distance (km)**.
+- Pick `Captain's chair (bodyweight_fraction)` → form asks for **sets, reps**.
+
+**Duration** (minutes) and **notes** are optional on any log.
+
+On save, the app computes the work score from the formula and **persists it on the row** — so if you later update your body weight, old scores don't change. Each session stays comparable to the day it was logged.
+
+If you try to log a `distance` or `bodyweight_fraction` exercise without setting your body weight first, you'll get a clear error: set it via the indicator at the top.
+
+The log list shows your sessions newest-first with the score on each row. Edit and Delete are per-entry.
+
+### Weekly view
+
+`/exercise/weekly` is the answer to "did I beat last week?":
+
+- **Total work score** for the current ISO week (Monday–Sunday).
+- **Delta vs. prior week** — absolute and percent, green if you improved, red if not.
+- **By body group** — bar chart of how much score came from `upper`, `lower`, `core`, `cardio`. Quick way to spot under-trained areas.
+- **By muscle group** — same idea, sorted descending. Uses the tags you put on each catalog exercise.
+
+Use the **Prev / Next / This week** buttons to walk other weeks.
+
+Per-exercise breakdown within a body group ("which exercise drove most of upper-body this week?") is not in MVP — it's on the phase 2 list.
 
 ---
 
@@ -156,4 +204,4 @@ Memories are surfaced to the LLM as context on every assistant request — that'
 - **The assistant is the fast path** for adding things ("add X to grocery", "plan tacos Friday"). The module pages are the fast path for editing, deleting, and viewing.
 - **The dashboard is the morning glance** — meals today, lunches this week, what's on the grocery list, recent assistant activity. If nothing surprises you, you're set.
 - **Hard restrictions and allergies belong in Memory**, not just in your head — the assistant only knows what's stored.
-- **Each user's exercise log is private**; everything else (grocery, meals, lunches, family, memory) is shared across both users in the household.
+- **Exercise**: each user sees their own log; the catalog is shared; body weight is per user. Grocery, meals, lunches, family, and memory are shared across both users.
