@@ -29,40 +29,57 @@ If you forget the password: it's not recoverable — generate a new hash (see `O
 
 ## Assistant
 
-`/assistant` — type a request in plain English. The LLM decides whether to (a) just reply, (b) act immediately on a low-risk action, or (c) propose actions and wait for your confirmation.
+`/assistant` — type a request in plain English. The LLM picks one of three paths:
 
-**What it can do** (the tools it has access to):
+1. **Answer from context** — for read-only questions like `"what's on the grocery list?"` or `"what's for dinner today?"`. No tool call; the LLM has the relevant data in its prompt and replies with text only.
+2. **Act immediately** — for low-risk actions (a single add, one meal/lunch plan, logging exercise, creating a non-allergy memory).
+3. **Propose actions and wait for you to approve** — for medium- and high-risk actions (see below).
+
+**What it can do** (the seven tools):
 
 - `grocery.add_items` — add items to the grocery list.
 - `grocery.mark_purchased` — mark items as purchased.
 - `meal_plan.create_entry` — schedule a meal on a date.
 - `lunch_plan.create_entry` — plan a school lunch for one family member on a date.
-- `exercise.log_activity` — log one session against a catalog exercise (referenced by name). Unknown names return an error — add to the catalog first.
+- `exercise.log_activity` — log one session against a catalog exercise (referenced by name; unknown name → validation error, add it to the catalog first).
 - `memory.create` — save a household / user / family-member preference or restriction.
 - `memory.search` — look up existing memories.
 
-It does **not** currently update, delete, or rename via the assistant — use the module pages for that.
+It does **not** update, delete, or rename — use the module pages for that. Reads happen through context, not tools (the prompt builder pre-loads the relevant data per request).
 
-**When it asks to confirm:**
+**When it asks to confirm** (medium or high risk):
 
-- More than 3 actions in one request.
-- Adding/marking more than 3 grocery items in one go.
-- Creating a "hard restriction" memory (e.g. allergies).
+- More than 3 tool calls in one request.
+- Adding or marking-purchased more than 3 grocery items in one call.
+- Creating a memory with **is_hard_restriction** set (allergies, must-never-do rules) — high risk.
 
-Other actions execute immediately. The "Did:" list below the response shows what actually happened (✓ row IDs, or ⚠ + error). Pending actions show as a yellow box with Approve / Cancel buttons.
+Everything else runs immediately. After running you see:
+
+- A grey **reply** panel with the LLM's text.
+- A **Did:** list of each tool that ran, e.g. `grocery.add_items  ✓ grocery_items #14, #15`. Per-tool failures show `⚠ <outcome> — <error>`.
+- A **status badge** on the response: `auto`, `pending confirmation`, `approved`, `cancelled`.
+
+For confirmation-required requests, an amber panel appears with the header **"Confirm before doing this:"**, the proposed tool calls listed with their args (or `invalid: <error>` for ones the validator rejected), and **Approve / Cancel** buttons. Approve runs them; Cancel discards.
 
 **Examples that work well:**
 
 ```
-Add milk, bread, and eggs to the grocery list.
-Plan tacos for dinner this Friday.
-What's on the grocery list?
-Pack a sandwich and an apple for Maya's lunch on Monday.
-Remember Alex is allergic to peanuts.
-I ran 5k this morning.
+Add milk, bread, and eggs to the grocery list.            → 3 adds, runs immediately
+Plan tacos for dinner this Friday.                        → one create, runs immediately
+What's on the grocery list?                               → reply only, no tool call
+Pack a sandwich and an apple for Maya's lunch on Monday.  → one lunch entry, runs immediately
+Remember Alex is allergic to peanuts.                     → hard-restriction memory, asks to confirm
+Add eggs, milk, bread, butter, cheese to grocery.         → >3 items, asks to confirm
+I ran 5k this morning.                                    → one exercise log, runs immediately
 ```
 
-**If you see no reply at all**: model isn't loaded — check `docker compose logs ollama` and `OPERATIONS.md` → Common issues.
+**History.** Below the latest interaction the page lists your recent prompts with their tool names and status — useful for "what just happened?" or auditing past assistant actions.
+
+**If something goes wrong:**
+
+- "**Sorry, I couldn't reach the assistant right now.**" — Ollama is down or unreachable. Check `docker compose logs ollama` and `OPERATIONS.md` → Common issues.
+- "**I couldn't act on that — the assistant produced an invalid action. Please rephrase.**" — the LLM emitted JSON that didn't match any tool's schema. A rewording usually fixes it.
+- A `⚠` next to a specific tool in the Did: list — that tool failed (e.g. unknown exercise name, unknown FamilyMember id). The reply text or the inline error usually explains why.
 
 ---
 
@@ -240,7 +257,7 @@ The line between `food_preference` and `restriction` is fuzzy — "doesn't like 
 
 ## Tips
 
-- **The assistant is the fast path** for adding things ("add X to grocery", "plan tacos Friday"). The module pages are the fast path for editing, deleting, and viewing.
+- **The assistant is the fast path for *adding*** ("add X to grocery", "plan tacos Friday"). For editing, deleting, viewing — or anything else — use the module pages; the assistant has no update / delete / rename tools.
 - **The dashboard is the morning glance** — meals today, lunches this week, what's on the grocery list, recent assistant activity. If nothing surprises you, you're set.
-- **Hard restrictions and allergies belong in Memory**, not just in your head — the assistant only knows what's stored.
+- **Hard restrictions and allergies belong in Memory**, not just in your head. The LLM knows general facts ("peanuts are nuts") but the household-specific ones ("Alex has a peanut allergy") only come from what's stored on the Memory page.
 - **Exercise**: each user sees their own log; the catalog is shared; body weight is per user. Grocery, meals, lunches, family, and memory are shared across both users.
