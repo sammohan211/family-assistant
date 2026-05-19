@@ -31,6 +31,7 @@ docker compose up -d --build                   # rebuild app image, then start
 docker compose exec app bash                   # shell inside the app container
 docker compose exec postgres psql -U family_assistant
 docker compose exec ollama ollama list
+docker compose exec app pytest                 # run the test suite
 ```
 
 ---
