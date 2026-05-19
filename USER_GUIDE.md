@@ -1,6 +1,6 @@
 # User Guide
 
-How to use the Family Assistant app once it's running. For installing the stack see `DESKTOP_SETUP.md`; for keeping it running (logs, backups, model switching) see `OPERATIONS.md`.
+How to use the Family Assistant app once it's running. For installing the stack see `SETUP.md`; for keeping it running (logs, backups, model switching) see `OPERATIONS.md`.
 
 The app has nine pages, reachable from the top nav: **Dashboard, Assistant, Grocery, Meal plan, Lunch plan, Exercise, Family, Memory** (plus Login).
 

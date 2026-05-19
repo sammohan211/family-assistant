@@ -35,14 +35,14 @@
       <label for="name" class="block text-sm font-medium text-gray-700">Name</label>
       <input id="name" name="name" type="text" required maxlength="120"
              value="{{ name_val }}"
-             class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+             class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-blue-500 focus:ring-blue-500">
     </div>
 
     <div class="grid gap-4 sm:grid-cols-2">
       <div>
         <label for="body_group" class="block text-sm font-medium text-gray-700">Body group</label>
         <select id="body_group" name="body_group"
-                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-blue-500 focus:ring-blue-500">
           {% for bg in body_groups %}
           <option value="{{ bg }}" {% if body_group_val == bg %}selected{% endif %}>{{ bg }}</option>
           {% endfor %}
@@ -52,7 +52,7 @@
       <div>
         <label for="scoring_type" class="block text-sm font-medium text-gray-700">Scoring type</label>
         <select id="scoring_type" name="scoring_type"
-                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-blue-500 focus:ring-blue-500">
           <option value="weighted" {% if scoring_type_val == 'weighted' %}selected{% endif %}>weighted (weight × reps × sets)</option>
           <option value="distance" {% if scoring_type_val == 'distance' %}selected{% endif %}>distance (km × body weight)</option>
           <option value="bodyweight_fraction" {% if scoring_type_val == 'bodyweight_fraction' %}selected{% endif %}>bodyweight_fraction (body weight × fraction × reps × sets)</option>
@@ -65,7 +65,7 @@
       <input id="muscle_groups" name="muscle_groups" type="text"
              placeholder="comma, separated, tags"
              value="{{ muscle_groups_val }}"
-             class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+             class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-blue-500 focus:ring-blue-500">
       <p class="mt-1 text-xs text-gray-500">e.g. chest, triceps, shoulders</p>
     </div>
 
@@ -76,7 +76,7 @@
       <input id="bodyweight_fraction" name="bodyweight_fraction" type="number"
              step="0.001" min="0" max="9.999"
              value="{{ fraction_val }}"
-             class="mt-1 block w-32 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+             class="mt-1 block w-32 rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-blue-500 focus:ring-blue-500">
       <p class="mt-1 text-xs text-gray-500">
         Only used when scoring type is <code>bodyweight_fraction</code>.
         Captain's chair = 0.5; pull-ups = 1.0.
@@ -85,11 +85,11 @@
 
     <div class="flex justify-end gap-2 pt-2">
       <a href="/exercise/catalog"
-         class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+         class="rounded-md border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
         Cancel
       </a>
       <button type="submit"
-              class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+              class="rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700">
         Save
       </button>
     </div>

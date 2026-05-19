@@ -35,7 +35,7 @@
       <div>
         <label for="user_subject_id" class="block text-sm font-medium text-gray-700">User (if subject is user)</label>
         <select id="user_subject_id" name="user_subject_id"
-                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-blue-500 focus:ring-blue-500">
           <option value="">—</option>
           {% for u in users %}
           <option value="{{ u.id }}" {% if form_data.user_subject_id == u.id|string %}selected{% endif %}>{{ u.name }}</option>
@@ -45,7 +45,7 @@
       <div>
         <label for="family_member_subject_id" class="block text-sm font-medium text-gray-700">Family member (if subject is family member)</label>
         <select id="family_member_subject_id" name="family_member_subject_id"
-                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-blue-500 focus:ring-blue-500">
           <option value="">—</option>
           {% for m in family_members %}
           <option value="{{ m.id }}" {% if form_data.family_member_subject_id == m.id|string %}selected{% endif %}>{{ m.name }}</option>
@@ -58,7 +58,7 @@
       <label for="memory_type" class="block text-sm font-medium text-gray-700">Type</label>
       {% set selected_memory_type = form_data.memory_type or 'preference' %}
       <select id="memory_type" name="memory_type"
-              class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+              class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-blue-500 focus:ring-blue-500">
         {% for mt in memory_types %}
         <option value="{{ mt }}" {% if selected_memory_type == mt %}selected{% endif %}>{{ mt|replace("_", " ")|capitalize }}</option>
         {% endfor %}
@@ -68,7 +68,7 @@
     <div>
       <label for="content" class="block text-sm font-medium text-gray-700">Content</label>
       <textarea id="content" name="content" rows="4" required
-                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500">{{ form_data.content or '' }}</textarea>
+                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-blue-500 focus:ring-blue-500">{{ form_data.content or '' }}</textarea>
     </div>
 
     <div>
@@ -76,7 +76,7 @@
       <input id="tags" name="tags" type="text"
              value="{{ form_data.tags or '' }}"
              placeholder="comma, separated, tags"
-             class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+             class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-blue-500 focus:ring-blue-500">
     </div>
 
     <label class="flex items-center gap-2 text-sm text-gray-700">
@@ -95,7 +95,7 @@
     {% endif %}
 
     <div class="flex items-center justify-between pt-2">
-      <button type="submit" class="rounded-md bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700">
+      <button type="submit" class="rounded-md bg-blue-600 px-4 py-2.5 font-medium text-white hover:bg-blue-700">
         {% if item %}Save{% else %}Add{% endif %}
       </button>
       <a href="/memory" class="text-sm text-gray-600 hover:underline">Cancel</a>
@@ -104,14 +104,15 @@
 
   {% if item %}
   {% if item.is_hard_restriction %}
-  <a href="/memory/{{ item.id }}/delete" class="mt-4 inline-block text-sm text-red-600 hover:text-red-700">
+  <a href="/memory/{{ item.id }}/delete"
+     class="mt-4 inline-block text-sm font-medium text-red-600 hover:bg-red-50 border border-red-200 rounded-md px-3 py-2">
     Delete memory
   </a>
   {% else %}
   <form method="post" action="/memory/{{ item.id }}/delete" class="mt-4">
     {{ csrf_input() }}
     <button type="submit"
-            class="text-sm text-red-600 hover:text-red-700"
+            class="text-sm font-medium text-red-600 hover:bg-red-50 border border-red-200 rounded-md px-3 py-2"
             onclick="return confirm('Delete this memory?');">
       Delete memory
     </button>

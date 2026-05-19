@@ -29,10 +29,10 @@
     {{ csrf_input() }}
     <textarea name="input_text" rows="3" required
               placeholder="Add milk and bread to the grocery list. Or: what's planned for dinner?"
-              class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
+              class="w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
     <div class="flex justify-end">
       <button type="submit"
-              class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+              class="rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700">
         Send
       </button>
     </div>
@@ -93,14 +93,14 @@
         <form method="post" action="/assistant/{{ latest.id }}/confirm">
           {{ csrf_input() }}
           <button type="submit"
-                  class="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">
+                  class="rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700">
             Approve
           </button>
         </form>
         <form method="post" action="/assistant/{{ latest.id }}/cancel">
           {{ csrf_input() }}
           <button type="submit"
-                  class="rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                  class="rounded-md border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
             Cancel
           </button>
         </form>

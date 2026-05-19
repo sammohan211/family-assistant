@@ -27,7 +27,7 @@
   <form method="post" action="/memory/{{ item.id }}/delete" class="flex items-center gap-3">
     {{ csrf_input() }}
     <input type="hidden" name="confirm" value="yes">
-    <button type="submit" class="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
+    <button type="submit" class="rounded-md bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700">
       Yes, delete this memory
     </button>
     <a href="/memory" class="text-sm text-gray-600 hover:underline">Cancel</a>

@@ -11,15 +11,15 @@
     </div>
     <div class="flex items-center gap-2">
       <a href="/lunch-plan?week_start={{ prev_week.isoformat() }}"
-         class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:border-gray-400">
+         class="rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 hover:border-gray-400">
         Previous week
       </a>
       <a href="/lunch-plan?week_start={{ next_week.isoformat() }}"
-         class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:border-gray-400">
+         class="rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 hover:border-gray-400">
         Next week
       </a>
       <a href="/lunch-plan/new"
-         class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+         class="rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700">
         Add lunch
       </a>
     </div>
@@ -52,7 +52,7 @@
               <p class="text-xs text-gray-500">{{ day.strftime("%b %-d") }}</p>
             </div>
             <a href="/lunch-plan/new?date={{ day.isoformat() }}&family_member_id={{ member.id }}"
-               class="text-xs text-blue-600 hover:underline">
+               class="inline-block text-xs text-blue-600 px-2 py-1 rounded hover:bg-blue-50">
               Add
             </a>
           </div>
@@ -63,7 +63,8 @@
             {% for entry in entries %}
             <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
               <div class="flex items-start justify-end gap-2">
-                <a href="/lunch-plan/{{ entry.id }}/edit" class="text-xs text-blue-600 hover:underline">Edit</a>
+                <a href="/lunch-plan/{{ entry.id }}/edit"
+                   class="inline-block text-xs text-blue-600 px-2 py-1 rounded hover:bg-blue-50">Edit</a>
               </div>
               <ul class="list-disc pl-5 text-sm text-gray-700">
                 {% for item in entry.items %}

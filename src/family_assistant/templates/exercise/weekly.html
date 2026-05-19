@@ -26,13 +26,13 @@
     </h1>
     <div class="flex items-center gap-1 text-sm">
       <a href="/exercise/weekly?week={{ prev_week }}"
-         class="px-2 py-1 rounded-md border border-gray-300 hover:bg-gray-50">&larr; Prev</a>
+         class="px-3 py-2 rounded-md border border-gray-300 hover:bg-gray-50">&larr; Prev</a>
       {% if summary.week_start != today_week_start %}
       <a href="/exercise/weekly"
-         class="px-2 py-1 rounded-md border border-gray-300 hover:bg-gray-50">This week</a>
+         class="px-3 py-2 rounded-md border border-gray-300 hover:bg-gray-50">This week</a>
       {% endif %}
       <a href="/exercise/weekly?week={{ next_week }}"
-         class="px-2 py-1 rounded-md border border-gray-300 hover:bg-gray-50">Next &rarr;</a>
+         class="px-3 py-2 rounded-md border border-gray-300 hover:bg-gray-50">Next &rarr;</a>
     </div>
   </div>
 

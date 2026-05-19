@@ -1,4 +1,4 @@
-# Desktop Setup (Omarchy + RTX 3090)
+# Family Assistant Setup (Omarchy + RTX 3090)
 
 Steps to turn the desktop into the deployment host for the Family Assistant stack (Postgres + app + Ollama + Caddy). Aligned with the home-first topology in `family_assistant_prd.md` §17.2.
 
@@ -78,7 +78,7 @@ Fill in:
 - `DATABASE_URL` — replace `CHANGE_ME` with the same password.
 - `SESSION_SECRET` — the generated value.
 - `OLLAMA_MODEL` — leave at `llama3.1:8b` for first run. With 24 GB VRAM you have headroom; you can revisit model choice later.
-- `APP_HOSTNAME` and `APP_BASE_URL` — for LAN-only start, `family.local` is fine. If you go Tailscale (step 8), use the desktop's Tailscale magic-DNS name (e.g. `family.tailnet-name.ts.net`).
+- `APP_HOSTNAME` and `APP_BASE_URL` — for LAN-only start, `family.local` is fine. If you go Tailscale (step 10), use the desktop's Tailscale magic-DNS name (e.g. `family.tailnet-name.ts.net`).
 - `CADDY_TLS` — `internal` for home / Tailscale. (`<email>` only matters if you ever go cloud.)
 - `USER1_EMAIL` / `USER1_PASSWORD_HASH` (and `USER2_*`) — leave blank for now; generate Argon2id hashes when you're ready to log in. The app starts fine without them.
 
@@ -144,7 +144,41 @@ docker compose exec postgres createdb -U family_assistant family_assistant_test
 - Hit the login page in a browser and sign in with the plaintext password you chose (not the hash).
 - Send an assistant command and watch `docker compose logs -f app ollama` — confirms the LLM round-trip works on the GPU.
 
-## 9. Optional: Tailscale for remote access from the laptop
+## 9. Client access (laptop + phone)
+
+The stack runs on the desktop; you reach it from other devices via a browser. Two one-time chores per device: resolving `family.local`, and trusting Caddy's self-signed cert.
+
+### Resolving the hostname
+
+- **Laptop**: add `<desktop-ip> family.local` to `/etc/hosts` (also mentioned in step 8). Using the IP directly works but compounds the cert-trust problem below — the cert is issued for `family.local`.
+- **Phone (LAN)**: iOS resolves `*.local` via Bonjour with no setup. Android sometimes does, sometimes doesn't — if `family.local` doesn't resolve, the cleanest fix is Tailscale (step 10), which works the same on LAN and away from home.
+- **Phone (Tailscale, recommended)**: install the Tailscale app (App Store / Play Store), sign in to the same tailnet, and the desktop's tailnet hostname (`family.tailnet-name.ts.net`) resolves anywhere.
+
+### Trusting the TLS cert
+
+With `CADDY_TLS=internal`, Caddy issues certs from its own root CA, which no browser trusts by default. You'll get a "Not Secure" warning on every visit. Two options:
+
+1. **Click through** the warning. Quick, but you'll see it after every cold browser start.
+2. **Install Caddy's root CA** on each device — one-time, makes the warning permanently go away. Extract it from the container on the desktop:
+
+   ```bash
+   docker compose exec caddy cat /data/caddy/pki/authorities/local/root.crt > /tmp/family-root.crt
+   ```
+
+   Then trust it on each client:
+   - **Laptop (openSUSE / other Linux)**: copy to `/etc/pki/trust/anchors/family-root.crt` and run `sudo update-ca-certificates`. Chromium-family browsers pick it up from the system store; Firefox has its own store and needs a separate import (Settings → Privacy & Security → Certificates → View Certificates → Authorities → Import).
+   - **iOS**: AirDrop or email the file to the phone, open it → installs as a profile in Settings → General → VPN & Device Management. Then **also** enable it in Settings → General → About → Certificate Trust Settings (iOS hides this second step deliberately).
+   - **Android**: Settings → Security → Encryption & credentials → Install a certificate → CA certificate.
+
+### Add to Home Screen (phone only)
+
+The app includes the iOS PWA meta tags, so once signed in:
+- **iOS Safari**: Share sheet → "Add to Home Screen". Launches in standalone mode, no Safari chrome.
+- **Android Chrome**: ⋮ menu → "Add to Home screen" / "Install app".
+
+There's no manifest yet, so the home-screen icon will be a Safari-generated thumbnail rather than a custom icon — good enough until a future PWA pass.
+
+## 10. Optional: Tailscale for remote access from the laptop
 
 Aligned with the §17.2 home-topology decision (Tailscale, no port-forwarding through CGNAT).
 
@@ -158,7 +192,7 @@ Then on the laptop (`sudo zypper in tailscale && sudo tailscale up`), and you ca
 
 Update `APP_HOSTNAME` / `APP_BASE_URL` in `.env` to the tailnet hostname (e.g. `family.tailnet-name.ts.net`) and `docker compose up -d` again so Caddy picks it up.
 
-## 10. Optional: dev loop from the laptop
+## 11. Optional: dev loop from the laptop
 
 Two patterns, pick whichever fits the moment:
 

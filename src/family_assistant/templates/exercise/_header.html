@@ -2,7 +2,7 @@
    Caller sets `active` to "log" or "catalog" so the right tab is highlighted.
    `user` is the logged-in User (passed by the router). #}
 
-{% set tab_base = "px-3 py-1.5 text-sm font-medium rounded-md" %}
+{% set tab_base = "px-3 py-2 text-sm font-medium rounded-md" %}
 {% set tab_active = "bg-white text-gray-900 shadow-sm" %}
 {% set tab_idle = "text-gray-600 hover:text-gray-900" %}
 
@@ -37,10 +37,10 @@
       <input type="number" step="0.01" min="0" max="999.99" name="body_weight"
              value="{{ user.body_weight if user.body_weight else '' }}"
              placeholder="kg"
-             class="w-24 rounded-md border border-gray-300 px-2 py-1 text-sm">
+             class="w-24 rounded-md border border-gray-300 px-2 py-1.5">
       <input type="hidden" name="redirect_to" value="{{ request.url.path }}">
       <button type="submit"
-              class="rounded-md bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700">
+              class="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">
         Update
       </button>
     </form>

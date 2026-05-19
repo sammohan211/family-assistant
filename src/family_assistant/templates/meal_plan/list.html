@@ -11,15 +11,15 @@
     </div>
     <div class="flex items-center gap-2">
       <a href="/meal-plan?week_start={{ prev_week.isoformat() }}"
-         class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:border-gray-400">
+         class="rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 hover:border-gray-400">
         Previous week
       </a>
       <a href="/meal-plan?week_start={{ next_week.isoformat() }}"
-         class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:border-gray-400">
+         class="rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 hover:border-gray-400">
         Next week
       </a>
       <a href="/meal-plan/new"
-         class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+         class="rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700">
         Add meal
       </a>
     </div>
@@ -37,7 +37,7 @@
         <div class="flex items-center justify-between gap-2">
           <h3 class="text-sm font-medium capitalize text-gray-700">{{ meal_type }}</h3>
           <a href="/meal-plan/new?meal_date={{ day.isoformat() }}&meal_type={{ meal_type }}"
-             class="text-xs text-blue-600 hover:underline">
+             class="inline-block text-xs text-blue-600 px-2 py-1 rounded hover:bg-blue-50">
             Add
           </a>
         </div>
@@ -53,7 +53,8 @@
                 <div class="text-xs uppercase tracking-wide text-amber-600">Favorite</div>
                 {% endif %}
               </div>
-              <a href="/meal-plan/{{ entry.id }}/edit" class="text-xs text-blue-600 hover:underline">Edit</a>
+              <a href="/meal-plan/{{ entry.id }}/edit"
+                 class="inline-block text-xs text-blue-600 px-2 py-1 rounded hover:bg-blue-50">Edit</a>
             </div>
             {% if entry.notes %}
             <p class="text-sm text-gray-600">{{ entry.notes }}</p>
@@ -63,7 +64,8 @@
               <form method="post" action="/meal-plan/{{ entry.id }}/duplicate">
                 {{ csrf_input() }}
                 <input type="hidden" name="date" value="{{ day.isoformat() }}">
-                <button type="submit" class="text-blue-600 hover:underline">Reuse</button>
+                <button type="submit"
+                        class="inline-block text-blue-600 px-2 py-1 rounded hover:bg-blue-50">Reuse</button>
               </form>
             </div>
           </div>
@@ -84,15 +86,19 @@
       {% if favorite_entries %}
       <ul class="divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
         {% for entry in favorite_entries %}
-        <li class="flex items-center justify-between gap-4 px-4 py-3">
+        <li class="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div>
             <div class="font-medium">{{ entry.title }}</div>
             <div class="text-sm text-gray-500 capitalize">{{ entry.meal_type }}</div>
           </div>
           <form method="post" action="/meal-plan/{{ entry.id }}/duplicate" class="flex items-center gap-2">
             {{ csrf_input() }}
-            <input type="date" name="date" value="{{ week_start.isoformat() }}" class="rounded-md border border-gray-300 px-2 py-1 text-sm">
-            <button type="submit" class="text-sm text-blue-600 hover:underline">Reuse</button>
+            <input type="date" name="date" value="{{ week_start.isoformat() }}"
+                   class="rounded-md border border-gray-300 px-2 py-1.5 shadow-sm">
+            <button type="submit"
+                    class="text-sm font-medium text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-md px-3 py-2">
+              Reuse
+            </button>
           </form>
         </li>
         {% endfor %}
@@ -107,12 +113,15 @@
       {% if recent_entries %}
       <ul class="divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
         {% for entry in recent_entries %}
-        <li class="flex items-center justify-between gap-4 px-4 py-3">
+        <li class="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div>
             <div class="font-medium">{{ entry.title }}</div>
             <div class="text-sm text-gray-500">{{ entry.date.isoformat() }} · {{ entry.meal_type }}</div>
           </div>
-          <a href="/meal-plan/{{ entry.id }}/edit" class="text-sm text-blue-600 hover:underline">Edit</a>
+          <a href="/meal-plan/{{ entry.id }}/edit"
+             class="text-sm font-medium text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-md px-3 py-2 self-start sm:self-auto">
+            Edit
+          </a>
         </li>
         {% endfor %}
       </ul>

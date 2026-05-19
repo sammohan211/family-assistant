@@ -20,7 +20,7 @@
       <label for="title" class="block text-sm font-medium text-gray-700">Title</label>
       <input id="title" name="title" type="text" required maxlength="140"
              value="{{ form_data.title if form_data and 'title' in form_data else (item.title if item else '') }}"
-             class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+             class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-blue-500 focus:ring-blue-500">
     </div>
 
     <div class="grid gap-4 sm:grid-cols-2">
@@ -28,13 +28,13 @@
         <label for="date" class="block text-sm font-medium text-gray-700">Date</label>
         <input id="date" name="date" type="date" required
                value="{{ form_data.date if form_data and 'date' in form_data else (item.date.isoformat() if item else '') }}"
-               class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+               class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-blue-500 focus:ring-blue-500">
       </div>
       <div>
         <label for="meal_type" class="block text-sm font-medium text-gray-700">Meal type</label>
         {% set selected_meal_type = form_data.meal_type if form_data and 'meal_type' in form_data else (item.meal_type if item else 'dinner') %}
         <select id="meal_type" name="meal_type"
-                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-blue-500 focus:ring-blue-500">
           {% for meal_type in meal_types %}
           <option value="{{ meal_type }}" {% if meal_type == selected_meal_type %}selected{% endif %}>{{ meal_type|capitalize }}</option>
           {% endfor %}
@@ -45,7 +45,7 @@
     <div>
       <label for="notes" class="block text-sm font-medium text-gray-700">Notes</label>
       <textarea id="notes" name="notes" rows="3"
-                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500">{{ form_data.notes if form_data and 'notes' in form_data else (item.notes if item and item.notes else '') }}</textarea>
+                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-blue-500 focus:ring-blue-500">{{ form_data.notes if form_data and 'notes' in form_data else (item.notes if item and item.notes else '') }}</textarea>
     </div>
 
     {% set favorite_checked = form_data.is_favorite if form_data and 'is_favorite' in form_data else ('on' if item and item.is_favorite else '') %}
@@ -56,7 +56,7 @@
     </label>
 
     <div class="flex items-center justify-between pt-2">
-      <button type="submit" class="rounded-md bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700">
+      <button type="submit" class="rounded-md bg-blue-600 px-4 py-2.5 font-medium text-white hover:bg-blue-700">
         {% if item %}Save{% else %}Add{% endif %}
       </button>
       <a href="/meal-plan" class="text-sm text-gray-600 hover:underline">Cancel</a>
@@ -67,7 +67,7 @@
   <form method="post" action="/meal-plan/{{ item.id }}/delete" class="mt-4">
     {{ csrf_input() }}
     <button type="submit"
-            class="text-sm text-red-600 hover:text-red-700"
+            class="text-sm font-medium text-red-600 hover:bg-red-50 border border-red-200 rounded-md px-3 py-2"
             onclick="return confirm('Delete {{ item.title }}?');">
       Delete {{ item.title }}
     </button>
