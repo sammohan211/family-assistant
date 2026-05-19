@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Exercise log · Family Assistant{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8">
+  {% set active = "log" %}
+  {% include "exercise/_header.html" with context %}
+
+  <div class="flex items-center justify-between gap-4 mb-4">
+    <div>
+      <h1 class="text-2xl font-semibold">Exercise log</h1>
+      <p class="text-sm text-gray-500">Your sessions, most recent first.</p>
+    </div>
+    <a href="/exercise/new"
+       class="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">
+      Log session
+    </a>
+  </div>
+
+  {% if logs %}
+  <div class="rounded-lg border border-gray-200 bg-white overflow-hidden">
+    <table class="min-w-full divide-y divide-gray-200 text-sm">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-4 py-2 text-left font-medium text-gray-600">Date</th>
+          <th class="px-4 py-2 text-left font-medium text-gray-600">Exercise</th>
+          <th class="px-4 py-2 text-left font-medium text-gray-600">Inputs</th>
+          <th class="px-4 py-2 text-right font-medium text-gray-600">Score</th>
+          <th class="px-4 py-2 text-right font-medium text-gray-600"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200">
+        {% for log in logs %}
+        <tr>
+          <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ log.date.strftime('%a %b %-d') }}</td>
+          <td class="px-4 py-2">
+            <span class="font-medium">{{ log.exercise.name }}</span>
+            <span class="ml-1 text-xs text-gray-500">{{ log.exercise.body_group }}</span>
+          </td>
+          <td class="px-4 py-2 text-gray-700">
+            {% if log.exercise.scoring_type == "weighted" %}
+              {{ log.sets }} × {{ log.reps }} @ {{ "%g"|format(log.weight) }}
+            {% elif log.exercise.scoring_type == "distance" %}
+              {{ "%g"|format(log.distance_km) }} km
+            {% elif log.exercise.scoring_type == "bodyweight_fraction" %}
+              {{ log.sets }} × {{ log.reps }}
+            {% endif %}
+            {% if log.duration_minutes %}
+              <span class="text-xs text-gray-500">· {{ log.duration_minutes }} min</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-2 text-right font-medium tabular-nums">{{ "%g"|format(log.work_score) }}</td>
+          <td class="px-4 py-2 text-right whitespace-nowrap">
+            <a href="/exercise/{{ log.id }}/edit"
+               class="text-blue-600 hover:underline mr-3">Edit</a>
+            <form method="post" action="/exercise/{{ log.id }}/delete"
+                  class="inline"
+                  onsubmit="return confirm('Delete this log entry?');">
+              {{ csrf_input() }}
+              <button type="submit" class="text-red-600 hover:underline">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center space-y-2">
+    <p class="text-sm text-gray-600">No sessions logged yet.</p>
+    <p class="text-xs text-gray-500">
+      <a href="/exercise/new" class="text-blue-600 hover:underline">Log your first session</a>.
+      Make sure the <a href="/exercise/catalog" class="text-blue-600 hover:underline">catalog</a>
+      has at least one exercise first.
+    </p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -393,7 +393,7 @@ def test_weekly_summary_delta_pct_none_when_no_prior(
 
 
 # ---------------------------------------------------------------------------
-# Router: placeholder + body-weight
+# Router: auth + body-weight
 # ---------------------------------------------------------------------------
 
 
@@ -402,10 +402,10 @@ def test_exercise_route_requires_auth(client: TestClient) -> None:
     assert response.status_code == 401
 
 
-def test_exercise_placeholder_renders(authenticated_client: TestClient) -> None:
+def test_log_list_empty_state(authenticated_client: TestClient) -> None:
     response = authenticated_client.get("/exercise")
     assert response.status_code == 200
-    assert b"Log view coming next" in response.content
+    assert b"No sessions logged yet" in response.content
     assert b"Body weight" in response.content
 
 
@@ -655,3 +655,213 @@ def test_assistant_tool_logs_against_catalog(db_session: Session, seeded_user: U
     log = db_session.get(ExerciseLog, result.affected_ids[0])
     assert log is not None
     assert log.work_score == Decimal("1800")
+
+
+# ---------------------------------------------------------------------------
+# Log UI
+# ---------------------------------------------------------------------------
+
+
+def test_log_new_form_empty_catalog_warns(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/exercise/new")
+    assert response.status_code == 200
+    assert b"No exercises in the catalog yet" in response.content
+
+
+def test_log_new_form_renders_with_catalog(
+    authenticated_client: TestClient, db_session: Session
+) -> None:
+    create_exercise(
+        db_session,
+        name="Bench press",
+        body_group="upper",
+        muscle_groups=["chest"],
+        scoring_type="weighted",
+    )
+    response = authenticated_client.get("/exercise/new")
+    assert response.status_code == 200
+    assert b"Bench press" in response.content
+
+
+def test_log_create_weighted(
+    authenticated_client: TestClient, db_session: Session, seeded_user: User
+) -> None:
+    from family_assistant.exercise.services import list_user_logs
+
+    ex = create_exercise(
+        db_session,
+        name="Bench press",
+        body_group="upper",
+        muscle_groups=["chest"],
+        scoring_type="weighted",
+    )
+    response = authenticated_client.post(
+        "/exercise",
+        data={
+            "exercise_id": str(ex.id),
+            "date": "2026-05-18",
+            "sets": "3",
+            "reps": "10",
+            "weight": "60",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    logs = list_user_logs(db_session, user=seeded_user)
+    assert len(logs) == 1
+    assert logs[0].work_score == Decimal("1800")
+
+
+def test_log_create_distance_requires_body_weight(
+    authenticated_client: TestClient, db_session: Session
+) -> None:
+    ex = create_exercise(
+        db_session,
+        name="Run",
+        body_group="cardio",
+        muscle_groups=["legs"],
+        scoring_type="distance",
+    )
+    response = authenticated_client.post(
+        "/exercise",
+        data={
+            "exercise_id": str(ex.id),
+            "date": "2026-05-18",
+            "distance_km": "5",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 400
+    assert b"body_weight" in response.content
+
+
+def test_log_create_distance_succeeds_with_body_weight(
+    authenticated_client: TestClient, db_session: Session, seeded_user: User
+) -> None:
+    from family_assistant.exercise.services import list_user_logs
+
+    set_body_weight(db_session, user=seeded_user, body_weight=Decimal("80"))
+    ex = create_exercise(
+        db_session,
+        name="Run",
+        body_group="cardio",
+        muscle_groups=["legs"],
+        scoring_type="distance",
+    )
+    response = authenticated_client.post(
+        "/exercise",
+        data={
+            "exercise_id": str(ex.id),
+            "date": "2026-05-18",
+            "distance_km": "5",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    logs = list_user_logs(db_session, user=seeded_user)
+    assert len(logs) == 1
+    assert logs[0].work_score == Decimal("400")
+
+
+def test_log_create_rejects_blank_exercise(authenticated_client: TestClient) -> None:
+    response = authenticated_client.post(
+        "/exercise",
+        data={"exercise_id": "", "date": "2026-05-18"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 400
+    assert b"Pick an exercise" in response.content
+
+
+def test_log_create_rejects_bad_date(authenticated_client: TestClient, db_session: Session) -> None:
+    ex = create_exercise(
+        db_session,
+        name="Bench press",
+        body_group="upper",
+        muscle_groups=["chest"],
+        scoring_type="weighted",
+    )
+    response = authenticated_client.post(
+        "/exercise",
+        data={
+            "exercise_id": str(ex.id),
+            "date": "not-a-date",
+            "sets": "3",
+            "reps": "10",
+            "weight": "60",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 400
+    assert b"Date must be YYYY-MM-DD" in response.content
+
+
+def test_log_edit_and_update(
+    authenticated_client: TestClient, db_session: Session, seeded_user: User
+) -> None:
+    ex = create_exercise(
+        db_session,
+        name="Bench press",
+        body_group="upper",
+        muscle_groups=["chest"],
+        scoring_type="weighted",
+    )
+    log = create_log(
+        db_session,
+        user=seeded_user,
+        exercise=ex,
+        entry_date=date(2026, 5, 18),
+        sets=3,
+        reps=10,
+        weight=Decimal("60"),
+        distance_km=None,
+        duration_minutes=None,
+        notes=None,
+    )
+    edit_response = authenticated_client.get(f"/exercise/{log.id}/edit")
+    assert edit_response.status_code == 200
+    assert b"Edit session" in edit_response.content
+
+    update_response = authenticated_client.post(
+        f"/exercise/{log.id}",
+        data={
+            "exercise_id": str(ex.id),
+            "date": "2026-05-18",
+            "sets": "4",
+            "reps": "10",
+            "weight": "60",
+        },
+        follow_redirects=False,
+    )
+    assert update_response.status_code == 303
+    db_session.refresh(log)
+    assert log.sets == 4
+    assert log.work_score == Decimal("2400")
+
+
+def test_log_delete(
+    authenticated_client: TestClient, db_session: Session, seeded_user: User
+) -> None:
+    ex = create_exercise(
+        db_session,
+        name="Bench press",
+        body_group="upper",
+        muscle_groups=["chest"],
+        scoring_type="weighted",
+    )
+    log = create_log(
+        db_session,
+        user=seeded_user,
+        exercise=ex,
+        entry_date=date(2026, 5, 18),
+        sets=3,
+        reps=10,
+        weight=Decimal("60"),
+        distance_km=None,
+        duration_minutes=None,
+        notes=None,
+    )
+    log_id = log.id
+    response = authenticated_client.post(f"/exercise/{log_id}/delete", follow_redirects=False)
+    assert response.status_code == 303
+    assert db_session.get(ExerciseLog, log_id) is None
