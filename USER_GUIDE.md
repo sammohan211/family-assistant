@@ -80,7 +80,9 @@ I ran 5k this morning.
 
 The dashboard's quick-add box creates an item with only a name — open the grocery page if you need quantity or category.
 
-**The list is a scratchpad, not stock tracking.** There's no deduplication: if you add `eggs · 1 dozen` and someone else adds `eggs · 30` later (via the form or the assistant), you get two separate rows — the system doesn't notice or merge. Whoever shops reconciles by eye. Unit strings are never compared, so `"dozen"`, `"items"`, and `""` are treated as three different units. Keep names simple and consistent if you want fewer duplicates.
+**Duplicate warning on add.** If you try to add an item whose name (case-insensitive) already matches an *open* item, the form shows a yellow warning ("Already on the open list: Eggs (1 dozen)") and won't create the row until you submit a second time. Edit the name to dodge the warning, or submit again to add anyway. The check is intentionally simple: only open items count (purchased history doesn't), and only exact-string-after-lowercasing matches (so `"eggs"`, `"Eggs"`, and `"EGGS"` are treated as the same, but `"egg"` and `"eggs"` aren't). The assistant path isn't gated by this — the LLM sees the open list in context and is responsible for its own choice.
+
+**The list is still a scratchpad, not stock tracking.** Beyond the literal-name dedup above, nothing tries to merge `"eggs"` with `"egg (large)"` or `"1 dozen eggs"` with `"12 eggs"`. Unit strings are never compared. Smarter dedup (synonyms, plurals, dozens-vs-counts) is phase 2 and depends on the meal/lunch catalog work.
 
 ---
 

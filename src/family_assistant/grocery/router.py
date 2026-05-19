@@ -14,6 +14,7 @@ from family_assistant.grocery.services import (
     clone_grocery_item,
     create_grocery_item,
     delete_grocery_item,
+    find_open_item_with_name,
     get_grocery_item,
     list_open_items,
     list_purchased_items,
@@ -49,12 +50,18 @@ def _render_form(
     item,
     error: str | None,
     form_data: dict[str, str] | None = None,
+    duplicate=None,
     status_code: int = 200,
 ) -> Response:
     return templates.TemplateResponse(
         request,
         "grocery/form.html",
-        {"item": item, "error": error, "form_data": form_data or {}},
+        {
+            "item": item,
+            "error": error,
+            "form_data": form_data or {},
+            "duplicate": duplicate,
+        },
         status_code=status_code,
     )
 
@@ -90,6 +97,7 @@ def create_view(
     quantity: Annotated[str, Form()] = "",
     unit: Annotated[str, Form()] = "",
     notes: Annotated[str, Form()] = "",
+    confirm_duplicate: Annotated[str, Form()] = "",
 ) -> Response:
     form_data = {
         "name": name,
@@ -115,6 +123,17 @@ def create_view(
             form_data=form_data,
             status_code=400,
         )
+    if confirm_duplicate != "true":
+        duplicate = find_open_item_with_name(db, name)
+        if duplicate is not None:
+            return _render_form(
+                request,
+                item=None,
+                error=None,
+                form_data=form_data,
+                duplicate=duplicate,
+                status_code=409,
+            )
     create_grocery_item(
         db,
         user=user,

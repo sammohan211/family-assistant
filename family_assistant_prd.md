@@ -213,8 +213,11 @@ The application shall support:
 6. Track who added and who purchased each item.
 7. "Recent items" quick-add UX surfacing frequently bought items.
 8. Assistant-created grocery items via the AI layer.
+9. **Form-level duplicate warning on add.** A case-insensitive name match against currently open items shows a warning ("Already on the open list: X") and requires a second submit to add anyway. Purchased history is not matched. The LLM-assistant path is not gated by this — the LLM already sees the open list in its prompt context and is responsible for its own decision.
 
 Scheduled / recurring grocery items (e.g., "milk every Tuesday") are not in MVP.
+
+Smarter dedup — LLM-assisted matching against canonical names and units (synonyms, plurals, "1 dozen eggs" ≈ "12 eggs"), with an `grocery.update_item` tool that folds a request into an existing open item where appropriate — is deferred to phase 2. It becomes natural once the meal/lunch catalogs (§10.5, §10.6) supply canonical ingredient names; until then, structured dedup has nothing to match against.
 
 ### 10.5 Meal Planning Module
 
@@ -1057,11 +1060,12 @@ Most architectural and scope questions are resolved earlier in this PRD. What re
 3. Pantry inventory and a "what's in stock" hint surfaced on the meal-plan page during planning.
 4. Meal-to-grocery generation from planned meals (becomes feasible once catalog meals carry ingredients).
 5. LLM-assisted weekly lunch planner: given the kid's hard restrictions (school no-nut rule, allergies from Memory), macro targets, and recent variety, proposes M–F lunches with grocery-feeding ingredients. Shares the macro framework with item 1.
-6. Lunch templates.
-7. AI-generated weekly summary card on the dashboard.
-8. PWA installation and offline-friendly grocery list.
-9. Memory archiving / expiration workflows.
-10. Inferred memories with user review (the AI proposes, the user approves).
+6. LLM-assisted grocery dedup: a `grocery.update_item` tool plus a prompt rule that matches user requests against canonical ingredient names from the catalogs and folds same-thing-different-wording adds into the existing open row (synonyms, plurals, `1 dozen eggs` ≈ `12 eggs`). Naturally feasible once items 1 + 5 land — canonical names are the prerequisite.
+7. Lunch templates.
+8. AI-generated weekly summary card on the dashboard.
+9. PWA installation and offline-friendly grocery list.
+10. Memory archiving / expiration workflows.
+11. Inferred memories with user review (the AI proposes, the user approves).
 
 ### Phase 3: AI and Retrieval Expansion
 

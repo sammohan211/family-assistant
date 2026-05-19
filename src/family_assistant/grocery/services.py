@@ -2,7 +2,7 @@
 
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 from sqlalchemy.orm import selectinload
 
@@ -64,6 +64,21 @@ def list_recent_items(db: DbSession, limit: int = 8, scan_limit: int = 200) -> l
 
 def get_grocery_item(db: DbSession, item_id: int) -> GroceryItem | None:
     return db.get(GroceryItem, item_id)
+
+
+def find_open_item_with_name(db: DbSession, name: str) -> GroceryItem | None:
+    """Case-insensitive lookup for an open item with the same trimmed name."""
+    needle = name.strip().lower()
+    if not needle:
+        return None
+    statement = (
+        select(GroceryItem)
+        .where(GroceryItem.status == "open")
+        .where(func.lower(GroceryItem.name) == needle)
+        .order_by(GroceryItem.id)
+        .limit(1)
+    )
+    return db.scalars(statement).first()
 
 
 def create_grocery_item(

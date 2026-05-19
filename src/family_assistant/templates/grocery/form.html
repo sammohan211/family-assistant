@@ -15,6 +15,14 @@
     {% if error %}
     <div class="text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">{{ error }}</div>
     {% endif %}
+    {% if duplicate %}
+    <div class="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+      Already on the open list: <strong>{{ duplicate.name }}</strong>
+      {%- if duplicate.quantity %} ({{ duplicate.quantity }}{% if duplicate.unit %} {{ duplicate.unit }}{% endif %}){% endif -%}.
+      Submit again to add anyway, or edit the name above.
+    </div>
+    <input type="hidden" name="confirm_duplicate" value="true">
+    {% endif %}
 
     <div>
       <label for="name" class="block text-sm font-medium text-gray-700">Name</label>

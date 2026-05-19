@@ -79,6 +79,65 @@ def test_create_accepts_decimal_quantity(
     assert item.unit == "lb"
 
 
+def test_create_warns_on_open_duplicate(
+    authenticated_client: TestClient, db_session: Session, seeded_user
+) -> None:
+    db_session.add(
+        GroceryItem(name="Eggs", quantity=12, unit="dozen", added_by_user_id=seeded_user.id)
+    )
+    db_session.commit()
+
+    response = authenticated_client.post(
+        "/grocery",
+        data={"name": "eggs", "quantity": "6"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 409
+    assert b"Already on the open list" in response.content
+    assert b"Eggs" in response.content
+    assert b'name="confirm_duplicate" value="true"' in response.content
+    # Nothing got created on the warning roundtrip.
+    assert db_session.scalars(select(GroceryItem)).all().__len__() == 1
+
+
+def test_create_confirm_duplicate_creates_anyway(
+    authenticated_client: TestClient, db_session: Session, seeded_user
+) -> None:
+    db_session.add(GroceryItem(name="Eggs", added_by_user_id=seeded_user.id))
+    db_session.commit()
+
+    response = authenticated_client.post(
+        "/grocery",
+        data={"name": "Eggs", "quantity": "30", "confirm_duplicate": "true"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    items = db_session.scalars(select(GroceryItem).order_by(GroceryItem.id)).all()
+    assert len(items) == 2
+    assert items[1].quantity == 30
+
+
+def test_create_does_not_warn_for_purchased_duplicate(
+    authenticated_client: TestClient, db_session: Session, seeded_user
+) -> None:
+    db_session.add(
+        GroceryItem(
+            name="Eggs",
+            added_by_user_id=seeded_user.id,
+            status="purchased",
+            purchased_by_user_id=seeded_user.id,
+        )
+    )
+    db_session.commit()
+
+    response = authenticated_client.post(
+        "/grocery",
+        data={"name": "Eggs"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+
 def test_mark_item_purchased(
     authenticated_client: TestClient, db_session: Session, seeded_user
 ) -> None:
