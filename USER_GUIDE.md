@@ -16,14 +16,14 @@ If you forget the password: it's not recoverable — generate a new hash (see `O
 
 ## Dashboard
 
-`/dashboard` — the landing page. Four cards:
+`/dashboard` — the landing page after login (`/` redirects here when authenticated). Four cards on a single screen:
 
-- **Today's meals** — meal plan entries whose `date` is today, grouped by type.
-- **School lunches this week** — per family member, count of planned vs. packed lunches for the current week.
-- **Grocery** — quick-add box (just a name; for quantity/unit/notes use the full grocery page) plus the first 5 open items.
-- **Recent assistant activity** — your last few assistant prompts and their status.
+- **Today's meals** — every meal-plan entry for today, with its type (breakfast/lunch/dinner/snack) as a chip. Empty state: "Nothing planned for today."
+- **School lunches this week** — one line per kid showing `N planned` for the current week (Monday–Sunday). Empty state per kid: "No lunches this week."
+- **Grocery** — a quick-add input (name only) plus the first 5 open items. The header link `N open` jumps to the full grocery page.
+- **Recent assistant activity** — the last 5 assistant prompts across both users, each with its time and status (`completed`, `pending_confirmation`, etc.).
 
-This is also the page to come back to first thing in the morning — it answers "what's already planned for today?"
+**Grocery quick-add behaviour:** the input creates an open item with just a name — no quantity, unit, or category. If the name already matches an open item (case-insensitive), the quick-add **silently does nothing** rather than creating a duplicate; switch to the full grocery page if you want to override that or set extra fields. The full form's duplicate warning gives you a "submit again to add anyway" option; the quick-add doesn't.
 
 ---
 
@@ -195,34 +195,46 @@ Per-exercise breakdown within a body group ("which exercise drove most of upper-
 
 ## Family
 
-`/family` — people in the household other than `USER1`/`USER2`. Children typically. Used by the lunch plan and memory pages.
+`/family` — non-login household members. Kids only in MVP (pets and other members are deferred). Shared across both login users.
 
-**Add a member:** name, optional notes, school-day checkboxes (Mon–Sun). The school-day selection feeds the dashboard's "lunches this week" totals (only counts days they go to school).
+**Add a member:** name, optional notes, school-day checkboxes (Mon–Sun). The school-day selection feeds the **Lunch plan** grid (which days appear for the kid) and the dashboard's "lunches this week" totals.
+
+**Per-entry actions:** **Edit** opens the form; **Delete** lives at the bottom of the edit page.
+
+**Allergies, food preferences, and restrictions don't go here — they go in Memory.** The Family page is just the *person*; Memory holds what's *true about them* ("Maya is allergic to peanuts"). When creating such memories, you pick the FamilyMember as the subject.
+
+**First-time setup order:** add the kid here, set school days, then capture allergies/preferences on the Memory page. After that, Lunch plan and the dashboard counts start working.
+
+There is no assistant tool for family members — adding, editing, and deleting are form-only.
 
 ---
 
 ## Memory
 
-`/memory` — durable preferences, restrictions, and routines that the assistant should remember across conversations.
+`/memory` — durable preferences, restrictions, and routines the assistant should remember across conversations. Shared across both users.
 
-**Add a memory:** pick a **subject**:
+**Subjects:**
 - `household` — applies to everyone.
-- `user` — pick one of the login users.
-- `family_member` — pick one family member.
+- `user` — pick one of the two login users.
+- `family_member` — pick a kid added on the Family page.
 
-Then pick a **type**:
+**Types** — pick whichever best fits:
 - `preference` — soft "likes" ("prefers oat milk").
-- `food_preference` — food-specific likes/dislikes.
-- `restriction` — must-avoid that isn't life-threatening ("vegetarian on Fridays").
+- `food_preference` — food-specific likes/dislikes ("doesn't eat mushrooms").
+- `restriction` — must-avoid that isn't life-threatening ("vegetarian"). Use `is_hard_restriction` (below) for life-threatening rules instead.
 - `routine` — recurring patterns ("swim practice Tuesdays").
 - `planning_constraint` — scheduling rules ("no dentist before 9am").
-- `frequently_used` — items/dishes/activities used often.
+- `frequently_used` — items, dishes, or activities used often.
 
-**Content** = the actual memory text. **Tags** are comma-separated and optional.
+The line between `food_preference` and `restriction` is fuzzy — "doesn't like mushrooms" is a preference; "vegetarian" is a restriction. Pick whichever the assistant should treat more seriously.
 
-**`is_hard_restriction`** — check this for allergies and any "must never do" rules. The form requires a second confirmation checkbox before saving, because the assistant treats these specially (creating one via the assistant always asks for confirmation first).
+**Content** is the actual memory text. **Tags** are comma-separated and optional — they filter the memory list page only (they're *not* sent to the LLM as context).
 
-Memories are surfaced to the LLM as context on every assistant request — that's how it remembers "Alex is allergic to peanuts" across sessions.
+**`is_hard_restriction`** — check this for allergies and any "must never do" rule. The form requires a second confirmation checkbox before saving. **Editing or deleting** a hard-restriction memory also requires confirmation, since accidentally clearing an allergy is high-risk. Creating one via the assistant always triggers a confirmation flow before anything runs.
+
+**Browse + filter.** The list page shows memories newest-first with hard restrictions pinned at the top. Filters: subject, type, free-text search, tag. **Edit / Delete** are per-row.
+
+**The LLM sees up to the 50 most recent memories on every assistant request**, regardless of subject — that's how it remembers "Alex is allergic to peanuts" across sessions. The assistant has `memory.create` and `memory.search` tools (see the **Assistant** section); other CRUD goes through this page.
 
 ---
 

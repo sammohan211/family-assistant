@@ -75,7 +75,7 @@ def test_dashboard_shows_lunch_summary_per_kid(
                 date=week_start,
                 items=[{"name": "Sandwich"}],
                 notes=None,
-                packed_status="packed",
+                packed_status="planned",
                 created_by_user_id=seeded_user.id,
             ),
             LunchPlanEntry(
@@ -94,8 +94,9 @@ def test_dashboard_shows_lunch_summary_per_kid(
     assert response.status_code == 200
     body = response.content
     assert b"Lila" in body
-    assert b"1 packed" in body
-    assert b"1 planned" in body
+    assert b"2 planned" in body
+    # Packed/planned distinction is dropped — should not appear.
+    assert b"packed" not in body
 
 
 def test_dashboard_shows_open_grocery_count_and_items(
@@ -142,6 +143,24 @@ def test_dashboard_quick_add_ignores_blank(
     )
     assert response.status_code == 303
     assert db_session.scalars(select(GroceryItem)).all() == []
+
+
+def test_dashboard_quick_add_silently_skips_open_duplicate(
+    authenticated_client: TestClient, db_session: Session, seeded_user
+) -> None:
+    db_session.add(GroceryItem(name="Eggs", added_by_user_id=seeded_user.id))
+    db_session.commit()
+
+    response = authenticated_client.post(
+        "/dashboard/grocery/quick-add",
+        data={"name": "eggs"},  # case-insensitive match
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    # No second row created.
+    items = db_session.scalars(select(GroceryItem)).all()
+    assert len(items) == 1
+    assert items[0].name == "Eggs"
 
 
 def test_root_redirects_authenticated_user_to_dashboard(

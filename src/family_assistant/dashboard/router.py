@@ -13,7 +13,11 @@ from family_assistant.auth.dependencies import require_user
 from family_assistant.auth.models import User
 from family_assistant.db import get_session
 from family_assistant.family_member.models import FamilyMember
-from family_assistant.grocery.services import create_grocery_item, list_open_items
+from family_assistant.grocery.services import (
+    create_grocery_item,
+    find_open_item_with_name,
+    list_open_items,
+)
 from family_assistant.lunch_plan.models import LunchPlanEntry
 from family_assistant.lunch_plan.services import (
     list_family_members,
@@ -41,13 +45,10 @@ def _lunch_summary(
     summary = []
     for member in members:
         member_entries = sorted(by_member[member.id], key=lambda e: e.date)
-        packed = sum(1 for e in member_entries if e.packed_status == "packed")
         summary.append(
             {
                 "member": member,
                 "total": len(member_entries),
-                "packed": packed,
-                "planned": len(member_entries) - packed,
                 "entries": member_entries,
             }
         )
@@ -86,11 +87,12 @@ def quick_add_grocery(
     db: Annotated[DbSession, Depends(get_session)],
     name: Annotated[str, Form()],
 ) -> Response:
-    if name.strip():
+    cleaned = name.strip()
+    if cleaned and find_open_item_with_name(db, cleaned) is None:
         create_grocery_item(
             db,
             user=user,
-            name=name,
+            name=cleaned,
             category=None,
             quantity=None,
             unit=None,

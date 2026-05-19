@@ -43,11 +43,7 @@
         <li class="py-2 flex items-center justify-between gap-3">
           <span class="font-medium">{{ row.member.name }}</span>
           {% if row.total %}
-          <span class="text-sm text-gray-600">
-            {{ row.packed }} packed
-            <span class="text-gray-400">·</span>
-            {{ row.planned }} planned
-          </span>
+          <span class="text-sm text-gray-600">{{ row.total }} planned</span>
           {% else %}
           <span class="text-sm text-gray-400">No lunches this week</span>
           {% endif %}
