@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="max-w-xl mx-auto px-4 py-8">
-  <h1 class="text-2xl font-semibold mb-6">
+  <h1 class="font-serif text-3xl tracking-tight mb-6">
     {% if member %}Edit {{ member.name }}{% else %}Add family member{% endif %}
   </h1>
 
@@ -20,13 +20,13 @@
       <label for="name" class="block text-sm font-medium text-gray-700">Name</label>
       <input id="name" name="name" type="text" required maxlength="100"
              value="{{ member.name if member else '' }}"
-             class="mt-1 block w-full rounded-md border border-gray-300 shadow-sm px-3 py-2.5 focus:border-blue-500 focus:ring-blue-500">
+             class="mt-1 block w-full rounded-md border border-gray-300 shadow-sm px-3 py-2.5 focus:border-accent focus:ring-accent">
     </div>
 
     <div>
       <label for="notes" class="block text-sm font-medium text-gray-700">Notes</label>
       <textarea id="notes" name="notes" rows="3"
-                class="mt-1 block w-full rounded-md border border-gray-300 shadow-sm px-3 py-2.5 focus:border-blue-500 focus:ring-blue-500">{{ member.notes if member and member.notes else '' }}</textarea>
+                class="mt-1 block w-full rounded-md border border-gray-300 shadow-sm px-3 py-2.5 focus:border-accent focus:ring-accent">{{ member.notes if member and member.notes else '' }}</textarea>
     </div>
 
     <fieldset>
@@ -36,7 +36,7 @@
         <label class="flex items-center gap-2 text-sm py-2">
           <input type="checkbox" name="school_days" value="{{ day }}"
                  {% if member and day in member.school_days %}checked{% endif %}
-                 class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                 class="rounded border-gray-300 text-accent focus:ring-accent">
           <span class="capitalize">{{ day }}</span>
         </label>
         {% endfor %}
@@ -45,7 +45,7 @@
 
     <div class="flex items-center justify-between pt-2">
       <button type="submit"
-              class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-4 rounded-md">
+              class="bg-accent hover:bg-accent-700 text-white font-medium py-2.5 px-4 rounded-md">
         {% if member %}Save{% else %}Add{% endif %}
       </button>
       <a href="/family" class="text-sm text-gray-600 hover:underline">Cancel</a>

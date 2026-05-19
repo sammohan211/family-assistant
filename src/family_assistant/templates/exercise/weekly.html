@@ -10,7 +10,7 @@
     <span class="tabular-nums text-gray-600">{{ "%g"|format(score) }}</span>
   </div>
   <div class="h-2 rounded-full bg-gray-100 overflow-hidden">
-    <div class="h-full bg-blue-500" style="width: {{ pct }}%"></div>
+    <div class="h-full bg-accent" style="width: {{ pct }}%"></div>
   </div>
 </div>
 {%- endmacro %}
@@ -21,7 +21,7 @@
   {% include "exercise/_header.html" with context %}
 
   <div class="flex items-center justify-between gap-3 mb-6">
-    <h1 class="text-2xl font-semibold">
+    <h1 class="font-serif text-3xl tracking-tight">
       Week of {{ summary.week_start.strftime('%b %-d, %Y') }}
     </h1>
     <div class="flex items-center gap-1 text-sm">
@@ -58,7 +58,7 @@
   <div class="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center">
     <p class="text-sm text-gray-600">No sessions logged this week.</p>
     <p class="mt-1 text-xs text-gray-500">
-      <a href="/exercise/new" class="text-blue-600 hover:underline">Log a session</a>
+      <a href="/exercise/new" class="text-accent hover:underline">Log a session</a>
       to start the week.
     </p>
   </div>
@@ -66,7 +66,7 @@
     {# Body group breakdown #}
     {% set max_body = summary.by_body_group|map(attribute='score')|max %}
     <section class="rounded-lg border border-gray-200 bg-white p-6 mb-6 space-y-3">
-      <h2 class="text-lg font-semibold">By body group</h2>
+      <h2 class="font-serif text-xl">By body group</h2>
       <div class="space-y-3">
         {% for row in summary.by_body_group %}
           {{ score_bar(row.label, row.score, max_body) }}
@@ -78,7 +78,7 @@
     {% if summary.by_muscle_group %}
     {% set max_muscle = summary.by_muscle_group|map(attribute='score')|max %}
     <section class="rounded-lg border border-gray-200 bg-white p-6 space-y-3">
-      <h2 class="text-lg font-semibold">By muscle group</h2>
+      <h2 class="font-serif text-xl">By muscle group</h2>
       <div class="space-y-3">
         {% for row in summary.by_muscle_group %}
           {{ score_bar(row.label, row.score, max_muscle) }}
@@ -88,7 +88,7 @@
     {% else %}
     <section class="rounded-lg border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-600">
       No muscle group tags on this week's exercises. Add tags in the
-      <a href="/exercise/catalog" class="text-blue-600 hover:underline">catalog</a> to see breakdowns.
+      <a href="/exercise/catalog" class="text-accent hover:underline">catalog</a> to see breakdowns.
     </section>
     {% endif %}
   {% endif %}

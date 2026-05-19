@@ -6,7 +6,7 @@
 <div class="max-w-6xl mx-auto px-4 py-8 space-y-8">
   <div class="flex flex-wrap items-center justify-between gap-4">
     <div>
-      <h1 class="text-2xl font-semibold">Meal plan</h1>
+      <h1 class="font-serif text-3xl tracking-tight">Meal plan</h1>
       <p class="text-sm text-gray-500">Week of {{ week_start.strftime("%b %-d") }} to {{ week_end.strftime("%b %-d") }}</p>
     </div>
     <div class="flex items-center gap-2">
@@ -19,7 +19,7 @@
         Next week
       </a>
       <a href="/meal-plan/new"
-         class="rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700">
+         class="rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-700">
         Add meal
       </a>
     </div>
@@ -37,7 +37,7 @@
         <div class="flex items-center justify-between gap-2">
           <h3 class="text-sm font-medium capitalize text-gray-700">{{ meal_type }}</h3>
           <a href="/meal-plan/new?meal_date={{ day.isoformat() }}&meal_type={{ meal_type }}"
-             class="inline-block text-xs text-blue-600 px-2 py-1 rounded hover:bg-blue-50">
+             class="inline-block text-xs text-accent px-2 py-1 rounded hover:bg-accent-50">
             Add
           </a>
         </div>
@@ -54,7 +54,7 @@
                 {% endif %}
               </div>
               <a href="/meal-plan/{{ entry.id }}/edit"
-                 class="inline-block text-xs text-blue-600 px-2 py-1 rounded hover:bg-blue-50">Edit</a>
+                 class="inline-block text-xs text-accent px-2 py-1 rounded hover:bg-accent-50">Edit</a>
             </div>
             {% if entry.notes %}
             <p class="text-sm text-gray-600">{{ entry.notes }}</p>
@@ -65,7 +65,7 @@
                 {{ csrf_input() }}
                 <input type="hidden" name="date" value="{{ day.isoformat() }}">
                 <button type="submit"
-                        class="inline-block text-blue-600 px-2 py-1 rounded hover:bg-blue-50">Reuse</button>
+                        class="inline-block text-accent px-2 py-1 rounded hover:bg-accent-50">Reuse</button>
               </form>
             </div>
           </div>
@@ -82,7 +82,7 @@
 
   <section class="grid gap-6 lg:grid-cols-2">
     <div class="space-y-3">
-      <h2 class="text-lg font-semibold">Favorite meals</h2>
+      <h2 class="font-serif text-xl">Favorite meals</h2>
       {% if favorite_entries %}
       <ul class="divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
         {% for entry in favorite_entries %}
@@ -96,7 +96,7 @@
             <input type="date" name="date" value="{{ week_start.isoformat() }}"
                    class="rounded-md border border-gray-300 px-2 py-1.5 shadow-sm">
             <button type="submit"
-                    class="text-sm font-medium text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-md px-3 py-2">
+                    class="text-sm font-medium text-accent hover:bg-accent-50 border border-accent/30 rounded-md px-3 py-2">
               Reuse
             </button>
           </form>
@@ -109,7 +109,7 @@
     </div>
 
     <div class="space-y-3">
-      <h2 class="text-lg font-semibold">Recent meals</h2>
+      <h2 class="font-serif text-xl">Recent meals</h2>
       {% if recent_entries %}
       <ul class="divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
         {% for entry in recent_entries %}
@@ -119,7 +119,7 @@
             <div class="text-sm text-gray-500">{{ entry.date.isoformat() }} · {{ entry.meal_type }}</div>
           </div>
           <a href="/meal-plan/{{ entry.id }}/edit"
-             class="text-sm font-medium text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-md px-3 py-2 self-start sm:self-auto">
+             class="text-sm font-medium text-accent hover:bg-accent-50 border border-accent/30 rounded-md px-3 py-2 self-start sm:self-auto">
             Edit
           </a>
         </li>

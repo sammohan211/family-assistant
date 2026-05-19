@@ -9,11 +9,11 @@
 
   <div class="flex items-center justify-between gap-4 mb-4">
     <div>
-      <h1 class="text-2xl font-semibold">Exercise catalog</h1>
+      <h1 class="font-serif text-3xl tracking-tight">Exercise catalog</h1>
       <p class="text-sm text-gray-500">Shared across the household. Logs reference these by name.</p>
     </div>
     <a href="/exercise/catalog/new"
-       class="rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700">
+       class="rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-700">
       New exercise
     </a>
   </div>
@@ -48,7 +48,7 @@
           </td>
           <td class="px-4 py-2 text-right whitespace-nowrap">
             <a href="/exercise/catalog/{{ ex.id }}/edit"
-               class="text-blue-600 hover:underline mr-3">Edit</a>
+               class="text-accent hover:underline mr-3">Edit</a>
             <form method="post" action="/exercise/catalog/{{ ex.id }}/delete"
                   class="inline"
                   onsubmit="return confirm('Delete {{ ex.name }}? Logs that reference it will block the delete.');">

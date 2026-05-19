@@ -9,11 +9,11 @@
 
   <div class="flex items-center justify-between gap-4 mb-4">
     <div>
-      <h1 class="text-2xl font-semibold">Exercise log</h1>
+      <h1 class="font-serif text-3xl tracking-tight">Exercise log</h1>
       <p class="text-sm text-gray-500">Your sessions, most recent first.</p>
     </div>
     <a href="/exercise/new"
-       class="rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700">
+       class="rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-700">
       Log session
     </a>
   </div>
@@ -53,7 +53,7 @@
           <td class="px-4 py-2 text-right font-medium tabular-nums">{{ "%g"|format(log.work_score) }}</td>
           <td class="px-4 py-2 text-right whitespace-nowrap">
             <a href="/exercise/{{ log.id }}/edit"
-               class="text-blue-600 hover:underline mr-3">Edit</a>
+               class="text-accent hover:underline mr-3">Edit</a>
             <form method="post" action="/exercise/{{ log.id }}/delete"
                   class="inline"
                   onsubmit="return confirm('Delete this log entry?');">
@@ -70,8 +70,8 @@
   <div class="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center space-y-2">
     <p class="text-sm text-gray-600">No sessions logged yet.</p>
     <p class="text-xs text-gray-500">
-      <a href="/exercise/new" class="text-blue-600 hover:underline">Log your first session</a>.
-      Make sure the <a href="/exercise/catalog" class="text-blue-600 hover:underline">catalog</a>
+      <a href="/exercise/new" class="text-accent hover:underline">Log your first session</a>.
+      Make sure the <a href="/exercise/catalog" class="text-accent hover:underline">catalog</a>
       has at least one exercise first.
     </p>
   </div>

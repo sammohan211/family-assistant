@@ -6,11 +6,11 @@
 <div class="max-w-5xl mx-auto px-4 py-8 space-y-8">
   <div class="flex flex-wrap items-center justify-between gap-4">
     <div>
-      <h1 class="text-2xl font-semibold">Memory</h1>
+      <h1 class="font-serif text-3xl tracking-tight">Memory</h1>
       <p class="text-sm text-gray-500">Things the assistant should remember about the household, the adults, and the kids.</p>
     </div>
     <a href="/memory/new"
-       class="rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700">
+       class="rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-700">
       Add memory
     </a>
   </div>
@@ -64,7 +64,7 @@
     {% endif %}
     <div class="sm:col-span-4 flex items-center justify-between gap-2">
       <div class="text-xs text-gray-500">
-        {% if filters.tag %}Tag: <span class="font-medium">{{ filters.tag }}</span> · <a href="/memory" class="text-blue-600 hover:underline">clear</a>{% endif %}
+        {% if filters.tag %}Tag: <span class="font-medium">{{ filters.tag }}</span> · <a href="/memory" class="text-accent hover:underline">clear</a>{% endif %}
       </div>
       <div class="flex items-center gap-2">
         <a href="/memory" class="text-sm text-gray-600 hover:underline">Reset</a>
@@ -91,14 +91,14 @@
           {% if m.tags %}
           <div class="flex flex-wrap gap-1">
             {% for t in m.tags %}
-            <a href="/memory?tag={{ t }}" class="text-xs rounded-full border border-gray-300 px-2 py-1 text-gray-600 hover:border-blue-400 hover:text-blue-700">#{{ t }}</a>
+            <a href="/memory?tag={{ t }}" class="text-xs rounded-full border border-gray-300 px-2 py-1 text-gray-600 hover:border-accent hover:text-accent-700">#{{ t }}</a>
             {% endfor %}
           </div>
           {% endif %}
         </div>
         <div class="flex items-center gap-2 shrink-0">
           <a href="/memory/{{ m.id }}/edit"
-             class="text-sm font-medium text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-md px-3 py-2">
+             class="text-sm font-medium text-accent hover:bg-accent-50 border border-accent/30 rounded-md px-3 py-2">
             Edit
           </a>
           {% if m.is_hard_restriction %}
@@ -119,7 +119,7 @@
         </div>
       </div>
       <div class="text-xs text-gray-400">
-        Updated {{ m.updated_at.strftime("%Y-%m-%d") }}
+        <span class="font-mono tabular-nums">{{ m.updated_at.strftime("%Y-%m-%d") }}</span>
         {% if m.created_by_user %} · added by {{ m.created_by_user.name }}{% endif %}
       </div>
     </li>

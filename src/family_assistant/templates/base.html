@@ -3,21 +3,47 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#2563eb">
+  <meta name="theme-color" content="#7A1F2B">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Family">
   <title>{% block title %}Family Assistant{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=IBM+Plex+Mono:wght@400;500&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            serif: ['Fraunces', 'ui-serif', 'Georgia', 'serif'],
+            sans: ['"Inter Tight"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+          },
+          colors: {
+            paper: '#FAF7F2',
+            accent: {
+              DEFAULT: '#7A1F2B',
+              50: '#FBF2F3',
+              100: '#F4DEE1',
+              600: '#7A1F2B',
+              700: '#651822',
+            },
+          },
+        },
+      },
+    }
+  </script>
   <script src="https://unpkg.com/htmx.org@2.0.3" defer></script>
   <script src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
   <style>[x-cloak]{display:none !important}</style>
 </head>
-<body class="bg-gray-50 text-gray-900 min-h-screen flex flex-col">
+<body class="bg-paper text-gray-900 min-h-screen flex flex-col antialiased">
   {% if request.url.path != "/auth/login" %}
   <header class="bg-white border-b border-gray-200" x-data="{open: false}">
     <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-      <a href="/dashboard" class="font-semibold text-gray-900">Family Assistant</a>
+      <a href="/dashboard" class="font-serif italic text-xl text-gray-900 leading-none">family.</a>
 
       <nav class="hidden md:flex items-center gap-4 text-sm">
         <a href="/dashboard" class="text-gray-600 hover:text-gray-900">Dashboard</a>

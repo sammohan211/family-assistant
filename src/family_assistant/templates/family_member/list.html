@@ -5,9 +5,9 @@
 {% block content %}
 <div class="max-w-3xl mx-auto px-4 py-8">
   <div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-semibold">Family</h1>
+    <h1 class="font-serif text-3xl tracking-tight">Family</h1>
     <a href="/family/new"
-       class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-md">
+       class="bg-accent hover:bg-accent-700 text-white text-sm font-medium px-4 py-2.5 rounded-md">
       Add member
     </a>
   </div>
@@ -28,7 +28,7 @@
         {% endif %}
       </div>
       <a href="/family/{{ m.id }}/edit"
-         class="text-sm font-medium text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-md px-3 py-2 self-start sm:self-auto">
+         class="text-sm font-medium text-accent hover:bg-accent-50 border border-accent/30 rounded-md px-3 py-2 self-start sm:self-auto">
         Edit
       </a>
     </li>
@@ -37,7 +37,7 @@
   {% else %}
   <p class="text-gray-500">
     No family members yet.
-    <a href="/family/new" class="text-blue-600 hover:underline">Add one</a>.
+    <a href="/family/new" class="text-accent hover:underline">Add one</a>.
   </p>
   {% endif %}
 </div>

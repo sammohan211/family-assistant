@@ -6,7 +6,7 @@
 <div class="max-w-6xl mx-auto px-4 py-8 space-y-8">
   <div class="flex flex-wrap items-center justify-between gap-4">
     <div>
-      <h1 class="text-2xl font-semibold">Lunch plan</h1>
+      <h1 class="font-serif text-3xl tracking-tight">Lunch plan</h1>
       <p class="text-sm text-gray-500">Week of {{ week_start.strftime("%b %-d") }} to {{ week_end.strftime("%b %-d") }}</p>
     </div>
     <div class="flex items-center gap-2">
@@ -19,7 +19,7 @@
         Next week
       </a>
       <a href="/lunch-plan/new"
-         class="rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700">
+         class="rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-700">
         Add lunch
       </a>
     </div>
@@ -32,7 +32,7 @@
     <article class="space-y-4">
       <div class="flex items-start justify-between gap-4">
         <div>
-          <h2 class="text-lg font-semibold">{{ member.name }}</h2>
+          <h2 class="font-serif text-xl">{{ member.name }}</h2>
           {% if member.school_days %}
           <p class="text-sm text-gray-500">School days: {{ member.school_days | join(", ") | title }}</p>
           {% endif %}
@@ -52,7 +52,7 @@
               <p class="text-xs text-gray-500">{{ day.strftime("%b %-d") }}</p>
             </div>
             <a href="/lunch-plan/new?date={{ day.isoformat() }}&family_member_id={{ member.id }}"
-               class="inline-block text-xs text-blue-600 px-2 py-1 rounded hover:bg-blue-50">
+               class="inline-block text-xs text-accent px-2 py-1 rounded hover:bg-accent-50">
               Add
             </a>
           </div>
@@ -64,7 +64,7 @@
             <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
               <div class="flex items-start justify-end gap-2">
                 <a href="/lunch-plan/{{ entry.id }}/edit"
-                   class="inline-block text-xs text-blue-600 px-2 py-1 rounded hover:bg-blue-50">Edit</a>
+                   class="inline-block text-xs text-accent px-2 py-1 rounded hover:bg-accent-50">Edit</a>
               </div>
               <ul class="list-disc pl-5 text-sm text-gray-700">
                 {% for item in entry.items %}
@@ -91,7 +91,7 @@
       {% else %}
       <p class="text-sm text-gray-500">
         No school days configured for {{ member.name }}.
-        <a href="/family/{{ member.id }}/edit" class="text-blue-600 hover:underline">Add some</a>
+        <a href="/family/{{ member.id }}/edit" class="text-accent hover:underline">Add some</a>
         to plan lunches.
       </p>
       {% endif %}
