@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Exercise · Family Assistant{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-12 space-y-4 text-center">
+  <h1 class="text-2xl font-semibold">Exercise</h1>
+  <p class="text-sm text-gray-600">
+    The exercise module is being rebuilt with a per-session work score, body group
+    and muscle group tagging, and a weekly aggregation view.
+    See <code class="px-1 py-0.5 bg-gray-100 rounded">family_assistant_prd.md §10.7</code>.
+  </p>
+  <p class="text-xs text-gray-500">
+    Catalog, log entry, and weekly views land in subsequent commits. The assistant tool
+    <code class="px-1 py-0.5 bg-gray-100 rounded">exercise.log_activity</code> already
+    uses the new shape but needs an exercise to be present in the catalog.
+  </p>
+</div>
+{% endblock %}

@@ -11,13 +11,15 @@ HTML forms use — there are no parallel mutation paths.
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
+from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.orm import Session as DbSession
 
 from family_assistant.auth.models import User
-from family_assistant.exercise.services import create_exercise_entry
+from family_assistant.exercise.scoring import ScoringInputError
+from family_assistant.exercise.services import create_log, get_exercise_by_name
 from family_assistant.family_member.models import FamilyMember
 from family_assistant.grocery.services import (
     create_grocery_item,
@@ -88,9 +90,13 @@ class LunchPlanCreateEntryArgs(_StrictModel):
 
 
 class ExerciseLogActivityArgs(_StrictModel):
-    activity_type: str
-    duration_minutes: int = Field(ge=1)
+    exercise_name: str
     date: date
+    sets: int | None = Field(default=None, ge=1)
+    reps: int | None = Field(default=None, ge=1)
+    weight: float | None = Field(default=None, ge=0)
+    distance_km: float | None = Field(default=None, ge=0)
+    duration_minutes: int | None = Field(default=None, ge=1)
     notes: str | None = None
 
 
@@ -205,18 +211,46 @@ def _handle_lunch_plan_create_entry(
     return ToolResult(outcome="success", affected_table="lunch_plan_entries", affected_ids=[row.id])
 
 
+def _to_decimal(value: float | None) -> Decimal | None:
+    if value is None:
+        return None
+    try:
+        return Decimal(str(value))
+    except InvalidOperation:
+        return None
+
+
 def _handle_exercise_log_activity(
     args: ExerciseLogActivityArgs, db: DbSession, user: User
 ) -> ToolResult:
-    row = create_exercise_entry(
-        db,
-        user=user,
-        activity_type=args.activity_type,
-        duration_minutes=args.duration_minutes,
-        entry_date=args.date,
-        notes=args.notes,
-    )
-    return ToolResult(outcome="success", affected_table="exercise_entries", affected_ids=[row.id])
+    exercise = get_exercise_by_name(db, args.exercise_name)
+    if exercise is None:
+        return ToolResult(
+            outcome="not_found",
+            affected_table="exercises",
+            error=(
+                f"No exercise named {args.exercise_name!r} in the catalog. "
+                "Add it via /exercise/catalog before logging."
+            ),
+        )
+    try:
+        row = create_log(
+            db,
+            user=user,
+            exercise=exercise,
+            entry_date=args.date,
+            sets=args.sets,
+            reps=args.reps,
+            weight=_to_decimal(args.weight),
+            distance_km=_to_decimal(args.distance_km),
+            duration_minutes=args.duration_minutes,
+            notes=args.notes,
+        )
+    except ScoringInputError as exc:
+        return ToolResult(
+            outcome="validation_error", affected_table="exercise_logs", error=str(exc)
+        )
+    return ToolResult(outcome="success", affected_table="exercise_logs", affected_ids=[row.id])
 
 
 def _handle_memory_create(args: MemoryCreateArgs, db: DbSession, user: User) -> ToolResult:
@@ -315,7 +349,14 @@ TOOLS: dict[str, ToolSpec] = {
             name="exercise.log_activity",
             args_model=ExerciseLogActivityArgs,
             handler=_handle_exercise_log_activity,
-            description="Log an exercise activity for the current user.",
+            description=(
+                "Log one exercise session for the current user. "
+                "Reference an existing catalog exercise by name (case-insensitive); "
+                "unknown names return a validation error. "
+                "Provide the inputs the exercise's scoring_type expects: "
+                "weighted -> sets/reps/weight; distance -> distance_km; "
+                "bodyweight_fraction -> sets/reps. duration_minutes is optional on any log."
+            ),
         ),
         ToolSpec(
             name="memory.create",
