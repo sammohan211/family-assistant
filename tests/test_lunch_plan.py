@@ -38,7 +38,6 @@ def test_create_lunch_plan_entry(
             "date": "2026-05-18",
             "items_text": "Turkey sandwich: no mayo\nApple slices",
             "notes": "Ice pack in side pocket",
-            "packed_status": "planned",
         },
         follow_redirects=False,
     )
@@ -67,7 +66,6 @@ def test_create_requires_item(authenticated_client: TestClient, db_session: Sess
             "family_member_id": str(member.id),
             "date": "2026-05-18",
             "items_text": " \n",
-            "packed_status": "planned",
         },
         follow_redirects=False,
     )
@@ -88,7 +86,7 @@ def test_update_lunch_plan_entry(
         date=date(2026, 5, 18),
         items=[{"name": "Sandwich"}],
         notes=None,
-        packed_status="planned",
+        packed_status="packed",
         created_by_user_id=seeded_user.id,
     )
     db_session.add(entry)
@@ -101,7 +99,6 @@ def test_update_lunch_plan_entry(
             "date": "2026-05-19",
             "items_text": "Pasta salad\nBerry cup",
             "notes": "Use the blue container",
-            "packed_status": "packed",
         },
         follow_redirects=False,
     )
@@ -112,6 +109,7 @@ def test_update_lunch_plan_entry(
     assert entry.date == date(2026, 5, 19)
     assert entry.items == [{"name": "Pasta salad"}, {"name": "Berry cup"}]
     assert entry.notes == "Use the blue container"
+    # Form no longer touches packed_status — pre-existing value preserved.
     assert entry.packed_status == "packed"
 
 
@@ -281,6 +279,25 @@ def test_new_lunch_form_shows_empty_state_when_no_family_members(
     assert response.status_code == 200
     assert b"You need a family member before you can plan a lunch" in response.content
     assert b'name="items_text"' not in response.content
+
+
+def test_new_lunch_form_auto_picks_only_family_member(
+    authenticated_client: TestClient, db_session: Session
+) -> None:
+    member = FamilyMember(name="Lila", notes=None, school_days=["monday"])
+    db_session.add(member)
+    db_session.commit()
+
+    response = authenticated_client.get("/lunch-plan/new")
+    assert response.status_code == 200
+    body = response.content
+    # The selector is hidden (no <select>) and the only member's name is shown read-only.
+    assert b"<select" not in body
+    assert (
+        b'<input type="hidden" name="family_member_id" value="' + str(member.id).encode() + b'"'
+        in body
+    )
+    assert b"Lila" in body
 
 
 def test_lunch_grid_shows_hint_when_no_school_days_configured(

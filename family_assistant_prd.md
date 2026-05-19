@@ -229,20 +229,21 @@ The application shall support:
 5. Mark a meal as a favorite (`is_favorite` flag) to filter the meal-reuse picker.
 6. Assistant-created meal plan entries.
 
-Recipe links and meal-to-grocery generation are deferred to phase 2.
+Recipe links and meal-to-grocery generation are deferred to phase 2. Also deferred: promoting meal entries from freeform titles to a household-shared **meal catalog** (mirroring the exercise catalog) with ingredients and **per-meal macronutrient values** (protein, fat, carbs, fibre). The catalog enables a weekly macro view for balancing macros across the week while planning. Macros are stored per prepared meal (one entry's worth), not per serving — there is no per-person consumption tracking; aggregation stays at the household level.
 
 ### 10.6 School Lunch Planning Module
 
 The application shall support:
 
-1. Lunch planning per FamilyMember (kid) by school day.
+1. Lunch planning per FamilyMember (kid) by school day. Current household has one kid; the UI auto-picks the single FamilyMember (hides the selector) but the data model, assistant tool, and weekly grid stay multi-kid-capable.
 2. Each lunch entry is a list of items plus free-text notes.
-3. Packed / not-packed status per entry.
-4. The lunch planning UI surfaces the kid's food preferences, allergies, and restrictions for reference.
-5. Assistant-created lunch entries.
-6. Weekly lunch overview across all kids.
+3. The lunch planning UI surfaces the kid's food preferences, allergies, and restrictions for reference.
+4. Assistant-created lunch entries.
+5. Weekly lunch overview across all kids.
 
-Lunch templates are deferred to phase 2.
+Packed / not-packed status is captured in the schema (defaults to `planned`) but is not surfaced in the MVP UI — the household does not track packing. The column and the `POST /{entry_id}/status` route stay in place for forward compatibility.
+
+Lunch templates and an LLM-assisted weekly lunch planner are deferred to phase 2. The planner — given the kid's hard restrictions (e.g., school no-nut rule + allergies from Memory), macro targets, and recent variety — proposes the coming week's five weekday lunches with grocery-feeding ingredients. Shares the macro framework with the phase-2 meal catalog (§10.5).
 
 ### 10.7 Exercise Module
 
@@ -1051,14 +1052,16 @@ Most architectural and scope questions are resolved earlier in this PRD. What re
 
 ### Phase 2: Better Planning
 
-1. Recipes with ingredients.
-2. Pantry inventory.
-3. Meal-to-grocery generation from planned meals.
-4. Lunch templates.
-5. AI-generated weekly summary card on the dashboard.
-6. PWA installation and offline-friendly grocery list.
-7. Memory archiving / expiration workflows.
-8. Inferred memories with user review (the AI proposes, the user approves).
+1. Meal catalog (mirroring the exercise catalog): household-shared, named meals with ingredients and per-meal macronutrient values (protein, fat, carbs, fibre). Meal plan entries reference catalog meals by name. Existing freeform titles either stay as-is or are promoted into the catalog on demand.
+2. Weekly macro view (`/meal-plan/weekly`) — total macros for the week plus a delta vs the prior week, used during planning. Household-level only; no per-person consumption tracking.
+3. Pantry inventory and a "what's in stock" hint surfaced on the meal-plan page during planning.
+4. Meal-to-grocery generation from planned meals (becomes feasible once catalog meals carry ingredients).
+5. LLM-assisted weekly lunch planner: given the kid's hard restrictions (school no-nut rule, allergies from Memory), macro targets, and recent variety, proposes M–F lunches with grocery-feeding ingredients. Shares the macro framework with item 1.
+6. Lunch templates.
+7. AI-generated weekly summary card on the dashboard.
+8. PWA installation and offline-friendly grocery list.
+9. Memory archiving / expiration workflows.
+10. Inferred memories with user review (the AI proposes, the user approves).
 
 ### Phase 3: AI and Retrieval Expansion
 

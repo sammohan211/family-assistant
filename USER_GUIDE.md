@@ -86,27 +86,50 @@ The dashboard's quick-add box creates an item with only a name — open the groc
 
 ## Meal plan
 
-`/meal-plan` — what you're cooking, when.
+`/meal-plan` — household dinners, planned a week at a time. Shared across both users.
 
-**Add an entry:** title (e.g. "Tacos"), date, meal type (`breakfast`, `lunch`, `dinner`, `snack`), optional notes, optional "favorite" flag.
+**Rhythm:** typically Saturday after grocery shopping — pick dinners for the coming week. In practice you'll only use the **dinner** slot; breakfast/lunch/snack slots exist but aren't used in this household. Per-person school lunches go on the **Lunch plan** page, not here.
 
-**Favorites** are just a checkbox on each entry — useful to mark dishes you'd want to repeat later. There's no auto-recurrence; use **Duplicate** to copy an entry to a new date.
+The page is a **7-day grid** — each day has a slot for every meal type. Use **Previous week / Next week** to walk back and forward. Today's dinner is also surfaced on the dashboard.
 
-The list is ordered by date. Past entries stay visible as a record of what you actually cooked.
+**Add an entry:** **Add meal** button (top right) or the inline **Add** link in a specific day/slot — opens a form for title, date, meal type, optional notes, and an optional **Mark as favorite** checkbox. Title is free text — no recipes or ingredients, just a name (`"Tacos"`, `"leftovers"`, `"out — birthday dinner"` all work).
+
+**Per-entry actions:**
+- **Edit** — opens the form. **Delete** lives at the bottom of the edit page.
+- **Reuse** — duplicates the entry. From within the grid, it copies to the same day; from the favourites list (below), a date picker lets you pick where it lands.
+
+**Below the grid, two helper panels:**
+- **Favorite meals** — every entry you've marked favourite, any date (up to 12). The fast path for "what should we eat this week?" — pick a date and click **Reuse**.
+- **Recent meals** — the last 12 entries (any week) by most-recently-updated, as a memory jog.
+
+**Not connected to grocery.** Planning "Tacos Friday" does not add tortillas/cheese to the grocery list — that step is manual. The meal plan tracks *what you're eating*; the grocery list tracks *what you're buying*; you reconcile them by hand.
+
+The assistant can add entries — `"plan tacos for dinner this Friday"` works.
+
+Phase 2 idea: surface recently purchased grocery items on this page as a "what's in stock" hint while planning.
 
 ---
 
 ## Lunch plan
 
-`/lunch-plan` — school lunches per family member per day. Different from meal plan because it's per-person and tracks a packed/planned status.
+`/lunch-plan` — what to pack for school lunch. Weekly view, one kid (the FamilyMember you added). Shared across both users.
 
-**Add an entry:** pick a family member, a date, write the lunch contents in the **Items** textarea (one item per line — e.g. "sandwich\napple\nyogurt"), optional notes, status (`planned` or `packed`).
+The page is a **5-day grid** (the kid's school days for the week), with **Previous week / Next week** buttons. Use it to plan the coming week's lunches after Saturday's grocery run.
+
+**Add an entry:** **Add lunch** button (top right) or the inline **Add** link in a specific day slot — opens a form for date, items, optional notes. Items are one per line; add an optional inline note with `name: note` (e.g. `Turkey sandwich: no mayo`). The family-member field auto-picks the single kid you have — no selector to fight with.
 
 **Per-entry actions:**
-- **Mark packed / Mark planned** — toggles status without opening the form.
-- **Edit / Delete**.
+- **Edit** — opens the form. **Delete** lives at the bottom of the edit page.
 
-Family members need their `school_days` set (in the family page) for the dashboard's weekly count to make sense.
+A day that isn't in the kid's `school_days` (see Family page) is hidden from the grid by default — but if you've already added an entry for that day (e.g. field-trip day), it stays visible.
+
+The lunch plan is for *packed school lunches only*. Household meals (dinner etc.) go on the Meal plan page.
+
+The assistant can add entries — `"pack a turkey sandwich and an apple on Monday"` works. It picks the only kid automatically.
+
+Phase 2 ideas:
+- LLM-assisted weekly planner: given the kid's hard restrictions (school no-nut rule, allergies in Memory), macro targets, and recent variety, propose M–F lunches and add their ingredients to grocery.
+- Lunch templates (reusable lunches you can stamp onto a day).
 
 ---
 

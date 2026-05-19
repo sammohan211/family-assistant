@@ -27,15 +27,21 @@
 
     <div class="grid gap-4 sm:grid-cols-2">
       <div>
-        <label for="family_member_id" class="block text-sm font-medium text-gray-700">Family member</label>
+        <label class="block text-sm font-medium text-gray-700">Family member</label>
         {% set selected_member_id = form_data.family_member_id if form_data and 'family_member_id' in form_data else (item.family_member_id|string if item else '') %}
-        <select id="family_member_id" name="family_member_id"
-                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-          <option value="">Choose</option>
-          {% for member in family_members %}
-          <option value="{{ member.id }}" {% if selected_member_id == member.id|string %}selected{% endif %}>{{ member.name }}</option>
-          {% endfor %}
-        </select>
+        {% if family_members | length == 1 %}
+          {% set only_member = family_members[0] %}
+          <input type="hidden" name="family_member_id" value="{{ only_member.id }}">
+          <p class="mt-1 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-gray-700">{{ only_member.name }}</p>
+        {% else %}
+          <select id="family_member_id" name="family_member_id"
+                  class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+            <option value="">Choose</option>
+            {% for member in family_members %}
+            <option value="{{ member.id }}" {% if selected_member_id == member.id|string %}selected{% endif %}>{{ member.name }}</option>
+            {% endfor %}
+          </select>
+        {% endif %}
       </div>
       <div>
         <label for="date" class="block text-sm font-medium text-gray-700">Date</label>
@@ -56,17 +62,6 @@
       <label for="notes" class="block text-sm font-medium text-gray-700">Lunch notes</label>
       <textarea id="notes" name="notes" rows="3"
                 class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500">{{ form_data.notes if form_data and 'notes' in form_data else (item.notes if item and item.notes else '') }}</textarea>
-    </div>
-
-    <div>
-      <label for="packed_status" class="block text-sm font-medium text-gray-700">Status</label>
-      {% set selected_status = form_data.packed_status if form_data and 'packed_status' in form_data else (item.packed_status if item else 'planned') %}
-      <select id="packed_status" name="packed_status"
-              class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-        {% for status in packed_statuses %}
-        <option value="{{ status }}" {% if selected_status == status %}selected{% endif %}>{{ status|capitalize }}</option>
-        {% endfor %}
-      </select>
     </div>
 
     <div class="flex items-center justify-between pt-2">

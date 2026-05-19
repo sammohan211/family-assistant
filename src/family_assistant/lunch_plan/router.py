@@ -113,7 +113,6 @@ def _render_form(
         {
             "item": item,
             "family_members": family_members,
-            "packed_statuses": PACKED_STATUSES,
             "error": error,
             "form_data": form_data or {},
         },
@@ -157,6 +156,9 @@ def new_form(
     family_member_id: Annotated[int | None, Query()] = None,
 ) -> Response:
     family_members = list_family_members(db)
+    prefilled_member_id = family_member_id
+    if prefilled_member_id is None and len(family_members) == 1:
+        prefilled_member_id = family_members[0].id
     return _render_form(
         request,
         item=None,
@@ -164,8 +166,7 @@ def new_form(
         error=None,
         form_data={
             "date": meal_date or date.today().isoformat(),
-            "family_member_id": str(family_member_id or ""),
-            "packed_status": "planned",
+            "family_member_id": str(prefilled_member_id or ""),
         },
     )
 
@@ -179,7 +180,6 @@ def create_view(
     lunch_date: Annotated[str, Form(alias="date")],
     raw_items: Annotated[str, Form(alias="items_text")],
     notes: Annotated[str, Form()] = "",
-    packed_status: Annotated[str, Form()] = "planned",
 ) -> Response:
     family_members = list_family_members(db)
     form_data = {
@@ -187,7 +187,6 @@ def create_view(
         "date": lunch_date,
         "items_text": raw_items,
         "notes": notes,
-        "packed_status": packed_status,
     }
     parsed_date, date_error = _parse_date(lunch_date)
     if date_error:
@@ -196,15 +195,6 @@ def create_view(
             item=None,
             family_members=family_members,
             error=date_error,
-            form_data=form_data,
-            status_code=400,
-        )
-    if packed_status not in PACKED_STATUSES:
-        return _render_form(
-            request,
-            item=None,
-            family_members=family_members,
-            error="Packed status is required.",
             form_data=form_data,
             status_code=400,
         )
@@ -235,7 +225,7 @@ def create_view(
         entry_date=parsed_date,
         items=items,
         notes=notes,
-        packed_status=packed_status,
+        packed_status="planned",
     )
     redirect_url = f"/lunch-plan?week_start={start_of_week(parsed_date).isoformat()}"
     return RedirectResponse(url=redirect_url, status_code=303)
@@ -269,7 +259,6 @@ def update_view(
     lunch_date: Annotated[str, Form(alias="date")],
     raw_items: Annotated[str, Form(alias="items_text")],
     notes: Annotated[str, Form()] = "",
-    packed_status: Annotated[str, Form()] = "planned",
 ) -> Response:
     item = get_lunch_plan_entry(db, entry_id)
     family_members = list_family_members(db)
@@ -278,7 +267,6 @@ def update_view(
         "date": lunch_date,
         "items_text": raw_items,
         "notes": notes,
-        "packed_status": packed_status,
     }
     parsed_date, date_error = _parse_date(lunch_date)
     if date_error:
@@ -287,15 +275,6 @@ def update_view(
             item=item,
             family_members=family_members,
             error=date_error,
-            form_data=form_data,
-            status_code=400,
-        )
-    if packed_status not in PACKED_STATUSES:
-        return _render_form(
-            request,
-            item=item,
-            family_members=family_members,
-            error="Packed status is required.",
             form_data=form_data,
             status_code=400,
         )
@@ -319,6 +298,7 @@ def update_view(
             form_data=form_data,
             status_code=400,
         )
+    existing_status = item.packed_status if item else "planned"
     update_lunch_plan_entry(
         db,
         entry_id=entry_id,
@@ -326,7 +306,7 @@ def update_view(
         entry_date=parsed_date,
         items=items,
         notes=notes,
-        packed_status=packed_status,
+        packed_status=existing_status,
     )
     redirect_url = f"/lunch-plan?week_start={start_of_week(parsed_date).isoformat()}"
     return RedirectResponse(url=redirect_url, status_code=303)
