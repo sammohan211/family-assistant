@@ -26,7 +26,7 @@
     <div class="grid gap-4 sm:grid-cols-3">
       <div class="sm:col-span-1">
         <label for="quantity" class="block text-sm font-medium text-gray-700">Quantity</label>
-        <input id="quantity" name="quantity" type="text" inputmode="numeric"
+        <input id="quantity" name="quantity" type="text" inputmode="decimal"
                value="{{ form_data.quantity if form_data and 'quantity' in form_data else (item.quantity if item and item.quantity else '') }}"
                class="mt-1 block w-full rounded-md border border-gray-300 shadow-sm px-3 py-2 focus:border-blue-500 focus:ring-blue-500">
       </div>

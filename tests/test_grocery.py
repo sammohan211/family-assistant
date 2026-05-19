@@ -1,5 +1,7 @@
 """Grocery module integration tests."""
 
+from decimal import Decimal
+
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -60,7 +62,21 @@ def test_create_rejects_non_numeric_quantity(authenticated_client: TestClient) -
         follow_redirects=False,
     )
     assert response.status_code == 400
-    assert b"Quantity must be a whole number" in response.content
+    assert b"Quantity must be a number" in response.content
+
+
+def test_create_accepts_decimal_quantity(
+    authenticated_client: TestClient, db_session: Session
+) -> None:
+    response = authenticated_client.post(
+        "/grocery",
+        data={"name": "Butter", "quantity": "1.5", "unit": "lb"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    item = db_session.scalars(select(GroceryItem).where(GroceryItem.name == "Butter")).one()
+    assert item.quantity == Decimal("1.5")
+    assert item.unit == "lb"
 
 
 def test_mark_item_purchased(

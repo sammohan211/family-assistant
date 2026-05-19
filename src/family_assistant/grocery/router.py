@@ -1,5 +1,6 @@
 """Grocery router (PRD Section 10.4)."""
 
+from decimal import Decimal, InvalidOperation
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, Request, Response
@@ -30,13 +31,13 @@ router = APIRouter(
 )
 
 
-def _parse_quantity(value: str) -> tuple[int | None, str | None]:
+def _parse_quantity(value: str) -> tuple[Decimal | None, str | None]:
     if not value.strip():
         return None, None
     try:
-        parsed = int(value)
-    except ValueError:
-        return None, "Quantity must be a whole number."
+        parsed = Decimal(value)
+    except InvalidOperation:
+        return None, "Quantity must be a number (e.g. 2 or 1.5)."
     if parsed <= 0:
         return None, "Quantity must be greater than zero."
     return parsed, None

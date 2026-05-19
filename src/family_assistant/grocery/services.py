@@ -1,5 +1,7 @@
 """Grocery CRUD services (PRD Section 10.4)."""
 
+from decimal import Decimal
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 from sqlalchemy.orm import selectinload
@@ -70,7 +72,7 @@ def create_grocery_item(
     user: User,
     name: str,
     category: str | None,
-    quantity: int | None,
+    quantity: Decimal | None,
     unit: str | None,
     notes: str | None,
 ) -> GroceryItem:
@@ -94,7 +96,7 @@ def update_grocery_item(
     item_id: int,
     name: str,
     category: str | None,
-    quantity: int | None,
+    quantity: Decimal | None,
     unit: str | None,
     notes: str | None,
 ) -> GroceryItem | None:

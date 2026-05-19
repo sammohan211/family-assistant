@@ -55,7 +55,7 @@ class _StrictModel(BaseModel):
 class GroceryItemArgs(_StrictModel):
     name: str
     category: str | None = None
-    quantity: int | None = None
+    quantity: Decimal | None = None
     unit: str | None = None
     notes: str | None = None
 

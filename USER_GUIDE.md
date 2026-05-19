@@ -8,9 +8,9 @@ The app has nine pages, reachable from the top nav: **Dashboard, Assistant, Groc
 
 ## Logging in
 
-`USER1_*` and `USER2_*` in `.env` define the accounts. Email + plaintext password on the login page; the password is checked against the Argon2id hash you stored.
+The app supports exactly two login users — set both `USER1_*` and `USER2_*` in `.env`. Email + password on the login page; checked against the Argon2id hash in `.env`. Sessions last 30 days; the **Log out** link in the top nav ends them.
 
-If you forget the password: it's not recoverable — generate a new hash, replace `USERn_PASSWORD_HASH` in `.env`, `docker compose restart app`, log in with the new plaintext.
+If you forget the password: it's not recoverable — generate a new hash (see `OPERATIONS.md` → Users for the `argon2` one-liner), replace `USERn_PASSWORD_HASH` in `.env`, `docker compose restart app`, log in with the new password.
 
 ---
 
@@ -68,9 +68,9 @@ I ran 5k this morning.
 
 ## Grocery
 
-`/grocery` — household shopping list.
+`/grocery` — household shopping list. Shared across both users.
 
-**Add an item:** "New item" button → name (required), optional quantity, unit, category, notes. Quantity is free-text but numeric is preferred ("2", "1.5").
+**Add an item:** "New item" button → name (required), optional quantity, unit, category, notes. Quantity accepts decimals (`2`, `1.5`, `0.25`) up to 3 fractional digits, or blank. Unit is free-form text (`lb`, `cartons`, `dozen` — anything); it's displayed next to the quantity but isn't normalised or used for math.
 
 **Per-item actions** on the list:
 - **Purchase** — moves the item to the purchased section (history kept).
@@ -79,6 +79,8 @@ I ran 5k this morning.
 - **Edit / Delete** — straightforward.
 
 The dashboard's quick-add box creates an item with only a name — open the grocery page if you need quantity or category.
+
+**The list is a scratchpad, not stock tracking.** There's no deduplication: if you add `eggs · 1 dozen` and someone else adds `eggs · 30` later (via the form or the assistant), you get two separate rows — the system doesn't notice or merge. Whoever shops reconciles by eye. Unit strings are never compared, so `"dozen"`, `"items"`, and `""` are treated as three different units. Keep names simple and consistent if you want fewer duplicates.
 
 ---
 

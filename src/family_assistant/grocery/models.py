@@ -1,9 +1,10 @@
 """Grocery ORM models (PRD Section 10.4)."""
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Literal
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from family_assistant.auth.models import User
@@ -18,7 +19,7 @@ class GroceryItem(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120))
     category: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    quantity: Mapped[Decimal | None] = mapped_column(Numeric(10, 3), nullable=True)
     unit: Mapped[str | None] = mapped_column(String(30), nullable=True)
     status: Mapped[GroceryStatus] = mapped_column(String(20), default="open", server_default="open")
     notes: Mapped[str | None] = mapped_column(Text(), nullable=True)
