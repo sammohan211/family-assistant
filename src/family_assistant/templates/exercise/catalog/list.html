@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Exercise catalog · Family Assistant{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8">
+  {% set active = "catalog" %}
+  {% include "exercise/_header.html" with context %}
+
+  <div class="flex items-center justify-between gap-4 mb-4">
+    <div>
+      <h1 class="text-2xl font-semibold">Exercise catalog</h1>
+      <p class="text-sm text-gray-500">Shared across the household. Logs reference these by name.</p>
+    </div>
+    <a href="/exercise/catalog/new"
+       class="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">
+      New exercise
+    </a>
+  </div>
+
+  {% if exercises %}
+  <div class="rounded-lg border border-gray-200 bg-white overflow-hidden">
+    <table class="min-w-full divide-y divide-gray-200 text-sm">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-4 py-2 text-left font-medium text-gray-600">Name</th>
+          <th class="px-4 py-2 text-left font-medium text-gray-600">Body group</th>
+          <th class="px-4 py-2 text-left font-medium text-gray-600">Scoring</th>
+          <th class="px-4 py-2 text-left font-medium text-gray-600">Muscle groups</th>
+          <th class="px-4 py-2 text-right font-medium text-gray-600"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200">
+        {% for ex in exercises %}
+        <tr>
+          <td class="px-4 py-2 font-medium">{{ ex.name }}</td>
+          <td class="px-4 py-2 text-gray-700">{{ ex.body_group }}</td>
+          <td class="px-4 py-2 text-gray-700">
+            {{ ex.scoring_type }}
+            {% if ex.scoring_type == "bodyweight_fraction" %}
+              <span class="text-xs text-gray-500">× {{ "%g"|format(ex.bodyweight_fraction) }}</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-2">
+            {% for tag in ex.muscle_groups %}
+              <span class="inline-block text-xs bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded mr-1">{{ tag }}</span>
+            {% endfor %}
+          </td>
+          <td class="px-4 py-2 text-right whitespace-nowrap">
+            <a href="/exercise/catalog/{{ ex.id }}/edit"
+               class="text-blue-600 hover:underline mr-3">Edit</a>
+            <form method="post" action="/exercise/catalog/{{ ex.id }}/delete"
+                  class="inline"
+                  onsubmit="return confirm('Delete {{ ex.name }}? Logs that reference it will block the delete.');">
+              {{ csrf_input() }}
+              <button type="submit" class="text-red-600 hover:underline">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center space-y-2">
+    <p class="text-sm text-gray-600">No exercises yet.</p>
+    <p class="text-xs text-gray-500">
+      Add a few — e.g. <em>Bench press</em> (weighted), <em>Run</em> (distance),
+      <em>Captain's chair</em> (bodyweight_fraction, 0.5) — then start logging.
+    </p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

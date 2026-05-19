@@ -1,0 +1,47 @@
+{# Shared header for all /exercise/* pages.
+   Caller sets `active` to "log" or "catalog" so the right tab is highlighted.
+   `user` is the logged-in User (passed by the router). #}
+
+{% set tab_base = "px-3 py-1.5 text-sm font-medium rounded-md" %}
+{% set tab_active = "bg-white text-gray-900 shadow-sm" %}
+{% set tab_idle = "text-gray-600 hover:text-gray-900" %}
+
+<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
+  <nav class="flex gap-1 bg-gray-100 p-1 rounded-lg">
+    <a href="/exercise"
+       class="{{ tab_base }} {{ tab_active if active == 'log' else tab_idle }}">
+      Log
+    </a>
+    <a href="/exercise/catalog"
+       class="{{ tab_base }} {{ tab_active if active == 'catalog' else tab_idle }}">
+      Catalog
+    </a>
+  </nav>
+
+  <details class="text-sm">
+    <summary class="cursor-pointer text-gray-700">
+      Body weight:
+      {% if user.body_weight %}
+        <span class="font-medium text-gray-900">{{ "%g"|format(user.body_weight) }}</span>
+      {% else %}
+        <span class="text-amber-700">not set</span>
+      {% endif %}
+    </summary>
+    <form method="post" action="/exercise/body-weight"
+          class="mt-2 flex items-center gap-2">
+      {{ csrf_input() }}
+      <input type="number" step="0.01" min="0" max="999.99" name="body_weight"
+             value="{{ user.body_weight if user.body_weight else '' }}"
+             placeholder="kg"
+             class="w-24 rounded-md border border-gray-300 px-2 py-1 text-sm">
+      <input type="hidden" name="redirect_to" value="{{ request.url.path }}">
+      <button type="submit"
+              class="rounded-md bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700">
+        Update
+      </button>
+    </form>
+    <p class="mt-1 text-xs text-gray-500">
+      Used by distance and bodyweight-fraction scoring. Blank to clear.
+    </p>
+  </details>
+</div>

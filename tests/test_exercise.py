@@ -23,6 +23,7 @@ from family_assistant.exercise.scoring import ScoringInputError, compute_work_sc
 from family_assistant.exercise.services import (
     create_exercise,
     create_log,
+    get_exercise,
     get_exercise_by_name,
     list_exercises,
     set_body_weight,
@@ -392,7 +393,7 @@ def test_weekly_summary_delta_pct_none_when_no_prior(
 
 
 # ---------------------------------------------------------------------------
-# Router placeholder
+# Router: placeholder + body-weight
 # ---------------------------------------------------------------------------
 
 
@@ -404,7 +405,196 @@ def test_exercise_route_requires_auth(client: TestClient) -> None:
 def test_exercise_placeholder_renders(authenticated_client: TestClient) -> None:
     response = authenticated_client.get("/exercise")
     assert response.status_code == 200
-    assert b"being rebuilt" in response.content
+    assert b"Log view coming next" in response.content
+    assert b"Body weight" in response.content
+
+
+def test_body_weight_set_via_form(
+    authenticated_client: TestClient, db_session: Session, seeded_user: User
+) -> None:
+    response = authenticated_client.post(
+        "/exercise/body-weight",
+        data={"body_weight": "75.5", "redirect_to": "/exercise/catalog"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    db_session.refresh(seeded_user)
+    assert seeded_user.body_weight == Decimal("75.5")
+
+
+def test_body_weight_cleared_when_blank(
+    authenticated_client: TestClient, db_session: Session, seeded_user: User
+) -> None:
+    set_body_weight(db_session, user=seeded_user, body_weight=Decimal("80"))
+    response = authenticated_client.post(
+        "/exercise/body-weight",
+        data={"body_weight": "", "redirect_to": "/exercise/catalog"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    db_session.refresh(seeded_user)
+    assert seeded_user.body_weight is None
+
+
+# ---------------------------------------------------------------------------
+# Catalog UI
+# ---------------------------------------------------------------------------
+
+
+def test_catalog_list_renders_empty_state(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/exercise/catalog")
+    assert response.status_code == 200
+    assert b"No exercises yet" in response.content
+
+
+def test_catalog_list_renders_existing_exercises(
+    authenticated_client: TestClient, db_session: Session
+) -> None:
+    create_exercise(
+        db_session,
+        name="Bench press",
+        body_group="upper",
+        muscle_groups=["chest"],
+        scoring_type="weighted",
+    )
+    response = authenticated_client.get("/exercise/catalog")
+    assert response.status_code == 200
+    assert b"Bench press" in response.content
+    assert b"chest" in response.content
+
+
+def test_catalog_create_via_form(authenticated_client: TestClient, db_session: Session) -> None:
+    response = authenticated_client.post(
+        "/exercise/catalog",
+        data={
+            "name": "Captain's chair",
+            "body_group": "core",
+            "muscle_groups": "core, hip flexors",
+            "scoring_type": "bodyweight_fraction",
+            "bodyweight_fraction": "0.5",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    item = get_exercise_by_name(db_session, "Captain's chair")
+    assert item is not None
+    assert item.body_group == "core"
+    assert item.muscle_groups == ["core", "hip flexors"]
+    assert item.scoring_type == "bodyweight_fraction"
+    assert item.bodyweight_fraction == Decimal("0.5")
+
+
+def test_catalog_create_rejects_blank_name(authenticated_client: TestClient) -> None:
+    response = authenticated_client.post(
+        "/exercise/catalog",
+        data={
+            "name": "   ",
+            "body_group": "upper",
+            "muscle_groups": "",
+            "scoring_type": "weighted",
+            "bodyweight_fraction": "1.000",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 400
+    assert b"Name is required" in response.content
+
+
+def test_catalog_create_rejects_unknown_body_group(
+    authenticated_client: TestClient,
+) -> None:
+    response = authenticated_client.post(
+        "/exercise/catalog",
+        data={
+            "name": "Bench press",
+            "body_group": "torso",  # not in BODY_GROUPS
+            "muscle_groups": "chest",
+            "scoring_type": "weighted",
+            "bodyweight_fraction": "1.000",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 400
+    assert b"Body group must be one of" in response.content
+
+
+def test_catalog_create_rejects_duplicate_name(
+    authenticated_client: TestClient, db_session: Session
+) -> None:
+    create_exercise(
+        db_session,
+        name="Bench press",
+        body_group="upper",
+        muscle_groups=["chest"],
+        scoring_type="weighted",
+    )
+    response = authenticated_client.post(
+        "/exercise/catalog",
+        data={
+            "name": "Bench press",
+            "body_group": "upper",
+            "muscle_groups": "chest",
+            "scoring_type": "weighted",
+            "bodyweight_fraction": "1.000",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 409
+    assert b"already exists" in response.content
+
+
+def test_catalog_edit_form_renders(authenticated_client: TestClient, db_session: Session) -> None:
+    item = create_exercise(
+        db_session,
+        name="Run",
+        body_group="cardio",
+        muscle_groups=["legs"],
+        scoring_type="distance",
+    )
+    response = authenticated_client.get(f"/exercise/catalog/{item.id}/edit")
+    assert response.status_code == 200
+    assert b"Run" in response.content
+
+
+def test_catalog_update_via_form(authenticated_client: TestClient, db_session: Session) -> None:
+    item = create_exercise(
+        db_session,
+        name="Squat",
+        body_group="lower",
+        muscle_groups=["quads"],
+        scoring_type="weighted",
+    )
+    response = authenticated_client.post(
+        f"/exercise/catalog/{item.id}",
+        data={
+            "name": "Back squat",
+            "body_group": "lower",
+            "muscle_groups": "quads, glutes",
+            "scoring_type": "weighted",
+            "bodyweight_fraction": "1.000",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    db_session.refresh(item)
+    assert item.name == "Back squat"
+    assert item.muscle_groups == ["quads", "glutes"]
+
+
+def test_catalog_delete_via_form(authenticated_client: TestClient, db_session: Session) -> None:
+    item = create_exercise(
+        db_session,
+        name="Yoga",
+        body_group="core",
+        muscle_groups=[],
+        scoring_type="weighted",
+    )
+    item_id = item.id
+    response = authenticated_client.post(
+        f"/exercise/catalog/{item_id}/delete", follow_redirects=False
+    )
+    assert response.status_code == 303
+    assert get_exercise(db_session, item_id) is None
 
 
 # ---------------------------------------------------------------------------
