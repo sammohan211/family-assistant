@@ -5,11 +5,11 @@ body-weight setter, and the per-user exercise log (list, new, edit, delete)
 at `/exercise`. The weekly aggregation view lands in the next commit.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, Request, Response
+from fastapi import APIRouter, Depends, Form, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
@@ -35,6 +35,8 @@ from family_assistant.exercise.services import (
     set_body_weight,
     update_exercise,
     update_log,
+    week_start,
+    weekly_summary,
 )
 from family_assistant.templating import templates
 
@@ -213,6 +215,47 @@ def update_body_weight(
         return RedirectResponse(url=redirect_to, status_code=303)
     set_body_weight(db, user=user, body_weight=None if cleared else value)
     return RedirectResponse(url=redirect_to, status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Weekly aggregation
+# ---------------------------------------------------------------------------
+
+
+def _parse_week_param(raw: str | None) -> date:
+    """Snap ?week=YYYY-MM-DD to the Monday of that week. Default: today's week."""
+    today = date.today()
+    if not raw:
+        return week_start(today)
+    try:
+        parsed = datetime.strptime(raw, "%Y-%m-%d").date()
+    except ValueError:
+        return week_start(today)
+    return week_start(parsed)
+
+
+@router.get("/weekly", response_class=HTMLResponse)
+def weekly_view(
+    request: Request,
+    db: Annotated[DbSession, Depends(get_session)],
+    user: Annotated[User, Depends(require_user)],
+    week: Annotated[str | None, Query()] = None,
+) -> Response:
+    reference = _parse_week_param(week)
+    summary = weekly_summary(db, user=user, reference=reference)
+    prev_week = (summary.week_start - timedelta(days=7)).isoformat()
+    next_week = (summary.week_start + timedelta(days=7)).isoformat()
+    return templates.TemplateResponse(
+        request,
+        "exercise/weekly.html",
+        {
+            "summary": summary,
+            "user": user,
+            "prev_week": prev_week,
+            "next_week": next_week,
+            "today_week_start": week_start(date.today()),
+        },
+    )
 
 
 # ---------------------------------------------------------------------------

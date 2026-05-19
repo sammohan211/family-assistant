@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Weekly summary · Family Assistant{% endblock %}
+
+{% macro score_bar(label, score, max_score) -%}
+{% set pct = (score / max_score * 100) if max_score and max_score > 0 else 0 %}
+<div class="space-y-1">
+  <div class="flex items-baseline justify-between text-sm">
+    <span class="font-medium text-gray-700">{{ label }}</span>
+    <span class="tabular-nums text-gray-600">{{ "%g"|format(score) }}</span>
+  </div>
+  <div class="h-2 rounded-full bg-gray-100 overflow-hidden">
+    <div class="h-full bg-blue-500" style="width: {{ pct }}%"></div>
+  </div>
+</div>
+{%- endmacro %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 py-8">
+  {% set active = "weekly" %}
+  {% include "exercise/_header.html" with context %}
+
+  <div class="flex items-center justify-between gap-3 mb-6">
+    <h1 class="text-2xl font-semibold">
+      Week of {{ summary.week_start.strftime('%b %-d, %Y') }}
+    </h1>
+    <div class="flex items-center gap-1 text-sm">
+      <a href="/exercise/weekly?week={{ prev_week }}"
+         class="px-2 py-1 rounded-md border border-gray-300 hover:bg-gray-50">&larr; Prev</a>
+      {% if summary.week_start != today_week_start %}
+      <a href="/exercise/weekly"
+         class="px-2 py-1 rounded-md border border-gray-300 hover:bg-gray-50">This week</a>
+      {% endif %}
+      <a href="/exercise/weekly?week={{ next_week }}"
+         class="px-2 py-1 rounded-md border border-gray-300 hover:bg-gray-50">Next &rarr;</a>
+    </div>
+  </div>
+
+  {# Total card #}
+  <div class="rounded-lg border border-gray-200 bg-white p-6 mb-6">
+    <p class="text-sm text-gray-500">Total work score</p>
+    <div class="flex items-baseline gap-3 mt-1">
+      <span class="text-4xl font-semibold tabular-nums">{{ "%g"|format(summary.total) }}</span>
+      {% if summary.prior_total > 0 %}
+        {% set positive = summary.delta >= 0 %}
+        <span class="text-sm font-medium {% if positive %}text-green-700{% else %}text-red-700{% endif %}">
+          {{ "+" if positive else "" }}{{ "%g"|format(summary.delta) }}
+          ({{ "+" if positive else "" }}{{ "%.1f"|format(summary.delta_pct) }}%)
+        </span>
+        <span class="text-xs text-gray-500">vs. {{ "%g"|format(summary.prior_total) }} prior</span>
+      {% elif summary.total > 0 %}
+        <span class="text-sm text-gray-500">no prior week to compare</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if summary.total == 0 %}
+  <div class="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center">
+    <p class="text-sm text-gray-600">No sessions logged this week.</p>
+    <p class="mt-1 text-xs text-gray-500">
+      <a href="/exercise/new" class="text-blue-600 hover:underline">Log a session</a>
+      to start the week.
+    </p>
+  </div>
+  {% else %}
+    {# Body group breakdown #}
+    {% set max_body = summary.by_body_group|map(attribute='score')|max %}
+    <section class="rounded-lg border border-gray-200 bg-white p-6 mb-6 space-y-3">
+      <h2 class="text-lg font-semibold">By body group</h2>
+      <div class="space-y-3">
+        {% for row in summary.by_body_group %}
+          {{ score_bar(row.label, row.score, max_body) }}
+        {% endfor %}
+      </div>
+    </section>
+
+    {# Muscle group breakdown #}
+    {% if summary.by_muscle_group %}
+    {% set max_muscle = summary.by_muscle_group|map(attribute='score')|max %}
+    <section class="rounded-lg border border-gray-200 bg-white p-6 space-y-3">
+      <h2 class="text-lg font-semibold">By muscle group</h2>
+      <div class="space-y-3">
+        {% for row in summary.by_muscle_group %}
+          {{ score_bar(row.label, row.score, max_muscle) }}
+        {% endfor %}
+      </div>
+    </section>
+    {% else %}
+    <section class="rounded-lg border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-600">
+      No muscle group tags on this week's exercises. Add tags in the
+      <a href="/exercise/catalog" class="text-blue-600 hover:underline">catalog</a> to see breakdowns.
+    </section>
+    {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

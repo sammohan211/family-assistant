@@ -5,7 +5,7 @@ this file covers the scoring calculator, service-layer CRUD + weekly
 aggregation, and the assistant tool's name-lookup behavior.
 """
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
@@ -865,3 +865,129 @@ def test_log_delete(
     response = authenticated_client.post(f"/exercise/{log_id}/delete", follow_redirects=False)
     assert response.status_code == 303
     assert db_session.get(ExerciseLog, log_id) is None
+
+
+# ---------------------------------------------------------------------------
+# Weekly view UI
+# ---------------------------------------------------------------------------
+
+
+def test_weekly_view_empty_state(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get("/exercise/weekly")
+    assert response.status_code == 200
+    assert b"No sessions logged this week" in response.content
+    assert b"Total work score" in response.content
+
+
+def test_weekly_view_renders_breakdowns(
+    authenticated_client: TestClient, db_session: Session, seeded_user: User
+) -> None:
+    set_body_weight(db_session, user=seeded_user, body_weight=Decimal("80"))
+    bench = create_exercise(
+        db_session,
+        name="Bench press",
+        body_group="upper",
+        muscle_groups=["chest", "triceps"],
+        scoring_type="weighted",
+    )
+    today = date.today()
+    # Snap to Monday so the entry is definitely in the current ISO week.
+    monday = today - timedelta(days=today.weekday())
+    create_log(
+        db_session,
+        user=seeded_user,
+        exercise=bench,
+        entry_date=monday,
+        sets=3,
+        reps=10,
+        weight=Decimal("60"),
+        distance_km=None,
+        duration_minutes=None,
+        notes=None,
+    )
+    response = authenticated_client.get("/exercise/weekly")
+    assert response.status_code == 200
+    assert b"By body group" in response.content
+    assert b"By muscle group" in response.content
+    assert b"chest" in response.content
+    assert b"triceps" in response.content
+
+
+def test_weekly_view_accepts_week_param(
+    authenticated_client: TestClient, db_session: Session, seeded_user: User
+) -> None:
+    set_body_weight(db_session, user=seeded_user, body_weight=Decimal("80"))
+    ex = create_exercise(
+        db_session,
+        name="Run",
+        body_group="cardio",
+        muscle_groups=["legs"],
+        scoring_type="distance",
+    )
+    create_log(
+        db_session,
+        user=seeded_user,
+        exercise=ex,
+        entry_date=date(2026, 5, 11),  # a Monday
+        sets=None,
+        reps=None,
+        weight=None,
+        distance_km=Decimal("5"),
+        duration_minutes=None,
+        notes=None,
+    )
+    response = authenticated_client.get("/exercise/weekly?week=2026-05-13")
+    assert response.status_code == 200
+    # Page header snaps to Monday of that week.
+    assert b"May 11, 2026" in response.content
+
+
+def test_weekly_view_bad_week_param_falls_back_to_today(
+    authenticated_client: TestClient,
+) -> None:
+    response = authenticated_client.get("/exercise/weekly?week=not-a-date")
+    assert response.status_code == 200
+
+
+def test_weekly_view_shows_delta_vs_prior(
+    authenticated_client: TestClient, db_session: Session, seeded_user: User
+) -> None:
+    set_body_weight(db_session, user=seeded_user, body_weight=Decimal("80"))
+    ex = create_exercise(
+        db_session,
+        name="Run",
+        body_group="cardio",
+        muscle_groups=["legs"],
+        scoring_type="distance",
+    )
+    today = date.today()
+    monday = today - timedelta(days=today.weekday())
+    create_log(
+        db_session,
+        user=seeded_user,
+        exercise=ex,
+        entry_date=monday - timedelta(days=7),
+        sets=None,
+        reps=None,
+        weight=None,
+        distance_km=Decimal("4"),  # prior 320
+        duration_minutes=None,
+        notes=None,
+    )
+    create_log(
+        db_session,
+        user=seeded_user,
+        exercise=ex,
+        entry_date=monday,
+        sets=None,
+        reps=None,
+        weight=None,
+        distance_km=Decimal("5"),  # this 400
+        duration_minutes=None,
+        notes=None,
+    )
+    response = authenticated_client.get("/exercise/weekly")
+    assert response.status_code == 200
+    body = response.content
+    assert b"+80" in body
+    assert b"+25.0%" in body
