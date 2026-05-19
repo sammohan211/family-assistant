@@ -151,8 +151,13 @@ Object storage and a generic mutation audit log are deferred — see Sections 11
 
 ### 9.5 Exercise Logging
 
-- As an adult, I want to log my exercise activities so I can track what I've been doing.
-- As an adult, I want to view my exercise history so I can see what I've done over time.
+- As an adult, I want to log workouts by picking a known exercise and entering the relevant numbers (sets/reps/weight, distance, or both), so each session captures the load that was actually trained.
+- As an adult, I want each exercise tagged with a body group (upper / lower / core / cardio) and one or more muscle groups, so I can later see which areas I've been hitting.
+- As an adult, I want a single comparable "work score" computed per log entry from the inputs and my current body weight, so I can try to beat last week's score next time.
+- As an adult, I want a separate weekly view that totals work score by body group and by muscle group with a delta vs. the previous week, so I can spot under-trained areas without doing the math myself.
+- As an adult, I want my body weight stored on my profile and editable any time, so distance- and bodyweight-based scores stay accurate.
+- As an adult, I want to view my own exercise history; both adults can see each other's history (no privacy controls in MVP).
+- As an adult, I want the assistant to log a workout by referencing an exercise by name.
 
 ### 9.6 Embedded Assistant
 
@@ -241,12 +246,43 @@ Lunch templates are deferred to phase 2.
 
 ### 10.7 Exercise Module
 
+The exercise module is structured as two tables: a household-wide **exercise catalog** of named, classified exercises, and per-user **exercise logs** that reference an exercise plus the numbers from one session. Each log carries a computed `work_score` so sessions are directly comparable week over week.
+
 The application shall support:
 
-1. Log exercise activity with type, duration, date, and free-text notes.
-2. View personal exercise history.
-3. Both adults can see each other's exercise history (no per-entry visibility flag).
-4. Assistant-created exercise entries.
+1. **Exercise catalog (household-shared).** A named exercise has:
+   - `body_group` — one of `upper | lower | core | cardio`.
+   - `muscle_groups` — array of tags (e.g. `chest`, `triceps`, `quads`). Free-text in MVP; a fixed vocabulary may be introduced later. The user will populate this from an existing reference list outside the app.
+   - `scoring_type` — one of `weighted | distance | bodyweight_fraction`.
+   - `bodyweight_fraction` — decimal used only when `scoring_type = bodyweight_fraction` (default `1.0`; e.g. captain's chair = `0.5`).
+
+   The catalog is **not pre-seeded** in MVP; the user adds exercises as needed.
+
+2. **Exercise log (per user).** A log entry references one catalog exercise + a date + numeric inputs appropriate to the exercise's scoring type:
+   - `weighted` → `sets`, `reps`, `weight`.
+   - `distance` → `distance_km` (covers walking, hiking, running, rowing-machine distance).
+   - `bodyweight_fraction` → `sets`, `reps`.
+
+   `duration_minutes` and `notes` are optional on any entry.
+
+3. **Work score formulas** (computed at write time and persisted on the log row, so historical scores don't drift if body weight is later updated):
+   - `weighted`: `weight × reps × sets`
+   - `distance`: `distance_km × body_weight`
+   - `bodyweight_fraction`: `body_weight × bodyweight_fraction × reps × sets`
+
+4. **User body weight.** Stored on the User profile, editable at any time. Used by the `distance` and `bodyweight_fraction` formulas at the moment of write. Not versioned per log.
+
+5. **Per-user log views.** Each adult sees their own log on `/exercise`. Both adults can view each other's logs; per-entry visibility flags are out of scope.
+
+6. **Weekly aggregation view** at a separate path (e.g. `/exercise/weekly`) showing, for the current ISO week:
+   - Total work score for the week.
+   - Subtotal per `body_group`.
+   - Subtotal per `muscle_group`.
+   - Delta vs. the previous week (absolute and %).
+
+   A per-exercise breakdown within each body group / muscle group is deferred to phase 2.
+
+7. **Assistant-created log entries.** The assistant can create one log entry per call by referencing an exercise by name (case-insensitive). Unknown names return a validation error rather than auto-creating a catalog entry.
 
 ### 10.8 Dashboard
 
@@ -440,6 +476,7 @@ The data model assumes a single implicit household. There is no `Household` or `
 - name
 - email
 - password_hash
+- body_weight (nullable decimal; used by exercise scoring — see §10.7)
 - created_at
 - updated_at
 
@@ -494,16 +531,36 @@ Food preferences, allergies, restrictions, and dislikes for a FamilyMember are s
 - created_at
 - updated_at
 
-#### ExerciseEntry
+#### Exercise (catalog)
+
+- id
+- name (unique per household)
+- body_group (upper | lower | core | cardio)
+- muscle_groups (jsonb — array of strings; freeform tags in MVP)
+- scoring_type (weighted | distance | bodyweight_fraction)
+- bodyweight_fraction (decimal; only meaningful when scoring_type = bodyweight_fraction; default 1.0)
+- created_at
+- updated_at
+
+Catalog is shared across both adults. Not pre-seeded; user populates as needed.
+
+#### ExerciseLog (per-session)
 
 - id
 - user_id (FK → User)
-- activity_type
-- duration_minutes
+- exercise_id (FK → Exercise)
 - date
+- sets (nullable int)
+- reps (nullable int)
+- weight (nullable decimal — for `weighted` scoring)
+- distance_km (nullable decimal — for `distance` scoring)
+- duration_minutes (nullable int — optional on any log)
+- work_score (decimal; computed and persisted at write time using the formulas in §10.7)
 - notes
 - created_at
 - updated_at
+
+Persisting `work_score` is deliberate: if a user later updates their body weight, the historical score on prior log rows stays stable so week-over-week comparisons aren't retroactively distorted.
 
 #### Memory
 
