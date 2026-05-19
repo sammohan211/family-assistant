@@ -167,4 +167,4 @@ Two patterns, pick whichever fits the moment:
 
 ---
 
-For day-to-day operations once the stack is running (updates, logs, database, backups, model switching, common issues), see `OPERATIONS.md`.
+For day-to-day operations once the stack is running (updates, logs, database, backups, model switching, common issues), see `OPERATIONS.md`. For using the app's features (grocery, meal plan, assistant, etc.), see `USER_GUIDE.md`.

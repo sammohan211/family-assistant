@@ -1,6 +1,6 @@
 # Operations
 
-Day-to-day running of the Family Assistant stack on the Omarchy desktop. For first-time install, see `DESKTOP_SETUP.md`.
+Day-to-day running of the Family Assistant stack on the Omarchy desktop. For first-time install, see `DESKTOP_SETUP.md`. For using the app's features (grocery, meal plan, assistant, etc.), see `USER_GUIDE.md`.
 
 All commands run from `~/Projects/family_assistant` on the desktop (over SSH from the laptop, or directly).
 
