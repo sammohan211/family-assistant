@@ -141,13 +141,13 @@ def process_command(
         confirmation_status = "auto"
     elif validation_errors and not validated:
         # Every proposed call failed validation — nothing safe to confirm or execute.
+        # Always overwrite reply: the LLM often claims success ("items added") even
+        # when its tool call was malformed, and we never want to show that to the user.
         confirmation_status = "auto"
         error_log = "Tool validation failed: " + "; ".join(e.error for e in validation_errors)
-        if not reply:
-            reply = (
-                "I couldn't act on that — the assistant produced an invalid action. "
-                "Please rephrase."
-            )
+        reply = (
+            "I couldn't act on that — the assistant produced an invalid action. " "Please rephrase."
+        )
     elif risk == "low" and validated and not validation_errors:
         results = [execute_tool_call(call, db, user) for call in validated]
         executed_serialized = _serialize_executed(validated, results)
