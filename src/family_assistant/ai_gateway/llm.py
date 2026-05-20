@@ -21,7 +21,7 @@ class OllamaClient:
         self,
         base_url: str | None = None,
         model: str | None = None,
-        timeout: float = 60.0,
+        timeout: float = 180.0,
     ) -> None:
         settings = get_settings()
         self._base_url = (base_url or settings.ollama_base_url).rstrip("/")
@@ -37,7 +37,7 @@ class OllamaClient:
                 "stream": False,
                 "messages": messages,
             },
-            timeout=self._timeout,
+            timeout=httpx.Timeout(connect=10.0, read=self._timeout, write=10.0, pool=10.0),
         )
         response.raise_for_status()
         content = response.json()["message"]["content"]
