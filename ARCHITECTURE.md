@@ -248,6 +248,17 @@ The `/assistant` HTML surface lives in
 and is a thin wrapper: it owns the form, the confirmation card UX,
 and the history list, but the actual logic is all in `ai_gateway`.
 
+**Clarification Policy.** Before any tool fires, the gateway honors
+PRD §11.5a: the LLM should ask a clarifying question (return
+`tool_calls: []` with a reply) when input is genuinely ambiguous —
+multiple matches, missing required-by-schema field, hard-restriction
+conflict, unknown catalog entry — but must not pester for fields
+that are optional in the schema. When server-side validation
+rejects a proposed call, `gateway.py` always overwrites any
+optimistic LLM reply so the user never sees "items added" against
+an unsaved record. Phase 2 (self-repair retry) and Phase 3
+(multi-turn clarification threads) are tracked in `BACKLOG.md`.
+
 Embeddings and pgvector retrieval are deliberately deferred — see
 the [scope decision](#) noted in the PRD discussion (memory count
 per household is small enough to stuff into the prompt directly).

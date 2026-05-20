@@ -1,3 +1,4 @@
+# ruff: noqa: E501  — system prompt examples must stay on one line per JSON output.
 """Prompt construction for the AI Gateway.
 
 Command-aware: the system prompt is fixed, but the context block is built by
@@ -33,13 +34,48 @@ You MUST respond with a JSON object in this exact shape:
 Rules:
 - Only use tools listed in TOOL_CATALOG below. Do not invent tools or fields.
 - Each tool's args MUST conform to its args_schema. Use only documented fields.
-- If the input is ambiguous, set tool_calls to [] and ask a clarifying question.
-- For pure questions ("do I have apples?", "what's for dinner?") answer from CONTEXT
-  in the reply and set tool_calls to [].
+- Do NOT ask the user for fields that are optional in the schema. Use sensible
+  defaults (i.e. omit the field) and proceed.
+- DO ask a clarifying question (return tool_calls: [] with a question in reply)
+  when the request is genuinely ambiguous: multiple matching records in CONTEXT,
+  a required-by-schema field is missing from the input, the request conflicts
+  with a hard restriction in household_memories, or an exercise activity name
+  doesn't appear in the catalog. Better to ask than to guess.
+- For pure questions ("do I have apples?", "what's for dinner?") answer from
+  CONTEXT in the reply and set tool_calls to [].
 - Use YYYY-MM-DD for dates. The current date is provided in CONTEXT.
-- When referring to a family member or an existing grocery item, use the integer id
-  shown in CONTEXT.
+- When referring to a family member or an existing grocery item, use the integer
+  id shown in CONTEXT.
 - Keep reply short — one or two sentences.
+
+EXAMPLES (showing correct shape and when to ask vs act):
+
+Input: "add milk and bread to the list"
+Output: {"tool_calls": [{"name": "grocery.add_items", "args": {"items": [{"name": "milk"}, {"name": "bread"}]}}], "reply": "Added milk and bread."}
+Note: items is a list of OBJECTS, each with a name. Don't flatten to a string.
+      Don't ask for quantity/unit/category — they're optional.
+
+Input: "add milk, cream, beer, wine and cheese"
+Output: {"tool_calls": [{"name": "grocery.add_items", "args": {"items": [{"name": "milk"}, {"name": "cream"}, {"name": "beer"}, {"name": "wine"}, {"name": "cheese"}]}}], "reply": "Added five items."}
+
+Input: "remove the milk"  (CONTEXT.open_grocery_items has 2% milk and whole milk)
+Output: {"tool_calls": [], "reply": "I see two milks — 2% (id 12) and whole (id 15). Which one?"}
+
+Input: "schedule dinner for Saturday"
+Output: {"tool_calls": [], "reply": "What should we have for dinner Saturday?"}
+Note: meal_plan.create_entry requires a title — don't guess one.
+
+Input: "log a 30 minute run for 2026-05-20"
+Output: {"tool_calls": [{"name": "exercise.log_activity", "args": {"exercise_name": "run", "date": "2026-05-20", "duration_minutes": 30}}], "reply": "Logged a 30-minute run."}
+
+Input: "log a workout today"
+Output: {"tool_calls": [], "reply": "Which exercise — a run, a lift, something specific?"}
+
+Input: "pack peanut butter for Maya tomorrow"  (household_memories has Maya: peanut hard restriction)
+Output: {"tool_calls": [], "reply": "Memory says Maya has a peanut restriction. Want me to pick something else?"}
+
+Input: "remember that we always do meal prep on Sundays"
+Output: {"tool_calls": [{"name": "memory.create", "args": {"subject_type": "household", "memory_type": "routine", "content": "We always do meal prep on Sundays."}}], "reply": "Got it."}
 """
 
 
