@@ -153,7 +153,7 @@ def render_messages(context: PromptContext, input_text: str) -> list[dict[str, s
         + "\n\nTOOL_CATALOG:\n"
         + json.dumps(tool_catalog(), indent=2)
         + "\n\nCONTEXT:\n"
-        + json.dumps(context_block, indent=2)
+        + json.dumps(context_block, indent=2, default=str)
     )
     return [
         {"role": "system", "content": system_content},
