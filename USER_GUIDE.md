@@ -6,6 +6,35 @@ The app has nine pages, reachable from the top nav: **Dashboard, Assistant, Groc
 
 ---
 
+## Starting up
+
+If the desktop has been off, here's the timeline from power-on to fully responsive:
+
+| Stage | What's happening | Time |
+|---|---|---|
+| Linux + Docker boot | systemd starts `docker.service` | ~30 s |
+| Containers come up | `restart: unless-stopped` revives every service | ~20 s |
+| Postgres / app / Caddy ready | login + dashboard pages load instantly | ~1 min total |
+| Ollama daemon ready | accepts API calls, but the model is **not yet in VRAM** | ~5 s |
+| **First assistant message** | model loads into VRAM, then inference | **20–40 s** |
+| Every subsequent message | model is hot | ~2–5 s |
+
+**The protocol: press power, wait ~1 minute, then use the app.** The login and dashboard pages will be instant. The very first assistant message after a cold boot takes 20–40 seconds — that's the model loading into the GPU. After that, the assistant is fast.
+
+If you don't want to feel that cold-start hit:
+
+1. **Send a throwaway "hi" right after boot.** By the time you have something real to ask, the model is already warm. Zero setup.
+2. **Warm from the shell** on the desktop:
+   ```bash
+   docker compose exec -T ollama ollama run "$OLLAMA_MODEL" "hi" </dev/null
+   ```
+   Could be a `~/bin/warm-family` alias.
+3. **Keep the model loaded forever.** Add `OLLAMA_KEEP_ALIVE=-1` to `.env` and pass it through to the `ollama` service in `compose.yml`. Default is 5 minutes idle before unload; `-1` pins the model in VRAM until the host reboots. One cold start per power cycle, then it's hot for as long as the desktop is on.
+
+The HTTP client between the app and Ollama has a 180-second read budget, so even a cold start finishes successfully — it just takes a beat.
+
+---
+
 ## Logging in
 
 The app supports exactly two login users — set both `USER1_*` and `USER2_*` in `.env`. Email + password on the login page; checked against the Argon2id hash in `.env`. Sessions last 30 days; the **Log out** link in the top nav ends them.
