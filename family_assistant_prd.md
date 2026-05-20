@@ -932,7 +932,25 @@ When the user chooses to move from Topology B to Topology A:
 
 - **Redis** container for session store and/or queue work — only if `BackgroundTasks` becomes inadequate for embedding generation.
 
-### 17.8 Future Deployment Evolutions
+### 17.8 Operational Ergonomics
+
+The stack has a handful of sharp edges that surface during everyday operation:
+
+- The `COMPOSE_FILE` / GPU-overlay trap — running `docker compose up -d --build` without `compose.gpu.yml` merged silently drops GPU passthrough, sending an 8B model onto CPU and turning every assistant response into a 30–70 second wait.
+- The cold-start warm-up dance — the first request after a rebuild always pays a 20–40 s model-load cost.
+- Diagnostic command sprawl — `docker compose ps`, `ollama ps`, `ollama list`, `nvidia-smi`, `docker compose logs --tail=N <service>` all answer different "is it healthy?" questions, and remembering which one to reach for first is operational friction.
+
+These are documented in `OPERATIONS.md`, but the cognitive load of remembering the right command at the right moment is real and has already caused incidents.
+
+The project ships a single shell helper sourced from `~/.bashrc` on the desktop, providing:
+
+1. `export COMPOSE_FILE=compose.yml:compose.gpu.yml` so plain `docker compose up -d --build` always includes the GPU overlay.
+2. Short aliases for the highest-frequency operations: status check, log tails, model status, model warm-up, restart, full rebuild.
+3. A single `family doctor` (or equivalent) command that runs the diagnostic chain — `docker compose ps` + `ollama ps` + `nvidia-smi` memory summary + last N app log lines — so "is it healthy?" is one keystroke.
+
+The helper is a convenience layer; `OPERATIONS.md` remains the source of truth for what each underlying command does.
+
+### 17.9 Future Deployment Evolutions
 
 1. Managed container service (Fly.io, Hetzner with managed Postgres) in place of a self-managed VM.
 2. Managed Postgres with managed pgvector.
