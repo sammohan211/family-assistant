@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 
 from family_assistant.ai_gateway.models import AssistantInteraction
 from family_assistant.assistant.dependencies import get_llm
+from family_assistant.auth.models import User
+from family_assistant.auth.services import hash_password
 from family_assistant.grocery.models import GroceryItem
 from family_assistant.main import app
 
@@ -251,3 +253,33 @@ def test_dashboard_shows_recent_interactions(
     assert response.status_code == 200
     assert b"add eggs to grocery" in response.content
     assert b"No interactions yet" not in response.content
+
+
+def test_recent_interactions_are_scoped_per_user(
+    authenticated_client: TestClient, fake_llm: FakeLLM, db_session: Session
+) -> None:
+    fake_llm.next_response = {
+        "tool_calls": [{"name": "grocery.add_items", "args": {"items": [{"name": "Milk"}]}}],
+        "reply": "Added.",
+    }
+    authenticated_client.post("/assistant", data={"input_text": "user A secret prompt"})
+
+    bob_password = "bob-correct-horse-battery"
+    bob = User(name="Bob", email="bob@example.com", password_hash=hash_password(bob_password))
+    db_session.add(bob)
+    db_session.commit()
+
+    other_client = TestClient(app)
+    login = other_client.post(
+        "/auth/login",
+        data={"email": "bob@example.com", "password": bob_password},
+        follow_redirects=False,
+    )
+    assert login.status_code == 303
+
+    for path in ("/assistant", "/dashboard"):
+        response = other_client.get(path)
+        assert response.status_code == 200, f"{path} returned {response.status_code}"
+        assert (
+            b"user A secret prompt" not in response.content
+        ), f"{path} leaked another user's interaction"

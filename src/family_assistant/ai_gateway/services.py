@@ -11,9 +11,12 @@ def _with_user(statement):
     return statement.options(selectinload(AssistantInteraction.user))
 
 
-def list_recent_interactions(db: DbSession, limit: int = 20) -> list[AssistantInteraction]:
+def list_recent_interactions(
+    db: DbSession, *, user_id: int, limit: int = 20
+) -> list[AssistantInteraction]:
     statement = (
         select(AssistantInteraction)
+        .where(AssistantInteraction.user_id == user_id)
         .order_by(AssistantInteraction.created_at.desc(), AssistantInteraction.id.desc())
         .limit(limit)
     )

@@ -6,6 +6,7 @@ a transaction wrapped in a SAVEPOINT so commits inside the request handler
 stay isolated and get rolled back when the test finishes.
 """
 
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -22,7 +23,6 @@ from family_assistant.auth.models import User, UserSession
 from family_assistant.auth.services import hash_password
 from family_assistant.db import get_session
 from family_assistant.main import app
-from family_assistant.settings import get_settings
 
 ALEMBIC_INI = Path(__file__).resolve().parent.parent / "alembic.ini"
 
@@ -35,7 +35,14 @@ def _alembic_config(database_url: str) -> Config:
 
 @pytest.fixture(scope="session")
 def engine() -> Iterator[Engine]:
-    url = make_url(get_settings().database_url).set(database="family_assistant_test")
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        pytest.fail(
+            "DATABASE_URL is not set. Tests need a Postgres URL so they can "
+            "swap in the family_assistant_test database. Populate `.env` "
+            "(see SETUP.md §4) or export DATABASE_URL before running pytest."
+        )
+    url = make_url(database_url).set(database="family_assistant_test")
     engine = create_engine(url, future=True)
     try:
         with engine.connect() as conn:

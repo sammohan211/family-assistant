@@ -59,6 +59,7 @@ def _lunch_summary(
 def index(
     request: Request,
     db: Annotated[DbSession, Depends(get_session)],
+    user: Annotated[User, Depends(require_user)],
 ) -> Response:
     today = date.today()
     week_start = start_of_week(today)
@@ -76,7 +77,7 @@ def index(
             "week_start": week_start,
             "open_items": open_items,
             "open_count": len(open_items),
-            "recent_interactions": list_recent_interactions(db, limit=5),
+            "recent_interactions": list_recent_interactions(db, user_id=user.id, limit=5),
         },
     )
 

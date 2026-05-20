@@ -26,8 +26,9 @@ router = APIRouter(
 def index(
     request: Request,
     db: Annotated[DbSession, Depends(get_session)],
+    user: Annotated[User, Depends(require_user)],
 ) -> Response:
-    recent = list_recent_interactions(db, limit=10)
+    recent = list_recent_interactions(db, user_id=user.id, limit=10)
     latest = recent[0] if recent else None
     history = recent[1:] if latest else []
     return templates.TemplateResponse(
