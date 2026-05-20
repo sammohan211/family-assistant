@@ -2,9 +2,12 @@
 
 Review basis: [`family_assistant_prd.md`](family_assistant_prd.md), [`ARCHITECTURE.md`](ARCHITECTURE.md), and the current implementation under `src/`.
 
+Verification note: the previously listed bugs appear fixed in the current codebase. I also ran `pytest -q`; the suite did not complete because of a new shared-fixture settings bug described below.
+
 ## Findings
 
-No outstanding findings.
+- **Test suite still fails without env vars because `tests/conftest.py` eagerly loads settings** — the app import bug is fixed in `src/family_assistant/db.py`, but the shared `engine` fixture now calls `get_settings().database_url` at session setup, so a clean `pytest -q` still errors with missing `database_url`, `session_secret`, and `app_base_url` before most tests run. This regresses the “works without `.env` at collection/startup” goal for local testing and CI bootstrap. Repro: run `pytest -q` in a repo checkout without a populated `.env`. Relevant code: `tests/conftest.py`, `src/family_assistant/settings.py`.
+- **Assistant history is leaked across users on both `/assistant` and `/dashboard`** — `get_interaction(..., user_id=...)` now protects confirm/cancel, but read paths still call `list_recent_interactions(db, limit=...)` with no user filter. That helper returns global `AssistantInteraction` rows ordered by recency, so any authenticated user can read another user’s assistant prompts/replies from the assistant page and dashboard. Relevant code: `src/family_assistant/assistant/router.py`, `src/family_assistant/dashboard/router.py`, `src/family_assistant/ai_gateway/services.py`.
 
 ## Resolved
 
