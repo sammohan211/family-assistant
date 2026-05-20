@@ -25,15 +25,20 @@
     <p class="text-sm text-gray-500">Type a command in plain English.</p>
   </div>
 
-  <form method="post" action="/assistant" class="space-y-3">
+  <form method="post" action="/assistant" class="space-y-3"
+        x-data="{ busy: false }"
+        @submit="busy = true">
     {{ csrf_input() }}
     <textarea name="input_text" rows="3" required
+              :disabled="busy"
               placeholder="Add milk and bread to the grocery list. Or: what's planned for dinner?"
-              class="w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-accent focus:ring-accent"></textarea>
+              class="w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-accent focus:ring-accent disabled:opacity-60"></textarea>
     <div class="flex justify-end">
       <button type="submit"
-              class="rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-700">
-        Send
+              :disabled="busy"
+              class="rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-700 disabled:opacity-60 disabled:cursor-not-allowed">
+        <span x-show="!busy">Send</span>
+        <span x-show="busy" x-cloak>Sending…</span>
       </button>
     </div>
   </form>
