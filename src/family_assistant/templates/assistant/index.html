@@ -30,9 +30,10 @@
         @submit="busy = true">
     {{ csrf_input() }}
     <textarea name="input_text" rows="3" required
-              :disabled="busy"
+              :readonly="busy"
+              :class="busy && 'opacity-60'"
               placeholder="Add milk and bread to the grocery list. Or: what's planned for dinner?"
-              class="w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-accent focus:ring-accent disabled:opacity-60"></textarea>
+              class="w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-accent focus:ring-accent"></textarea>
     <div class="flex justify-end">
       <button type="submit"
               :disabled="busy"
