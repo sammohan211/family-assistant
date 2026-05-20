@@ -1,7 +1,7 @@
 [project]
 name = "family-assistant"
 version = "0.1.0"
-description = "Household management web app with an embedded AI assistant. Personal project for one household. See family_assistant_prd.md."
+description = "Household management web app with an embedded AI assistant. Personal project for one household. See PRD_AND_ROADMAP.md."
 requires-python = ">=3.11"
 readme = "README.md"
 authors = [

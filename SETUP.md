@@ -1,6 +1,6 @@
 # Family Assistant Setup (Omarchy + RTX 3090)
 
-Steps to turn the desktop into the deployment host for the Family Assistant stack (Postgres + app + Ollama + Caddy). Aligned with the home-first topology in `family_assistant_prd.md` §17.2.
+Steps to turn the desktop into the deployment host for the Family Assistant stack (Postgres + app + Ollama + Caddy). Aligned with the home-first topology in `PRD_AND_ROADMAP.md` §17.2.
 
 Order matters where noted. Anything marked **optional** can be skipped or done later.
 

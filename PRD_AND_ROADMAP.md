@@ -1082,7 +1082,22 @@ Most architectural and scope questions are resolved earlier in this PRD. What re
 
 ---
 
-## 21. Future Roadmap
+## 21. Backlog and Future Roadmap
+
+Two tiers. **Near-term backlog** is the unphased queue — work picked up as needs surface, not slotted into a phase yet. **Future roadmap phases** are the strategic, multi-phase plan. When a backlog item ships, delete its bullet here and update the relevant PRD section in-place so the spec describes shipped reality.
+
+### Near-term backlog
+
+- **Expand assistant tool coverage as needs surface.** Starter tools cover the common write paths (grocery add / mark purchased, meal/lunch/exercise create, memory create/search). Add update/delete/duplicate variants when an actual user flow demands them, not as a "complete the matrix" exercise — §11.5 explicitly frames the starter set as something to expand during build.
+- **Add assistant read support for exercise history.** Today the assistant can write exercise entries but can't answer "how much did I run this week?". This is a real gap if you want conversational reads on exercise. Needs an `exercise.search`-style tool plus extending the command-aware prompt builder to pre-fetch exercise data for exercise-flavored commands.
+- **Clarification Policy Phase 2 — self-repair retry on validation failure.** Per §11.5a. When Pydantic rejects a tool call, feed the validation error back to the LLM once ("Your previous call failed validation: <error>. Either correct it or ask the user.") and accept the second response. Capped at one retry to bound latency and cost. Today the gateway is one-shot — invalid calls bounce with a generic "I couldn't act on that" reply, which wastes the LLM's ability to recover from its own shape errors.
+- **Clarification Policy Phase 3 — multi-turn clarification threads.** Per §11.5a. `assistant_interactions` gains `thread_id`; a new `confirmation_status = "pending_clarification"` lets the user's next message resume the same context ("which milk?" → "the 2%" → tool fires). Needs a migration and a small router change to thread messages through `process_command`. Real conversational follow-up — today every input is independent.
+- **Operational ergonomics shell helper.** Per §17.8. Ship `scripts/family.sh` sourced from `~/.bashrc` on the desktop. Bundles the things that have already bitten us: `export COMPOSE_FILE=compose.yml:compose.gpu.yml` (the GPU-overlay trap), short aliases for the highest-frequency ops (`fa-status` → `docker compose ps`; `fa-logs <svc>` → tailed logs; `fa-ops` → `ollama ps`; `fa-warm` → one-shot `ollama run "$OLLAMA_MODEL" "hi"`; `fa-restart` → restart app; `fa-rebuild` → `git pull && docker compose up -d --build && docker compose exec app alembic upgrade head`), and a `fa-doctor` function that runs `docker compose ps` + `ollama ps` + `nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader` + last 20 app log lines. Goal: zero memorization of the GPU-overlay or cold-start gotchas. Leave `OPERATIONS.md` as the source of truth; the script is a convenience layer.
+
+### Deferred decisions / notes
+
+- **`pgvector` image vs. plain Postgres.** Compose uses `pgvector/pgvector:pg16` but nothing in code touches vector columns or functions (embeddings deferred per scope §11.8). Leaving the image as-is costs nothing and keeps phase-2 embeddings a clean additive migration. No action unless you want to slim the image.
+- **`subject_id` orphan cleanup for memories.** `Memory.subject_type` / `subject_id` is a polymorphic reference (no FK), so memories can be orphaned if a user or family member is deleted. Low real-world impact in a two-adult + few-kids household. Revisit only if orphans actually show up in the UI.
 
 ### Phase 1: MVP
 

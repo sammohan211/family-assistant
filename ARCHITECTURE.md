@@ -1,7 +1,7 @@
 # Architecture
 
 How the codebase fits together. For *what* the app is supposed to do, see
-[`family_assistant_prd.md`](family_assistant_prd.md). For *how to run it*,
+[`PRD_AND_ROADMAP.md`](PRD_AND_ROADMAP.md). For *how to run it*,
 see [`README.md`](README.md). This doc is about *what each piece is and
 why it's there*.
 
@@ -257,7 +257,8 @@ that are optional in the schema. When server-side validation
 rejects a proposed call, `gateway.py` always overwrites any
 optimistic LLM reply so the user never sees "items added" against
 an unsaved record. Phase 2 (self-repair retry) and Phase 3
-(multi-turn clarification threads) are tracked in `BACKLOG.md`.
+(multi-turn clarification threads) are tracked in the
+near-term backlog under `PRD_AND_ROADMAP.md` §21.
 
 Embeddings and pgvector retrieval are deliberately deferred — see
 the [scope decision](#) noted in the PRD discussion (memory count

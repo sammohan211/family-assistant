@@ -1,6 +1,6 @@
 # Bug Review
 
-Review basis: [`family_assistant_prd.md`](family_assistant_prd.md), [`ARCHITECTURE.md`](ARCHITECTURE.md), and the current implementation under `src/`.
+Review basis: [`PRD_AND_ROADMAP.md`](PRD_AND_ROADMAP.md), [`ARCHITECTURE.md`](ARCHITECTURE.md), and the current implementation under `src/`.
 
 Verification note: the previously listed bugs appear fixed in the current codebase. I also ran `pytest -q`; the suite did not complete because of a new shared-fixture settings bug described below.
 
