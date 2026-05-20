@@ -367,7 +367,33 @@ Every tool call must pass:
 1. JSON schema validation against the published tool schema.
 2. Authentication check (the call is from one of the two logged-in adults).
 3. Module-specific business rules (e.g., a `lunch_plan.create_entry` call must reference an existing FamilyMember).
-4. The confirmation policy in Section 11.6.
+4. The clarification policy in Section 11.5a.
+5. The confirmation policy in Section 11.6.
+
+### 11.5a Clarification Policy
+
+Before any tool is called, the assistant must decide whether the user's request is actionable, ambiguous, or invalid. This policy governs that decision and applies to every tool — `grocery.*`, `meal_plan.*`, `lunch_plan.*`, `exercise.*`, `memory.*` — not just grocery. The goal is honest UX: never claim to have done something the system did not actually do, and never interrupt the user for information the schema does not require.
+
+Three cases:
+
+1. **Schema-optional fields are missing.** The assistant must NOT ask for information that is optional in the tool's args schema. If the user says "add milk and bread," the assistant calls `grocery.add_items` with `[{name: "milk"}, {name: "bread"}]` and does not pester for quantity, unit, or category. Sensible silent defaults beat naggy prompts.
+
+2. **The user's request is genuinely ambiguous.** When the assistant cannot resolve the request without making an arbitrary choice, it must return `tool_calls: []` and a short clarifying question in `reply`. Ambiguity includes:
+   - Multiple matching records in CONTEXT (e.g., "remove the milk" when two milks are open).
+   - A required-by-schema field absent from the input (e.g., "schedule dinner Saturday" with no title).
+   - A request that would conflict with a hard restriction in memory (e.g., packing peanuts for a child whose memory shows a peanut restriction).
+   - An exercise activity name that does not match any catalog entry case-insensitively.
+   - A unit/quantity that contradicts itself or context (e.g., "log a 0-minute run").
+
+3. **A tool call fails server-side validation.** When Pydantic rejects the assistant's proposed call, the gateway MUST overwrite any optimistic reply text (the LLM will sometimes produce "items added" even when its call was malformed) and surface a clarification request instead of letting a false-success message reach the user. The interaction must be logged with `error_log` so the failure is auditable.
+
+**Phasing.** The clarification policy ships in three tiers; later tiers strengthen the earlier ones without breaking them:
+
+- **Phase 1 — Prompt-time examples.** The system prompt carries worked examples of correct and ambiguous inputs for every module (one per module minimum), so the small LLM has concrete patterns to imitate. Highest leverage, cheapest change.
+- **Phase 2 — Single self-repair retry on validation failure.** When validation fails, the gateway feeds the error back to the LLM once ("Your previous call failed validation: <error>. Either correct it or ask the user for clarification.") and accepts the second response. Capped at one retry to bound latency and cost.
+- **Phase 3 — Multi-turn clarification threads.** `AssistantInteraction` gains a `thread_id`; a new `confirmation_status = "pending_clarification"` lets the user's next message resume the same context. Enables true conversational follow-up ("which milk?" → "the 2%" → tool call fires).
+
+Phases 2 and 3 are explicitly out of MVP scope; Phase 1 is required for MVP behavior to feel honest.
 
 ### 11.6 Confirmation Policy
 
