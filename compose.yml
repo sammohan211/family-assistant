@@ -47,6 +47,8 @@ services:
   ollama:
     image: ollama/ollama:latest
     restart: unless-stopped
+    environment:
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:--1}
     volumes:
       - ollama_data:/root/.ollama
     healthcheck:
