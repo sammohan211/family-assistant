@@ -16,6 +16,16 @@ export COMPOSE_FILE=compose.yml:compose.gpu.yml
 
 After `source ~/.bashrc`, plain `docker compose up -d --build` picks up both files. The rest of this doc assumes that.
 
+For everyday use, source `scripts/family.sh` instead — it exports `COMPOSE_FILE` for you and adds `fa-up` (bring everything up, wait for health, run migrations, warm the model, doctor), `fa-down` (stop containers, preserve volumes), `fa-status`, `fa-logs <svc>`, `fa-ops`, `fa-warm`, `fa-restart`, `fa-rebuild`, and `fa-doctor`:
+
+```bash
+echo 'source ~/Projects/family_assistant/scripts/family.sh' >> ~/.bashrc
+source ~/.bashrc
+fa-doctor   # one-shot: compose ps + ollama ps + GPU memory + last 20 app log lines
+```
+
+This doc remains the source of truth for what each underlying command does.
+
 ---
 
 ## Quick reference

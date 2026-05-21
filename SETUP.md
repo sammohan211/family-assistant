@@ -78,7 +78,7 @@ Fill in:
 - `DATABASE_URL` — replace `CHANGE_ME` with the same password.
 - `SESSION_SECRET` — the generated value.
 - `OLLAMA_MODEL` — leave at `llama3.1:8b` for first run. With 24 GB VRAM you have headroom; you can revisit model choice later.
-- `APP_HOSTNAME` and `APP_BASE_URL` — for LAN-only start, `family.local` is fine. If you go Tailscale (step 10), use the desktop's Tailscale magic-DNS name (e.g. `family.tailnet-name.ts.net`).
+- `APP_HOSTNAME` and `APP_BASE_URL` — for LAN-only start, `family.local` is fine. If you go Tailscale (step 11), use the desktop's Tailscale magic-DNS name (e.g. `family.tailnet-name.ts.net`).
 - `CADDY_TLS` — `internal` for home / Tailscale. (`<email>` only matters if you ever go cloud.)
 - `USER1_EMAIL` / `USER1_PASSWORD_HASH` (and `USER2_*`) — leave blank for now; generate Argon2id hashes when you're ready to log in. The app starts fine without them.
 
@@ -144,14 +144,26 @@ docker compose exec postgres createdb -U family_assistant family_assistant_test
 - Hit the login page in a browser and sign in with the plaintext password you chose (not the hash).
 - Send an assistant command and watch `docker compose logs -f app ollama` — confirms the LLM round-trip works on the GPU.
 
-## 9. Client access (laptop + phone)
+## 9. Install the shell helper (recommended)
+
+`scripts/family.sh` exports `COMPOSE_FILE=compose.yml:compose.gpu.yml` (so plain `docker compose up -d --build` always merges the GPU overlay — forgetting this silently drops the model onto CPU) and defines `fa-up` (start everything + wait for health + migrate + warm the model + doctor), `fa-down` (stop containers; volumes preserved), `fa-status`, `fa-logs <svc>`, `fa-ops`, `fa-warm`, `fa-restart`, `fa-rebuild`, and `fa-doctor`. Source it from your shell rc:
+
+```bash
+echo 'source ~/Projects/family_assistant/scripts/family.sh' >> ~/.bashrc
+source ~/.bashrc
+fa-doctor   # one-shot: compose ps + ollama ps + GPU memory + last 20 app log lines
+```
+
+If your checkout lives elsewhere, `export FAMILY_ASSISTANT_DIR=/your/path` before sourcing. See `OPERATIONS.md` for what each underlying command does.
+
+## 10. Client access (laptop + phone)
 
 The stack runs on the desktop; you reach it from other devices via a browser. Two one-time chores per device: resolving `family.local`, and trusting Caddy's self-signed cert.
 
 ### Resolving the hostname
 
 - **Laptop**: add `<desktop-ip> family.local` to `/etc/hosts` (also mentioned in step 8). Using the IP directly works but compounds the cert-trust problem below — the cert is issued for `family.local`.
-- **Phone (LAN)**: iOS resolves `*.local` via Bonjour with no setup. Android sometimes does, sometimes doesn't — if `family.local` doesn't resolve, the cleanest fix is Tailscale (step 10), which works the same on LAN and away from home.
+- **Phone (LAN)**: iOS resolves `*.local` via Bonjour with no setup. Android sometimes does, sometimes doesn't — if `family.local` doesn't resolve, the cleanest fix is Tailscale (step 11), which works the same on LAN and away from home.
 - **Phone (Tailscale, recommended)**: install the Tailscale app (App Store / Play Store), sign in to the same tailnet, and the desktop's tailnet hostname (`family.tailnet-name.ts.net`) resolves anywhere.
 
 ### Trusting the TLS cert
@@ -178,7 +190,7 @@ The app includes the iOS PWA meta tags, so once signed in:
 
 There's no manifest yet, so the home-screen icon will be a Safari-generated thumbnail rather than a custom icon — good enough until a future PWA pass.
 
-## 10. Optional: Tailscale for remote access from the laptop
+## 11. Optional: Tailscale for remote access from the laptop
 
 Aligned with the §17.2 home-topology decision (Tailscale, no port-forwarding through CGNAT).
 
@@ -192,7 +204,7 @@ Then on the laptop (`sudo zypper in tailscale && sudo tailscale up`), and you ca
 
 Update `APP_HOSTNAME` / `APP_BASE_URL` in `.env` to the tailnet hostname (e.g. `family.tailnet-name.ts.net`) and `docker compose up -d` again so Caddy picks it up.
 
-## 11. Optional: dev loop from the laptop
+## 12. Optional: dev loop from the laptop
 
 Two patterns, pick whichever fits the moment:
 
