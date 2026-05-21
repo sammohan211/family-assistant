@@ -283,3 +283,86 @@ def test_recent_interactions_are_scoped_per_user(
         assert (
             b"user A secret prompt" not in response.content
         ), f"{path} leaked another user's interaction"
+
+
+# --- Trace viewer ----------------------------------------------------------
+
+
+def test_trace_view_requires_auth(client: TestClient) -> None:
+    response = client.get("/assistant/interactions/1/trace", follow_redirects=False)
+    assert response.status_code == 401
+
+
+def test_trace_view_404_for_missing_interaction(authenticated_client: TestClient) -> None:
+    response = authenticated_client.get(
+        "/assistant/interactions/999999/trace", follow_redirects=False
+    )
+    assert response.status_code == 404
+
+
+def test_trace_view_renders_stage_timeline(
+    authenticated_client: TestClient, fake_llm: FakeLLM, db_session: Session
+) -> None:
+    fake_llm.next_response = {
+        "tool_calls": [{"name": "grocery.add_items", "args": {"items": [{"name": "Milk"}]}}],
+        "reply": "Added milk.",
+    }
+    authenticated_client.post("/assistant", data={"input_text": "add milk to grocery"})
+    interaction = db_session.scalar(select(AssistantInteraction))
+    assert interaction is not None
+
+    response = authenticated_client.get(f"/assistant/interactions/{interaction.id}/trace")
+    assert response.status_code == 200
+    body = response.content
+    # Input echoed back.
+    assert b"add milk to grocery" in body
+    # Stage pills for the canonical sequence are present.
+    for stage in (b"input", b"context", b"llm", b"validation", b"risk", b"decision", b"persist"):
+        assert stage in body, f"trace view missing stage pill: {stage!r}"
+    # Specific event names from a low-risk happy path.
+    assert b"call_succeeded" in body
+    assert b"interaction_saved" in body
+
+
+def test_trace_view_rejects_other_users_interaction(
+    authenticated_client: TestClient, fake_llm: FakeLLM, db_session: Session
+) -> None:
+    # User A creates an interaction.
+    fake_llm.next_response = {"tool_calls": [], "reply": "ok"}
+    authenticated_client.post("/assistant", data={"input_text": "user A secret prompt"})
+    interaction = db_session.scalar(select(AssistantInteraction))
+    assert interaction is not None
+
+    # User B logs in via a fresh client.
+    bob_password = "bob-correct-horse-battery"
+    bob = User(name="Bob", email="bob@example.com", password_hash=hash_password(bob_password))
+    db_session.add(bob)
+    db_session.commit()
+
+    other_client = TestClient(app)
+    login = other_client.post(
+        "/auth/login",
+        data={"email": "bob@example.com", "password": bob_password},
+        follow_redirects=False,
+    )
+    assert login.status_code == 303
+
+    response = other_client.get(
+        f"/assistant/interactions/{interaction.id}/trace", follow_redirects=False
+    )
+    # 404 (not 403) — don't leak which it is.
+    assert response.status_code == 404
+
+
+def test_assistant_index_links_to_trace(
+    authenticated_client: TestClient, fake_llm: FakeLLM, db_session: Session
+) -> None:
+    fake_llm.next_response = {"tool_calls": [], "reply": "ok"}
+    authenticated_client.post("/assistant", data={"input_text": "anything"})
+    interaction = db_session.scalar(select(AssistantInteraction))
+    assert interaction is not None
+
+    response = authenticated_client.get("/assistant")
+    assert response.status_code == 200
+    expected = f"/assistant/interactions/{interaction.id}/trace".encode()
+    assert expected in response.content

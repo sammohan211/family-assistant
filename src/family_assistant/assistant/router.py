@@ -2,13 +2,17 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, Request, Response
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session as DbSession
 
 from family_assistant.ai_gateway import cancel_pending, confirm_pending, process_command
 from family_assistant.ai_gateway.llm import LLMClient
-from family_assistant.ai_gateway.services import get_interaction, list_recent_interactions
+from family_assistant.ai_gateway.services import (
+    get_interaction,
+    list_recent_interactions,
+    list_traces_for_interaction,
+)
 from family_assistant.assistant.dependencies import get_llm
 from family_assistant.auth.dependencies import require_user
 from family_assistant.auth.models import User
@@ -72,3 +76,22 @@ def cancel(
     if interaction is not None:
         cancel_pending(interaction, db)
     return RedirectResponse(url="/assistant", status_code=303)
+
+
+@router.get("/interactions/{interaction_id}/trace", response_class=HTMLResponse)
+def trace_view(
+    interaction_id: int,
+    request: Request,
+    db: Annotated[DbSession, Depends(get_session)],
+    user: Annotated[User, Depends(require_user)],
+) -> Response:
+    # 404 for both "doesn't exist" and "not yours" — don't leak which it is.
+    interaction = get_interaction(db, interaction_id, user_id=user.id)
+    if interaction is None:
+        raise HTTPException(status_code=404)
+    traces = list_traces_for_interaction(db, interaction_id)
+    return templates.TemplateResponse(
+        request,
+        "assistant/trace.html",
+        {"interaction": interaction, "traces": traces},
+    )

@@ -48,7 +48,11 @@
   <section class="rounded-lg border border-gray-200 bg-white p-6 space-y-3">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <p class="font-mono text-xs text-gray-500 tabular-nums">{{ latest.created_at.strftime('%a %b %-d, %-I:%M %p') }}</p>
+        <p class="font-mono text-xs text-gray-500 tabular-nums">
+          {{ latest.created_at.strftime('%a %b %-d, %-I:%M %p') }}
+          ·
+          <a href="/assistant/interactions/{{ latest.id }}/trace" class="text-gray-500 hover:text-gray-900 underline-offset-2 hover:underline">trace</a>
+        </p>
         <p class="font-medium truncate">"{{ latest.input_text }}"</p>
       </div>
       {{ status_badge(latest.confirmation_status) }}
@@ -127,7 +131,11 @@
       {% for entry in history %}
       <li class="px-4 py-3 flex items-start justify-between gap-3">
         <div class="min-w-0">
-          <p class="font-mono text-xs text-gray-500 tabular-nums">{{ entry.created_at.strftime('%a %b %-d, %-I:%M %p') }}</p>
+          <p class="font-mono text-xs text-gray-500 tabular-nums">
+            {{ entry.created_at.strftime('%a %b %-d, %-I:%M %p') }}
+            ·
+            <a href="/assistant/interactions/{{ entry.id }}/trace" class="text-gray-500 hover:text-gray-900 underline-offset-2 hover:underline">trace</a>
+          </p>
           <p class="text-sm truncate">"{{ entry.input_text }}"</p>
           {% if entry.executed_tool_calls %}
           <p class="text-xs text-gray-500 mt-1">
