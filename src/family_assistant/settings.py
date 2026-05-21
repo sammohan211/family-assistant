@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://ollama:11434"
     ollama_model: str = "llama3.1:8b"
     ollama_embedding_model: str = "nomic-embed-text"
+    # Swap the live Ollama client for an offline keyword-driven mock. Useful
+    # for UI dev on machines without a GPU, and for end-to-end tests that
+    # don't want to depend on inference. See ai_gateway/llm_mock.py.
+    use_mock_llm: bool = False
 
     user1_email: str | None = None
     user1_password_hash: str | None = None

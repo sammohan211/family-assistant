@@ -6,8 +6,9 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from family_assistant.ai_gateway import process_command
-from family_assistant.ai_gateway.models import AssistantInteraction
+from family_assistant.ai_gateway import cancel_pending, confirm_pending, process_command
+from family_assistant.ai_gateway.llm_mock import MockLLMClient
+from family_assistant.ai_gateway.models import AssistantInteraction, InteractionTrace
 from family_assistant.ai_gateway.risk import classify
 from family_assistant.ai_gateway.tools import (
     GroceryAddItemsArgs,
@@ -521,3 +522,231 @@ def test_prompt_omits_grocery_items_for_unrelated_command(
     [system, _user] = llm.calls[0]
     assert "open_grocery_items" in system["content"]
     assert '"apples"' not in system["content"]
+
+
+# --- Tracing ---------------------------------------------------------------
+
+
+def _traces_for(db: Session, interaction_id: int) -> list[InteractionTrace]:
+    return list(
+        db.scalars(
+            select(InteractionTrace)
+            .where(InteractionTrace.interaction_id == interaction_id)
+            .order_by(InteractionTrace.id)
+        ).all()
+    )
+
+
+def _events(traces: list[InteractionTrace]) -> list[tuple[str, str]]:
+    return [(t.stage, t.event) for t in traces]
+
+
+def test_tracing_records_full_low_risk_sequence(db_session: Session, seeded_user: User) -> None:
+    llm = FakeLLM(
+        {
+            "tool_calls": [{"name": "grocery.add_items", "args": {"items": [{"name": "Milk"}]}}],
+            "reply": "Added milk.",
+        }
+    )
+
+    result = process_command(seeded_user, "add milk", db_session, llm=llm)
+
+    events = _events(_traces_for(db_session, result.interaction_id))
+    assert events == [
+        ("input", "received"),
+        ("context", "built"),
+        ("llm", "call_started"),
+        ("llm", "call_succeeded"),
+        ("validation", "completed"),
+        ("risk", "classified"),
+        ("execution", "completed"),
+        ("decision", "auto"),
+        ("persist", "interaction_saved"),
+    ]
+
+
+def test_tracing_records_llm_failure(db_session: Session, seeded_user: User) -> None:
+    result = process_command(seeded_user, "anything", db_session, llm=BrokenLLM())
+
+    traces = _traces_for(db_session, result.interaction_id)
+    events = _events(traces)
+    assert ("llm", "call_failed") in events
+    assert ("llm", "call_succeeded") not in events
+    failed = next(t for t in traces if t.event == "call_failed")
+    assert "ollama is on fire" in failed.payload["error"]
+
+
+def test_tracing_records_validation_error_branch(db_session: Session, seeded_user: User) -> None:
+    llm = FakeLLM(
+        {
+            "tool_calls": [{"name": "grocery.add_items", "args": {"items": [{"name": "   "}]}}],
+            "reply": "",
+        }
+    )
+    result = process_command(seeded_user, "add nothing", db_session, llm=llm)
+
+    traces = _traces_for(db_session, result.interaction_id)
+    events = _events(traces)
+    assert ("decision", "validation_error") in events
+    validation = next(t for t in traces if t.event == "completed" and t.stage == "validation")
+    assert validation.payload["validated_count"] == 0
+    assert validation.payload["error_count"] == 1
+
+
+def test_tracing_records_pending_confirmation_and_confirm(
+    db_session: Session, seeded_user: User
+) -> None:
+    llm = FakeLLM(
+        {
+            "tool_calls": [
+                {
+                    "name": "grocery.add_items",
+                    "args": {"items": [{"name": n} for n in ["a", "b", "c", "d", "e"]]},
+                }
+            ],
+            "reply": "",
+        }
+    )
+    result = process_command(seeded_user, "add a bunch", db_session, llm=llm)
+
+    pre_confirm = _events(_traces_for(db_session, result.interaction_id))
+    assert ("decision", "pending_confirmation") in pre_confirm
+
+    interaction = db_session.get(AssistantInteraction, result.interaction_id)
+    assert interaction is not None
+    confirm_pending(interaction, db_session, seeded_user)
+
+    post_confirm = _events(_traces_for(db_session, result.interaction_id))
+    # Pre-confirm events are still there, plus the new confirm row.
+    assert post_confirm[: len(pre_confirm)] == pre_confirm
+    assert ("confirm", "approved") in post_confirm
+
+
+def test_tracing_records_cancel(db_session: Session, seeded_user: User) -> None:
+    llm = FakeLLM(
+        {
+            "tool_calls": [
+                {
+                    "name": "grocery.add_items",
+                    "args": {"items": [{"name": n} for n in ["a", "b", "c", "d", "e"]]},
+                }
+            ],
+            "reply": "",
+        }
+    )
+    result = process_command(seeded_user, "add a bunch", db_session, llm=llm)
+    interaction = db_session.get(AssistantInteraction, result.interaction_id)
+    assert interaction is not None
+    cancel_pending(interaction, db_session)
+
+    events = _events(_traces_for(db_session, result.interaction_id))
+    assert ("cancel", "cancelled") in events
+
+
+def test_tracing_ts_ms_is_monotonic(db_session: Session, seeded_user: User) -> None:
+    llm = FakeLLM({"tool_calls": [], "reply": "ok"})
+    result = process_command(seeded_user, "anything", db_session, llm=llm)
+
+    traces = _traces_for(db_session, result.interaction_id)
+    ts = [t.ts_ms for t in traces]
+    # Trace timestamps are monotonic-offset milliseconds from request start so
+    # the sequence must be non-decreasing within a single call.
+    assert ts == sorted(ts)
+    assert ts[0] == 0 or ts[0] >= 0
+
+
+# --- MockLLMClient + full pipeline -----------------------------------------
+#
+# These run the offline mock through process_command so the threat ↔ defense
+# pairing is asserted end-to-end (mock emits intentional bad output, pipeline
+# layers catch it). The unit tests for the mock itself live in test_llm_mock.py.
+
+
+def test_mock_blank_name_routes_to_validation_error(db_session: Session, seeded_user: User) -> None:
+    mock = MockLLMClient(force_mode="blank_name")
+    result = process_command(seeded_user, "anything", db_session, llm=mock)
+
+    assert result.confirmation_status == "auto"
+    assert result.error is not None and "validation" in result.error.lower()
+    assert db_session.scalars(select(GroceryItem)).all() == []
+
+
+def test_mock_unknown_tool_routes_to_validation_error(
+    db_session: Session, seeded_user: User
+) -> None:
+    mock = MockLLMClient(force_mode="unknown_tool")
+    result = process_command(seeded_user, "anything", db_session, llm=mock)
+
+    assert result.confirmation_status == "auto"
+    assert result.error is not None and "unknown tool" in result.error.lower()
+
+
+def test_mock_bad_args_shape_routes_to_validation_error(
+    db_session: Session, seeded_user: User
+) -> None:
+    mock = MockLLMClient(force_mode="bad_args_shape")
+    result = process_command(seeded_user, "anything", db_session, llm=mock)
+
+    assert result.confirmation_status == "auto"
+    assert result.error is not None
+    assert db_session.scalars(select(GroceryItem)).all() == []
+
+
+def test_mock_hallucinated_fk_records_not_found(db_session: Session, seeded_user: User) -> None:
+    mock = MockLLMClient(force_mode="hallucinated_fk")
+    result = process_command(seeded_user, "pack lunch for ghost", db_session, llm=mock)
+
+    assert db_session.scalars(select(LunchPlanEntry)).all() == []
+    interaction = db_session.get(AssistantInteraction, result.interaction_id)
+    assert interaction is not None
+    # Lunch plan validation runs in services (FK check), not the schema layer,
+    # so this surfaces as an executed call with outcome=not_found.
+    assert interaction.executed_tool_calls[0]["outcome"] == "not_found"
+
+
+def test_mock_hard_restriction_routes_to_pending_confirmation(
+    db_session: Session, seeded_user: User
+) -> None:
+    mock = MockLLMClient(force_mode="hard_restriction")
+    result = process_command(seeded_user, "anything", db_session, llm=mock)
+
+    assert result.risk == "high"
+    assert result.confirmation_status == "pending_confirmation"
+    assert db_session.scalars(select(Memory)).all() == []
+
+
+def test_mock_bulk_grocery_routes_to_pending_confirmation(
+    db_session: Session, seeded_user: User
+) -> None:
+    mock = MockLLMClient(force_mode="bulk_grocery")
+    result = process_command(seeded_user, "anything", db_session, llm=mock)
+
+    assert result.risk == "medium"
+    assert result.confirmation_status == "pending_confirmation"
+    # Nothing executes until confirm.
+    assert db_session.scalars(select(GroceryItem)).all() == []
+
+
+def test_mock_crash_routes_to_llm_error(db_session: Session, seeded_user: User) -> None:
+    mock = MockLLMClient(force_mode="crash")
+    result = process_command(seeded_user, "anything", db_session, llm=mock)
+
+    assert result.error is not None and "mock LLM forced crash" in result.error
+    interaction = db_session.get(AssistantInteraction, result.interaction_id)
+    assert interaction is not None
+    assert interaction.error_log is not None
+    # The trace should show the failure stage.
+    events = _events(_traces_for(db_session, result.interaction_id))
+    assert ("llm", "call_failed") in events
+
+
+def test_mock_keyword_routing_runs_end_to_end(db_session: Session, seeded_user: User) -> None:
+    # Without force_mode the mock matches on the user message — exercise the
+    # happy path so offline UI dev produces real DB writes.
+    mock = MockLLMClient()
+    result = process_command(seeded_user, "add milk to the grocery list", db_session, llm=mock)
+
+    assert result.confirmation_status == "auto"
+    assert mock.last_label == "grocery"
+    items = db_session.scalars(select(GroceryItem)).all()
+    assert [i.name for i in items] == ["Milk"]
