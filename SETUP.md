@@ -81,6 +81,7 @@ Fill in:
 - `APP_HOSTNAME` and `APP_BASE_URL` — for LAN-only start, `family.local` is fine. If you go Tailscale (step 11), use the desktop's Tailscale magic-DNS name (e.g. `family.tailnet-name.ts.net`).
 - `CADDY_TLS` — `internal` for home / Tailscale. (`<email>` only matters if you ever go cloud.)
 - `USER1_EMAIL` / `USER1_PASSWORD_HASH` (and `USER2_*`) — leave blank for now; generate Argon2id hashes when you're ready to log in. The app starts fine without them.
+- `USE_MOCK_LLM` — leave at `false`. Set to `true` only if you want to develop the UI without Ollama running (e.g. on a no-GPU laptop). The assistant will respond via keyword-routed canned outputs from `ai_gateway/llm_mock.py` instead of hitting the model.
 
 ## 5. Bring the stack up
 

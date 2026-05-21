@@ -104,6 +104,8 @@ When the assistant looks broken, the three useful tails:
 - `ollama` — model loading, token generation.
 - `caddy` — TLS handshakes, upstream errors (if the browser can't reach the app at all).
 
+For "why did the assistant do *that*?" — check the `interaction_traces` table (see the Database section below). Each assistant call writes one row per pipeline stage (input → context → llm → validation → risk → decision → execution → persist) so a single query reconstructs the full lifecycle without re-running anything.
+
 ---
 
 ## Database
@@ -118,6 +120,10 @@ docker compose exec postgres psql -U family_assistant
 # Most recent assistant interactions
 docker compose exec postgres psql -U family_assistant -c \
   "SELECT id, created_at, input_text, reply FROM assistant_interactions ORDER BY id DESC LIMIT 10;"
+
+# Full pipeline trace for one interaction (substitute the id)
+docker compose exec postgres psql -U family_assistant -c \
+  "SELECT ts_ms, stage, event, payload FROM interaction_traces WHERE interaction_id = 42 ORDER BY ts_ms;"
 
 # Row counts per table
 docker compose exec postgres psql -U family_assistant -c \

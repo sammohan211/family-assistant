@@ -477,18 +477,22 @@ Object storage is deferred from MVP. No file uploads, attachments, or images are
 
 ### 11.10 AssistantInteraction Logging
 
-Every assistant interaction is logged as an `AssistantInteraction` record (see Section 12), capturing:
+Every assistant interaction is logged at two granularities:
+
+**Per-request (`AssistantInteraction`).** One row per assistant call, capturing the end-to-end outcome:
 
 1. Timestamp and the user who issued the command.
 2. Raw user input.
 3. Parsed intent and extracted entities.
 4. Proposed tool calls (JSON).
-5. Confirmation status (auto / approved / cancelled).
+5. Confirmation status (auto / pending_confirmation / approved / cancelled).
 6. Executed tool calls and their outcomes (success / validation failure / runtime error).
 7. Resulting record IDs created or modified.
 8. End-to-end latency.
 
-This log is the primary debugging surface for the AI layer — for understanding parse failures, tracing how user commands translate to database mutations, and iterating on prompts. Sensitive content (e.g., memory content quoted in inputs) should be reviewed before any future log export.
+**Per-stage (`InteractionTrace`).** Many rows per interaction, one per pipeline stage event (input, context, llm, validation, risk, decision, execution, persist, confirm, cancel). Each row stores `stage`, `event`, a monotonic offset `ts_ms`, and a free-form JSONB payload. The (stage, event) pair names *which layer* made *which* decision — so a misbehaving assistant call can be reconstructed with one query keyed on `interaction_id`, instead of re-running with print statements.
+
+Together, these are the primary debugging surface for the AI layer — for understanding parse failures, tracing how user commands translate to database mutations, and iterating on prompts. Sensitive content (e.g., memory content quoted in inputs) should be reviewed before any future log export.
 
 ---
 
@@ -626,14 +630,29 @@ Embeddings are generated in a background worker after the source record is writt
 - user_id
 - created_at
 - input_text
+- reply (text — user-facing reply, possibly overwritten by gateway on validation failure)
 - parsed_intent (jsonb)
 - parsed_entities (jsonb)
 - proposed_tool_calls (jsonb)
-- confirmation_status (auto | approved | cancelled)
+- confirmation_status (auto | pending_confirmation | approved | cancelled)
 - executed_tool_calls (jsonb — array with per-call outcomes)
 - affected_record_ids (jsonb)
 - latency_ms (integer)
 - error_log (text, nullable)
+
+#### InteractionTrace
+
+Per-stage observability for one `AssistantInteraction`. One row per stage event inside `process_command` / `confirm_pending` / `cancel_pending`.
+
+- id
+- interaction_id (FK → assistant_interactions.id, ON DELETE CASCADE)
+- created_at
+- ts_ms (integer — monotonic offset in milliseconds from request start)
+- stage (string — input | context | llm | validation | risk | decision | execution | persist | confirm | cancel)
+- event (string — e.g., received, built, call_started, call_succeeded, call_failed, completed, classified, auto, validation_error, pending_confirmation, interaction_saved, approved, cancelled)
+- payload (jsonb — free-form per-event detail; adding fields does not require a migration)
+
+Indexed on (interaction_id, ts_ms) so reconstructing a single request's lifecycle is one ordered scan.
 
 ---
 
@@ -839,13 +858,14 @@ Object storage is deferred. When phase 2 or 3 introduces it (recipes, document i
 The AI Gateway is a Python module (`ai_gateway/`) inside the FastAPI app. Its responsibilities:
 
 1. Prompt template loading and rendering.
-2. LLM calls via Ollama's OpenAI-compatible API.
+2. LLM calls via Ollama's OpenAI-compatible API (or the offline mock in `llm_mock.py` when `USE_MOCK_LLM=true`).
 3. Embedding generation via Ollama's embedding endpoint (e.g., `nomic-embed-text`).
 4. Retrieval orchestration over Memory + meal/lunch notes (pgvector similarity + optional keyword fallback).
 5. Tool schema validation (Pydantic).
 6. Tool execution dispatch into the relevant module's service layer.
 7. Confirmation policy enforcement (Section 11.6).
 8. AssistantInteraction logging (Section 11.10).
+9. Per-stage tracing (`tracing.py`): every pipeline stage (input, context, llm, validation, risk, decision, execution, persist, confirm, cancel) emits one or more rows into `interaction_traces` keyed on the parent interaction id. See Section 11.10.
 
 The Gateway exposes a single internal entry point (`ai_gateway.process_command(user, input_text) → AssistantInteraction`) consumed by the assistant router.
 
@@ -859,6 +879,8 @@ For MVP, two models are served:
 2. An **embedding model** for memory + notes embeddings. Candidates: `nomic-embed-text`, `mxbai-embed-large`.
 
 Larger models, hybrid local/cloud routing, or task-specific model fine-tuning are deferred to later phases. Structured JSON output is enforced via either Ollama's JSON mode or a library-side constrained-decoding pass (Instructor/Outlines) — to be decided during build.
+
+**Offline mock.** For UI development on no-GPU machines and for end-to-end tests that exercise specific failure paths without Ollama running, the same `LLMClient` Protocol is implemented by `ai_gateway/llm_mock.py`. Setting `USE_MOCK_LLM=true` in `.env` swaps in `MockLLMClient`, which routes input by keyword to canned responses and supports a `force_mode` hook (`blank_name`, `unknown_tool`, `bad_args_shape`, `hallucinated_fk`, `hard_restriction`, `bulk_grocery`, `crash`, `prompt_injection_echo`). Each failure mode is paired with the defense layer it's meant to exercise.
 
 ---
 
@@ -1092,7 +1114,9 @@ Two tiers. **Near-term backlog** is the unphased queue — work picked up as nee
 - **Add assistant read support for exercise history.** Today the assistant can write exercise entries but can't answer "how much did I run this week?". This is a real gap if you want conversational reads on exercise. Needs an `exercise.search`-style tool plus extending the command-aware prompt builder to pre-fetch exercise data for exercise-flavored commands.
 - **Clarification Policy Phase 2 — self-repair retry on validation failure.** Per §11.5a. When Pydantic rejects a tool call, feed the validation error back to the LLM once ("Your previous call failed validation: <error>. Either correct it or ask the user.") and accept the second response. Capped at one retry to bound latency and cost. Today the gateway is one-shot — invalid calls bounce with a generic "I couldn't act on that" reply, which wastes the LLM's ability to recover from its own shape errors.
 - **Clarification Policy Phase 3 — multi-turn clarification threads.** Per §11.5a. `assistant_interactions` gains `thread_id`; a new `confirmation_status = "pending_clarification"` lets the user's next message resume the same context ("which milk?" → "the 2%" → tool fires). Needs a migration and a small router change to thread messages through `process_command`. Real conversational follow-up — today every input is independent.
-- **Operational ergonomics shell helper.** Per §17.8. Ship `scripts/family.sh` sourced from `~/.bashrc` on the desktop. Bundles the things that have already bitten us: `export COMPOSE_FILE=compose.yml:compose.gpu.yml` (the GPU-overlay trap), short aliases for the highest-frequency ops (`fa-status` → `docker compose ps`; `fa-logs <svc>` → tailed logs; `fa-ops` → `ollama ps`; `fa-warm` → one-shot `ollama run "$OLLAMA_MODEL" "hi"`; `fa-restart` → restart app; `fa-rebuild` → `git pull && docker compose up -d --build && docker compose exec app alembic upgrade head`), and a `fa-doctor` function that runs `docker compose ps` + `ollama ps` + `nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader` + last 20 app log lines. Goal: zero memorization of the GPU-overlay or cold-start gotchas. Leave `OPERATIONS.md` as the source of truth; the script is a convenience layer.
+- **Trace viewer admin page.** Per §17.8 and §11.10. `interaction_traces` already records per-stage events for every assistant call. Surfaces today only via direct SQL. Add a tiny admin-only HTML view at `/assistant/interactions/{id}/trace` that renders the stage sequence + payloads + latencies — turns the "why did the assistant do that?" question from a psql query into a click. Read-only, owner-only.
+- **Deterministic eval set for the assistant.** A `tests/eval/` folder of `(input, expected_tool_calls)` pairs run through `MockLLMClient(force_mode=...)` or against the real LLM, with a 0–1 score. Catches prompt regressions on model upgrades. Building block already in place: `MockLLMClient` and the per-stage trace surface make pipeline-level assertions cheap.
+- **Output guardrails as a named pipeline layer.** Today blank-field, FK, and confirm checks are scattered across `tools.py`, `services.py`, and `gateway.py`. Pulling them into one `output_guardrails(...) → ALLOW | BLOCK | ESCALATE | FALLBACK` step would mostly be reorganization — but it sets up a clean home for future cross-tool semantic checks (e.g., "no tool_call references a family_member_id outside the household").
 
 ### Deferred decisions / notes
 

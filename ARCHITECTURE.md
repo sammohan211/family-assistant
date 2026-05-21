@@ -14,10 +14,12 @@ and (optionally) one Ollama LLM container. Everything is server-rendered
 HTML — there is no separate frontend build. The whole stack runs in Docker
 Compose, the same containers at home and in the cloud.
 
-```
-Browser ─HTTPS─▶ Caddy ─HTTP─▶ FastAPI app ─SQL─▶ Postgres
-                                    │
-                                    └─HTTP─▶ Ollama (LLM)
+```mermaid
+flowchart LR
+    Browser["Browser<br/>(phone or laptop)"] -->|HTTPS| Caddy
+    Caddy -->|HTTP| App["FastAPI app<br/>(this codebase)"]
+    App -->|SQL| Postgres[("Postgres")]
+    App -->|HTTP /api/chat| Ollama["Ollama<br/>(swap for mock<br/>via USE_MOCK_LLM)"]
 ```
 
 Inside the FastAPI process the layout is **one Python package per
@@ -215,6 +217,14 @@ Pieces, in order from input to output:
   implementation wraps `/api/chat` over httpx with
   `format: "json"` set so Ollama constrains decoding to valid JSON.
   Tests inject a fake.
+- **`llm_mock.py`** — offline `MockLLMClient` implementing the same
+  Protocol, swapped in when `USE_MOCK_LLM=true`. Keyword-driven
+  scenarios for offline UI dev (no Ollama needed) plus a `force_mode`
+  hook for tests that exercise specific failure paths (blank
+  required field, unknown tool, hallucinated FK, hard restriction,
+  bulk grocery, crash). Each failure mode is paired with the defense
+  it's meant to exercise — the threat ↔ defense pairing is what makes
+  end-to-end tests of the pipeline tractable without an LLM.
 - **`prompt.py`** — builds the system prompt + the JSON-encoded tool
   catalog + a per-command **context block** (pre-fetched DB state
   relevant to the input — open grocery items for grocery commands,
@@ -230,16 +240,25 @@ Pieces, in order from input to output:
 - **`risk.py`** — pure function from `list[ValidatedToolCall]` to
   `"low" | "medium" | "high"` per PRD §11.6. Low executes
   automatically; medium/high stages for confirmation.
+- **`tracing.py`** — `TraceRecorder` buffers `(stage, event, payload)`
+  events during `process_command` and flushes them to the
+  `interaction_traces` table once the parent `AssistantInteraction`
+  row has an id. The (stage, event) pair names *which layer* made
+  *which* decision — the primary debugging surface when the
+  assistant misbehaves. Payload is free-form JSONB so adding fields
+  doesn't require a migration.
 - **`gateway.py`** — the orchestrator. `process_command(user, text,
   db, llm)` runs: build prompt → call LLM → parse + validate each
   tool call → classify risk → execute (low-risk only) → log an
-  `AssistantInteraction` row. Returns a `GatewayResult` for the
-  caller.
-- **`models.py`** — `AssistantInteraction` table. Every assistant
-  call writes one row capturing input, proposed tool calls,
-  confirmation status, executed tool calls + outcomes, affected
-  record IDs, latency, and any error. This is the primary
-  debugging surface for the AI layer.
+  `AssistantInteraction` row and flush per-stage traces. Returns a
+  `GatewayResult` for the caller. `confirm_pending` and
+  `cancel_pending` extend the trace for the same interaction id.
+- **`models.py`** — `AssistantInteraction` (one row per assistant
+  call: input, proposed tool calls, confirmation status, executed
+  outcomes, affected record IDs, latency, error) and
+  `InteractionTrace` (many rows per interaction: per-stage events
+  with monotonic-offset timestamps and JSONB payload). Together,
+  these are the debugging surface for the AI layer.
 - **`services.py`** — read helpers for the assistant UI and the
   dashboard "recent activity" card.
 
@@ -247,6 +266,54 @@ The `/assistant` HTML surface lives in
 [`src/family_assistant/assistant/`](src/family_assistant/assistant/)
 and is a thin wrapper: it owns the form, the confirmation card UX,
 and the history list, but the actual logic is all in `ai_gateway`.
+
+### The pipeline, end to end
+
+```mermaid
+flowchart TD
+    Input["input_text<br/>(POST /assistant)"] --> Context["build_context<br/>(prompt.py)"]
+    Context --> LLM["llm.chat_json<br/>(OllamaClient or MockLLMClient)"]
+    LLM -->|raises| Crash["error_log set<br/>auto + recovery reply"]
+    LLM -->|response| Validate["validate_tool_call per call<br/>(tools.py)"]
+    Validate --> Risk["classify<br/>(risk.py)"]
+    Risk --> Decide{decision}
+    Decide -->|no tool calls| Auto1["auto<br/>(read-only reply)"]
+    Decide -->|all invalid| Auto2["auto<br/>+ overwrite reply<br/>'please rephrase'"]
+    Decide -->|low risk + valid| Exec["execute_tool_call per call<br/>(tools.py → services)"]
+    Decide -->|medium/high or mixed| Pending["pending_confirmation<br/>(staged for /assistant/confirm)"]
+    Exec --> Persist
+    Auto1 --> Persist
+    Auto2 --> Persist
+    Pending --> Persist
+    Crash --> Persist
+    Persist["AssistantInteraction row<br/>+ flush traces<br/>(gateway.py + tracing.py)"] --> Done["GatewayResult → caller"]
+```
+
+Every node above also emits one or more rows into `interaction_traces`
+(`stage` = node label, `event` = the specific transition), so any single
+request can be reconstructed with one query keyed on `interaction_id`.
+
+### Interaction lifecycle
+
+`AssistantInteraction.confirmation_status` walks a small state machine.
+Low-risk requests skip the human-in-the-loop step entirely; medium and
+high-risk requests stage their tool calls and wait for an explicit
+confirm or cancel.
+
+```mermaid
+stateDiagram-v2
+    [*] --> auto: low-risk valid<br/>OR read-only<br/>OR validation error<br/>OR LLM crash
+    [*] --> pending_confirmation: medium/high risk
+    pending_confirmation --> approved: POST /assistant/confirm<br/>(re-validates, executes)
+    pending_confirmation --> cancelled: POST /assistant/cancel
+    auto --> [*]
+    approved --> [*]
+    cancelled --> [*]
+```
+
+The state lives in one column on `assistant_interactions` and is also
+the read surface for the dashboard "recent activity" card and the
+`/assistant` history list.
 
 **Clarification Policy.** Before any tool fires, the gateway honors
 PRD §11.5a: the LLM should ask a clarifying question (return
@@ -314,10 +381,15 @@ to share the test's transactional session. The `authenticated_client`
 fixture logs in and patches `client.post` to auto-include the CSRF
 token, so individual tests don't have to think about CSRF.
 
-Tests that need a fake LLM override the
-`assistant.dependencies.get_llm` dependency with their own
-`FakeLLM` returning canned JSON — Ollama is never required to run
-the suite.
+Tests that need a fake LLM have two options. For unit-style tests
+that hand-craft a single response, a local `FakeLLM` class returning a
+canned dict is fine (see `tests/test_ai_gateway.py`). For end-to-end
+tests of specific failure paths, pass
+`MockLLMClient(force_mode="blank_name")` (or any other mode in
+`FORCED_MODES`) from `ai_gateway/llm_mock.py` — that exercises the
+real validation, risk, and tracing layers without inventing tool-call
+payloads in the test itself. Either way, Ollama is never required to
+run the suite.
 
 ---
 
