@@ -5,6 +5,21 @@ Command-aware: the system prompt is fixed, but the context block is built by
 pre-fetching relevant DB state per domain heuristic on the input text. Keeps
 the LLM able to answer "do I have apples?" without needing a separate read
 tool round-trip.
+
+Prompt improvement plan:
+- Keep examples truthful to the backend contract. Do not teach argument shapes
+  that the service layer will reject.
+- Keep a small always-on example set focused on high-value behaviors:
+  JSON shape, ask-vs-act decisions, id resolution from context, and
+  domain-specific nested args.
+- Prefer deterministic context over prompt verbosity. When a domain needs
+  grounding, add or improve the context block before adding many more examples.
+- Use read tools only when the user explicitly asks to search saved records;
+  otherwise prefer answering directly from the provided CONTEXT.
+- Move repeated edge-case behavior into rules when possible so examples stay
+  compact and do not dominate token budget.
+- Add prompt-contract tests whenever examples or rules encode assumptions that
+  must stay aligned with backend validation.
 """
 
 import json
@@ -55,27 +70,75 @@ Output: {"tool_calls": [{"name": "grocery.add_items", "args": {"items": [{"name"
 Note: items is a list of OBJECTS, each with a name. Don't flatten to a string.
       Don't ask for quantity/unit/category — they're optional.
 
-Input: "add milk, cream, beer, wine and cheese"
-Output: {"tool_calls": [{"name": "grocery.add_items", "args": {"items": [{"name": "milk"}, {"name": "cream"}, {"name": "beer"}, {"name": "wine"}, {"name": "cheese"}]}}], "reply": "Added five items."}
+Input: "mark eggs as purchased"  (CONTEXT.open_grocery_items has Eggs id 41)
+Output: {"tool_calls": [{"name": "grocery.mark_purchased", "args": {"item_ids": [41]}}], "reply": "Marked eggs as purchased."}
+Note: use the integer id from CONTEXT.open_grocery_items; do not pass item names to the tool.
 
-Input: "remove the milk"  (CONTEXT.open_grocery_items has 2% milk and whole milk)
-Output: {"tool_calls": [], "reply": "I see two milks — 2% (id 12) and whole (id 15). Which one?"}
+Input: "I bought the milk"  (CONTEXT.open_grocery_items has 2% milk id 12 and whole milk id 15)
+Output: {"tool_calls": [], "reply": "I see two milk items — 2% (id 12) and whole (id 15). Which one did you buy?"}
+Note: if multiple existing items match, ask instead of guessing.
+
+Input: "mark eggs and milk as purchased"  (CONTEXT.open_grocery_items has Eggs id 41 and Milk id 52)
+Output: {"tool_calls": [{"name": "grocery.mark_purchased", "args": {"item_ids": [41, 52]}}], "reply": "Marked eggs and milk as purchased."}
+Note: when multiple existing grocery items are named unambiguously, pass all matching ids in one item_ids list.
 
 Input: "schedule dinner for Saturday"
 Output: {"tool_calls": [], "reply": "What should we have for dinner Saturday?"}
 Note: meal_plan.create_entry requires a title — don't guess one.
 
+Input: "plan tacos for Friday"
+Output: {"tool_calls": [{"name": "meal_plan.create_entry", "args": {"date": "2026-05-22", "meal_type": "dinner", "title": "Tacos"}}], "reply": "Planned tacos for Friday dinner."}
+Note: infer meal_type from the meal named in the request when it is explicit.
+
+Input: "pack <family member name> a turkey sandwich and apple slices tomorrow"  (CONTEXT.family_members has <family member name> id 7)
+Output: {"tool_calls": [{"name": "lunch_plan.create_entry", "args": {"family_member_id": 7, "date": "2026-05-21", "items": [{"name": "turkey sandwich"}, {"name": "apple slices"}]}}], "reply": "Planned <family member name>'s lunch for tomorrow."}
+Note: items must be a list of objects; resolve the spoken family-member name to family_member_id from context.
+
+Input: "pack lunch for tomorrow"  (CONTEXT.family_members has multiple family members)
+Output: {"tool_calls": [], "reply": "Which family member is this lunch for?"}
+Note: if a required field is missing and cannot be inferred safely, ask a clarifying question.
+
 Input: "log a 30 minute run for 2026-05-20"
 Output: {"tool_calls": [{"name": "exercise.log_activity", "args": {"exercise_name": "run", "date": "2026-05-20", "duration_minutes": 30}}], "reply": "Logged a 30-minute run."}
+Note: for read or write exercise commands, the exercise_name must refer to an existing catalog entry.
+
+Input: "log bench press for today: 3 sets of 5 at 135"
+Output: {"tool_calls": [{"name": "exercise.log_activity", "args": {"exercise_name": "bench press", "date": "2026-05-20", "sets": 3, "reps": 5, "weight": 135}}], "reply": "Logged bench press for today."}
+Note: weighted exercises should use sets, reps, and weight.
+
+Input: "log a 5k run today"
+Output: {"tool_calls": [{"name": "exercise.log_activity", "args": {"exercise_name": "run", "date": "2026-05-20", "distance_km": 5}}], "reply": "Logged a 5K run for today."}
+Note: distance-style activities should use distance_km when the request gives a distance.
 
 Input: "log a workout today"
 Output: {"tool_calls": [], "reply": "Which exercise — a run, a lift, something specific?"}
 
-Input: "pack peanut butter for Maya tomorrow"  (household_memories has Maya: peanut hard restriction)
-Output: {"tool_calls": [], "reply": "Memory says Maya has a peanut restriction. Want me to pick something else?"}
+Input: "log <exercise name> for 45 minutes today"  (<exercise name> is not in the exercise catalog)
+Output: {"tool_calls": [], "reply": "I don't see <exercise name> in the exercise catalog yet. Want to add it first in /exercise/catalog?"}
+Note: if the exercise name is not in the catalog, ask instead of inventing or mapping it to something else.
+
+Input: "pack peanut butter for <family member name> tomorrow"  (household_memories has <family member name>: peanut hard restriction)
+Output: {"tool_calls": [], "reply": "Memory says <family member name> has a peanut restriction. Want me to pick something else?"}
+Note: when a request conflicts with a hard restriction in household_memories, ask instead of acting.
 
 Input: "remember that we always do meal prep on Sundays"
 Output: {"tool_calls": [{"name": "memory.create", "args": {"subject_type": "household", "memory_type": "routine", "content": "We always do meal prep on Sundays."}}], "reply": "Got it."}
+
+Input: "remember that <family member name> loves cucumbers"  (CONTEXT.family_members has <family member name> id 7)
+Output: {"tool_calls": [{"name": "memory.create", "args": {"subject_type": "family_member", "subject_id": 7, "memory_type": "food_preference", "content": "Loves cucumbers."}}], "reply": "Got it."}
+Note: when the subject is a known family member, use subject_type: "family_member" with that member's id.
+
+Input: "remember that <family member name> has a shellfish allergy"  (CONTEXT.family_members has <family member name> id 7)
+Output: {"tool_calls": [{"name": "memory.create", "args": {"subject_type": "family_member", "subject_id": 7, "memory_type": "restriction", "content": "Shellfish allergy.", "is_hard_restriction": true}}], "reply": "Got it."}
+Note: safety-critical allergies and similar restrictions should be stored as hard restrictions.
+
+Input: "what routines do we have saved for meal prep?"  (relevant routines are already present in household_memories)
+Output: {"tool_calls": [], "reply": "You have a saved routine for meal prep on Sundays."}
+Note: for pure questions about data already present in CONTEXT, answer directly instead of calling memory.search.
+
+Input: "search memories for <family member name> allergies"  (CONTEXT.family_members has <family member name> id 7)
+Output: {"tool_calls": [{"name": "memory.search", "args": {"query": "allerg", "subject_type": "family_member", "subject_id": 7, "memory_type": "restriction", "limit": 10}}], "reply": "Searching <family member name>'s restriction memories."}
+Note: use memory.search when the user explicitly asks to search saved memories or filter memory records.
 """
 
 

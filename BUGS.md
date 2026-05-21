@@ -4,7 +4,8 @@ Review basis: [`PRD_AND_ROADMAP.md`](PRD_AND_ROADMAP.md), [`ARCHITECTURE.md`](AR
 
 ## Findings
 
-No outstanding findings.
+- **Assistant tool execution can still persist blank records** — The assistant tool schemas accept plain `str` fields for names/titles/content, and the downstream service layer only trims before commit instead of rejecting empty-after-trim values. An LLM-produced tool call like `{"name": "   "}` or `{"content": "   "}` can therefore create blank grocery items, meal entries, lunch items, or memories even though the HTML forms block those inputs. Affected areas include `ai_gateway/tools.py` plus service-layer creates in `grocery/services.py`, `meal_plan/services.py`, `lunch_plan/services.py`, and `memory/services.py`.
+- **Several edit routes report success for missing records** — Some POST update routes call service methods that return `None` when the row no longer exists, but the routers ignore that and always redirect as if the edit succeeded. A stale tab or deleted record therefore looks like a successful save with no change applied. Affected routes include family member, grocery, meal plan, lunch plan, and memory update handlers.
 
 ## Resolved
 
@@ -16,3 +17,8 @@ No outstanding findings.
 - **Any authenticated user could approve or cancel any pending assistant interaction** — `get_interaction` now scopes by `user_id`; confirm/cancel routes pass the current user.
 - **Deleting a family member with lunch-plan rows failed at commit time** — `delete_family_member` raises `FamilyMemberInUseError` with the dependent count; the router catches it and re-renders the edit form with a `409` and a friendly message.
 - **Import-time settings loading broke test collection without `.env`** — `db.py` now exposes `get_engine()` and `get_sessionmaker()` (lazy, `lru_cache`'d); engine construction happens at first use, not at module import. `main.py` updated to match. `tests/test_settings_bootstrap.py` is a subprocess-level regression guard.
+
+## Verification Notes
+
+- Source review confirms the resolved items above are implemented in the current codebase.
+- Full DB-backed runtime verification was not possible in this environment because `DATABASE_URL` was unset, so pytest integration tests that require Postgres could not run here.
