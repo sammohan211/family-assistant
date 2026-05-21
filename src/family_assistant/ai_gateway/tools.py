@@ -12,9 +12,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 from sqlalchemy.orm import Session as DbSession
 
 from family_assistant.auth.models import User
@@ -52,8 +52,15 @@ class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+# Required user-facing identifier fields (item names, titles, content). HTML
+# forms enforce non-empty via `required`; this gives the assistant path the same
+# guarantee so an LLM hallucinating `{"name": "   "}` is rejected up front and
+# routed through the validation_error path instead of persisting a blank row.
+NonEmptyStr = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
 class GroceryItemArgs(_StrictModel):
-    name: str
+    name: NonEmptyStr
     category: str | None = None
     quantity: Decimal | None = None
     unit: str | None = None
@@ -71,13 +78,13 @@ class GroceryMarkPurchasedArgs(_StrictModel):
 class MealPlanCreateEntryArgs(_StrictModel):
     date: date
     meal_type: Literal["breakfast", "lunch", "dinner", "snack"]
-    title: str
+    title: NonEmptyStr
     notes: str | None = None
     is_favorite: bool = False
 
 
 class LunchItemArgs(_StrictModel):
-    name: str
+    name: NonEmptyStr
     notes: str | None = None
 
 
@@ -90,7 +97,7 @@ class LunchPlanCreateEntryArgs(_StrictModel):
 
 
 class ExerciseLogActivityArgs(_StrictModel):
-    exercise_name: str
+    exercise_name: NonEmptyStr
     date: date
     sets: int | None = Field(default=None, ge=1)
     reps: int | None = Field(default=None, ge=1)
@@ -111,7 +118,7 @@ class MemoryCreateArgs(_StrictModel):
         "planning_constraint",
         "frequently_used",
     ]
-    content: str
+    content: NonEmptyStr
     is_hard_restriction: bool = False
     tags: list[str] = Field(default_factory=list)
 

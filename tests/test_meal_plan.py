@@ -62,6 +62,26 @@ def test_create_rejects_invalid_meal_type(authenticated_client: TestClient) -> N
     assert b"Meal type is required" in response.content
 
 
+def test_update_missing_meal_plan_entry_redirects_without_writing(
+    authenticated_client: TestClient, db_session: Session
+) -> None:
+    # Regression: POST to a deleted/non-existent ID used to call update_meal_plan_entry
+    # (which returns None) and then redirect 303 as if the edit succeeded.
+    response = authenticated_client.post(
+        "/meal-plan/99999",
+        data={
+            "date": "2026-05-18",
+            "meal_type": "dinner",
+            "title": "Ghost dinner",
+            "notes": "",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/meal-plan"
+    assert db_session.scalars(select(MealPlanEntry)).all() == []
+
+
 def test_update_meal_plan_entry(
     authenticated_client: TestClient, db_session: Session, seeded_user
 ) -> None:

@@ -94,6 +94,10 @@ def update_view(
     notes: Annotated[str, Form()] = "",
     school_days: Annotated[list[str] | None, Form()] = None,
 ) -> Response:
+    # Row deleted between GET and POST (stale tab, another device). Mirror the
+    # GET edit_form behavior rather than silently no-op the update.
+    if get_family_member(db, member_id) is None:
+        return RedirectResponse(url="/family", status_code=303)
     if not name.strip():
         member = get_family_member(db, member_id)
         return templates.TemplateResponse(

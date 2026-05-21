@@ -261,6 +261,10 @@ def update_view(
     notes: Annotated[str, Form()] = "",
 ) -> Response:
     item = get_lunch_plan_entry(db, entry_id)
+    # Row deleted between GET and POST (stale tab, another device). Mirror the
+    # GET edit_form behavior rather than silently no-op the update.
+    if item is None:
+        return RedirectResponse(url="/lunch-plan", status_code=303)
     family_members = list_family_members(db)
     form_data = {
         "family_member_id": str(family_member_id),

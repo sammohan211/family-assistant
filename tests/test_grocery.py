@@ -231,6 +231,28 @@ def test_delete_item(authenticated_client: TestClient, db_session: Session, seed
     assert db_session.get(GroceryItem, item_id) is None
 
 
+def test_update_missing_item_redirects_without_writing(
+    authenticated_client: TestClient, db_session: Session
+) -> None:
+    # Regression: POST to a deleted/non-existent ID used to call update_grocery_item
+    # (which returns None) and then redirect 303 as if the edit succeeded. Now early-
+    # returns to the list, mirroring the GET edit_form behavior.
+    response = authenticated_client.post(
+        "/grocery/99999",
+        data={
+            "name": "Should not be created",
+            "category": "",
+            "quantity": "",
+            "unit": "",
+            "notes": "",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/grocery"
+    assert db_session.scalars(select(GroceryItem)).all() == []
+
+
 def test_list_recent_items_dedupes_by_name_only(db_session: Session, seeded_user) -> None:
     # Same name + different quantity/unit/notes should collapse to one quick-add chip.
     db_session.add_all(

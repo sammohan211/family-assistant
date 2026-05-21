@@ -85,6 +85,21 @@ def test_update_family_member(authenticated_client: TestClient, db_session: Sess
     assert member.school_days == ["monday"]
 
 
+def test_update_missing_family_member_redirects_without_writing(
+    authenticated_client: TestClient, db_session: Session
+) -> None:
+    # Regression: POST to a deleted/non-existent ID used to call update_family_member
+    # (which returns None) and then redirect 303 as if the edit succeeded.
+    response = authenticated_client.post(
+        "/family/99999",
+        data={"name": "Ghost", "notes": "", "school_days": ["monday"]},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/family"
+    assert db_session.scalars(select(FamilyMember)).all() == []
+
+
 def test_delete_family_member(authenticated_client: TestClient, db_session: Session) -> None:
     member = FamilyMember(name="Lila", notes=None, school_days=[])
     db_session.add(member)

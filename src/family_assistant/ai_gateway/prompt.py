@@ -23,6 +23,7 @@ Prompt improvement plan:
 """
 
 import json
+import re
 from dataclasses import dataclass
 from datetime import date
 
@@ -152,21 +153,30 @@ class PromptContext:
     household_memories: list[dict]
 
 
+def _matches(text: str, words: tuple[str, ...]) -> bool:
+    # Word-boundary match so "add" doesn't pull the grocery list for
+    # "add a family member" and "list" doesn't pull it for "list memories".
+    return re.search(r"\b(?:" + "|".join(re.escape(w) for w in words) + r")\b", text) is not None
+
+
+# Token sets pruned of overly generic verbs ("add", "list", "plan") that fire
+# across unrelated domains. The LLM is told to ask when context is missing, so
+# a false negative is cheaper than a false positive that wastes prompt budget.
+_GROCERY_TOKENS = ("grocery", "groceries", "shopping", "buy", "bought", "purchase", "purchased")
+_MEAL_TOKENS = ("meal", "dinner", "breakfast", "snack", "cook", "eat")  # "lunch" handled below
+_LUNCH_TOKENS = ("lunch", "school", "pack", "packed", "packing")
+
+
 def _grocery_relevant(text: str) -> bool:
-    t = text.lower()
-    return any(w in t for w in ("grocery", "shopping", "buy", "purchase", "add", "list"))
+    return _matches(text.lower(), _GROCERY_TOKENS)
 
 
 def _meal_relevant(text: str) -> bool:
-    t = text.lower()
-    return any(
-        w in t for w in ("meal", "dinner", "breakfast", "lunch", "snack", "cook", "eat", "plan")
-    )
+    return _matches(text.lower(), _MEAL_TOKENS)
 
 
 def _lunch_relevant(text: str) -> bool:
-    t = text.lower()
-    return "lunch" in t or "school" in t or "pack" in t
+    return _matches(text.lower(), _LUNCH_TOKENS)
 
 
 def build_context(db: DbSession, input_text: str, today: date | None = None) -> PromptContext:

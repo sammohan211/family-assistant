@@ -174,6 +174,26 @@ def test_create_requires_user_when_subject_is_user(authenticated_client: TestCli
     assert b"Choose a user" in response.content
 
 
+def test_update_missing_memory_redirects_without_writing(
+    authenticated_client: TestClient, db_session: Session
+) -> None:
+    # Regression: POST to a deleted/non-existent ID used to call update_memory
+    # (which returns None) and then redirect 303 as if the edit succeeded.
+    response = authenticated_client.post(
+        "/memory/99999",
+        data={
+            "subject_type": "household",
+            "memory_type": "routine",
+            "content": "Ghost routine",
+            "tags": "",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/memory"
+    assert db_session.scalars(select(Memory)).all() == []
+
+
 def test_update_memory_changes_subject_and_clears_subject_id_for_household(
     authenticated_client: TestClient, db_session: Session, seeded_user: User
 ) -> None:

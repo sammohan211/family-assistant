@@ -73,6 +73,29 @@ def test_create_requires_item(authenticated_client: TestClient, db_session: Sess
     assert b"At least one lunch item is required" in response.content
 
 
+def test_update_missing_lunch_plan_entry_redirects_without_writing(
+    authenticated_client: TestClient, db_session: Session
+) -> None:
+    # Regression: POST to a deleted/non-existent ID used to call update_lunch_plan_entry
+    # (which returns None) and then redirect 303 as if the edit succeeded.
+    member = FamilyMember(name="Ghost", notes=None, school_days=["monday"])
+    db_session.add(member)
+    db_session.commit()
+    response = authenticated_client.post(
+        "/lunch-plan/99999",
+        data={
+            "family_member_id": str(member.id),
+            "date": "2026-05-18",
+            "items_text": "Sandwich",
+            "notes": "",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/lunch-plan"
+    assert db_session.scalars(select(LunchPlanEntry)).all() == []
+
+
 def test_update_lunch_plan_entry(
     authenticated_client: TestClient, db_session: Session, seeded_user
 ) -> None:

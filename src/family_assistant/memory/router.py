@@ -308,6 +308,10 @@ def update_view(
     confirm_hard_restriction: Annotated[bool, Form()] = False,
 ) -> Response:
     item = get_memory(db, memory_id)
+    # Row deleted between GET and POST (stale tab, another device). Mirror the
+    # GET edit_form behavior rather than silently no-op the update.
+    if item is None:
+        return RedirectResponse(url="/memory", status_code=303)
     users = _all_users(db)
     family_members = _all_family_members(db)
     form_data = {

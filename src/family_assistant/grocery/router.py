@@ -170,6 +170,11 @@ def update_view(
     notes: Annotated[str, Form()] = "",
 ) -> Response:
     item = get_grocery_item(db, item_id)
+    # Row deleted between GET and POST (stale tab, another device). Mirror the
+    # GET edit_form behavior: bounce to the list rather than silently no-op the
+    # update and redirect as if it succeeded.
+    if item is None:
+        return RedirectResponse(url="/grocery", status_code=303)
     form_data = {
         "name": name,
         "category": category,

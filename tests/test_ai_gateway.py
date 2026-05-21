@@ -61,6 +61,64 @@ def test_validate_tool_call_ok() -> None:
     assert isinstance(ok.args, GroceryAddItemsArgs)
 
 
+# Required identifier fields (name/title/content/exercise_name) must reject
+# whitespace-only LLM output so blank rows can't be persisted via the assistant.
+def test_validate_tool_call_rejects_blank_grocery_name() -> None:
+    err = validate_tool_call("grocery.add_items", {"items": [{"name": "   "}]})
+    assert err.error is not None  # type: ignore[union-attr]
+    assert "name" in err.error.lower()  # type: ignore[union-attr]
+
+
+def test_validate_tool_call_rejects_blank_meal_title() -> None:
+    err = validate_tool_call(
+        "meal_plan.create_entry",
+        {"date": date.today().isoformat(), "meal_type": "dinner", "title": "  "},
+    )
+    assert err.error is not None  # type: ignore[union-attr]
+    assert "title" in err.error.lower()  # type: ignore[union-attr]
+
+
+def test_validate_tool_call_rejects_blank_lunch_item_name() -> None:
+    err = validate_tool_call(
+        "lunch_plan.create_entry",
+        {
+            "family_member_id": 1,
+            "date": date.today().isoformat(),
+            "items": [{"name": "\t\n"}],
+        },
+    )
+    assert err.error is not None  # type: ignore[union-attr]
+    assert "name" in err.error.lower()  # type: ignore[union-attr]
+
+
+def test_validate_tool_call_rejects_blank_memory_content() -> None:
+    err = validate_tool_call(
+        "memory.create",
+        {
+            "subject_type": "household",
+            "memory_type": "preference",
+            "content": " ",
+        },
+    )
+    assert err.error is not None  # type: ignore[union-attr]
+    assert "content" in err.error.lower()  # type: ignore[union-attr]
+
+
+def test_validate_tool_call_rejects_blank_exercise_name() -> None:
+    err = validate_tool_call(
+        "exercise.log_activity",
+        {"exercise_name": "  ", "date": date.today().isoformat()},
+    )
+    assert err.error is not None  # type: ignore[union-attr]
+    assert "exercise_name" in err.error.lower()  # type: ignore[union-attr]
+
+
+def test_validate_tool_call_strips_whitespace_on_required_strings() -> None:
+    ok = validate_tool_call("grocery.add_items", {"items": [{"name": "  milk  "}]})
+    assert isinstance(ok, ValidatedToolCall)
+    assert ok.args.items[0].name == "milk"  # type: ignore[attr-defined]
+
+
 # --- Risk classifier -------------------------------------------------------
 
 
@@ -193,6 +251,25 @@ def test_process_command_validation_errors_only_does_not_stage(
     assert interaction.confirmation_status == "auto"
     assert interaction.proposed_tool_calls[0]["validation"] == "error"
     assert interaction.error_log is not None
+
+
+def test_process_command_blank_required_string_does_not_stage(
+    db_session: Session, seeded_user: User
+) -> None:
+    llm = FakeLLM(
+        {
+            "tool_calls": [{"name": "grocery.add_items", "args": {"items": [{"name": "   "}]}}],
+            "reply": "",
+        }
+    )
+    result = process_command(seeded_user, "add nothing", db_session, llm=llm)
+
+    assert result.confirmation_status == "auto"
+    assert db_session.scalars(select(GroceryItem)).all() == []
+    interaction = db_session.get(AssistantInteraction, result.interaction_id)
+    assert interaction is not None
+    assert interaction.proposed_tool_calls[0]["validation"] == "error"
+    assert interaction.error_log is not None and "name" in interaction.error_log.lower()
 
 
 def test_process_command_memory_create_rejects_unknown_family_member(
