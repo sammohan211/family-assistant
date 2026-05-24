@@ -111,11 +111,32 @@ def process_command(
         response = llm.chat_json(messages)
         reply = str(response.get("reply", "") or "")
         raw_calls = list(response.get("tool_calls") or [])
+        prompt_tokens = getattr(llm, "last_prompt_tokens", None)
+        num_ctx = getattr(llm, "last_num_ctx", None)
         tracer.log(
             "llm",
             "call_succeeded",
-            {"reply_chars": len(reply), "tool_call_count": len(raw_calls)},
+            {
+                "reply_chars": len(reply),
+                "tool_call_count": len(raw_calls),
+                "prompt_tokens": prompt_tokens,
+                "num_ctx": num_ctx,
+            },
         )
+        # Catch silent truncation regressions: Ollama drops the tail of any
+        # prompt that exceeds num_ctx and the response shape stays valid
+        # (empty reply, zero tool calls), so this is the only place we'd
+        # see it before the user notices the assistant going quiet.
+        if (
+            prompt_tokens is not None
+            and num_ctx is not None
+            and prompt_tokens >= int(num_ctx * 0.95)
+        ):
+            tracer.log(
+                "llm",
+                "prompt_near_ceiling",
+                {"prompt_tokens": prompt_tokens, "num_ctx": num_ctx},
+            )
     except Exception as exc:
         error_log = f"LLM call failed: {type(exc).__name__}: {exc}"
         tracer.log("llm", "call_failed", {"error": error_log})

@@ -262,6 +262,10 @@ class MockLLMClient:
     force_mode: str | None = None
     last_label: str | None = field(default=None, init=False)
     calls: list[list[dict[str, str]]] = field(default_factory=list, init=False)
+    # Mirror OllamaClient surface so gateway tracing reads the same attribute
+    # without special-casing the client type. Mock has no token count.
+    last_prompt_tokens: int | None = field(default=None, init=False)
+    last_num_ctx: int | None = field(default=None, init=False)
 
     def chat_json(self, messages: list[dict[str, str]]) -> dict[str, Any]:
         self.calls.append(messages)
