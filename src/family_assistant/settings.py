@@ -17,10 +17,13 @@ class Settings(BaseSettings):
     ollama_model: str = "llama3.1:8b"
     ollama_embedding_model: str = "nomic-embed-text"
     # Context window passed to Ollama on every /api/chat call. Default 4096
-    # silently truncated real prompts (system + tools + context can hit ~5k);
-    # 16384 gives comfortable headroom for memory growth and phase-2 catalogs
-    # at ~2 GB KV cache on a 24 GB GPU (vs llama3.1:8b's 128k native ceiling).
-    ollama_num_ctx: int = 16384
+    # silently truncated real prompts (system + tools + context can hit ~5k).
+    # 8192 sized for an 8 GB GPU (RTX 3070): llama3.1:8b Q4 weights ~4.7 GB +
+    # ~1 GB KV cache + overhead leaves headroom without spilling layers to CPU.
+    # If `llm.prompt_near_ceiling` fires in traces, prefer trimming the context
+    # builder (memories cap, current-week-only data) over raising this — each
+    # extra 4096 tokens costs ~0.5 GB KV you don't have on this card.
+    ollama_num_ctx: int = 8192
     # Swap the live Ollama client for an offline keyword-driven mock. Useful
     # for UI dev on machines without a GPU, and for end-to-end tests that
     # don't want to depend on inference. See ai_gateway/llm_mock.py.
