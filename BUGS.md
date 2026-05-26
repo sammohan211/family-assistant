@@ -4,7 +4,7 @@ Review basis: [`PRD_AND_ROADMAP.md`](PRD_AND_ROADMAP.md), [`ARCHITECTURE.md`](AR
 
 ## Findings
 
-No outstanding findings.
+- **Assistant fabricates "Memory says..." refusals when no matching memory exists.** The prompt's hard-restriction example (`prompt.py:121-123`) teaches the model to respond `"Memory says <name> has a peanut restriction. Want me to pick something else?"` when a packing request conflicts with a stored allergy. Llama 3.1 8B over-generalizes this template: typing `"Remember Auro has a peanut restriction"` (a memory-creation request, with `household_memories: []` in CONTEXT) produced `tool_call_count: 0` and the verbatim refusal text — the model pattern-matched on the keyword "peanut" + family-member name and ignored both the verb ("Remember") and the empty memories list. Trace evidence: interaction 51, prompt_tokens 4639, branch `no_tool_calls`. Two failures stacked: (a) intent misclassification (write → refuse), (b) false citation of a non-existent memory. Likely fix: tighten the example's wording so it doesn't read as a generic template, add an explicit rule (`"Memory says..."` opener only valid when `household_memories` contains a matching entry), and add a counter-example showing `"Remember <name> has a peanut allergy"` → `memory.create`.
 
 ## Resolved
 

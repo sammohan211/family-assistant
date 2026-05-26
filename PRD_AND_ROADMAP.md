@@ -1139,17 +1139,24 @@ Two tiers. **Near-term backlog** is the unphased queue — work picked up as nee
 
 ### Phase 2: Better Planning
 
-1. Meal catalog (mirroring the exercise catalog): household-shared, named meals with ingredients and per-meal macronutrient values (protein, fat, carbs, fibre). Meal plan entries reference catalog meals by name. Existing freeform titles either stay as-is or are promoted into the catalog on demand.
+1. Meal catalog (mirroring the exercise catalog): household-shared, named meals with ingredients and per-meal macronutrient values (protein, fat, carbs, fibre). A `category` field distinguishes `meal` (cooked household meals) from `school_lunch` (packed kid lunches) — single table, separate filters in the catalog UI and assistant tooling. Meal-plan and lunch-plan entries reference catalog rows by id. Existing freeform titles either stay as-is or are promoted into the catalog on demand. **Explicit non-goal**: catalog rows carry ingredients and macros only, never cooking method or steps — the household either knows the method or googles it.
 2. Weekly macro view (`/meal-plan/weekly`) — total macros for the week plus a delta vs the prior week, used during planning. Household-level only; no per-person consumption tracking.
 3. Pantry inventory and a "what's in stock" hint surfaced on the meal-plan page during planning.
-4. Meal-to-grocery generation from planned meals (becomes feasible once catalog meals carry ingredients).
-5. LLM-assisted weekly lunch planner: given the kid's hard restrictions (school no-nut rule, allergies from Memory), macro targets, and recent variety, proposes M–F lunches with grocery-feeding ingredients. Shares the macro framework with item 1.
-6. LLM-assisted grocery dedup: a `grocery.update_item` tool plus a prompt rule that matches user requests against canonical ingredient names from the catalogs and folds same-thing-different-wording adds into the existing open row (synonyms, plurals, `1 dozen eggs` ≈ `12 eggs`). Naturally feasible once items 1 + 5 land — canonical names are the prerequisite.
-7. Lunch templates.
-8. AI-generated weekly summary card on the dashboard.
-9. PWA installation and offline-friendly grocery list.
-10. Memory archiving / expiration workflows.
-11. Inferred memories with user review (the AI proposes, the user approves).
+4. Meal plannability gate. When a catalog meal is picked for planning, cross-check its ingredients against open grocery items and recently-purchased history (the pantry-inventory work in item 3). Surface missing ingredients inline at plan time; offer a one-click "add missing items to grocery" action; allow the user to override and plan anyway. Distinct from item 3's passive hint — this is an active check at plan time.
+5. Meal-to-grocery generation from planned meals (becomes feasible once catalog meals carry ingredients).
+6. LLM-assisted weekly lunch planner: given the kid's hard restrictions (school no-nut rule, allergies from Memory), macro targets, and recent variety, proposes M–F lunches with grocery-feeding ingredients. Shares the macro framework with item 1.
+7. Weekly planning workflow. A guided "plan the week" pass that bundles meal-plan, lunch-plan, and grocery into one flow:
+   (a) pick meals + lunches for the coming week (catalog-driven, plannability gate from item 4 enforced);
+   (b) missing ingredients aggregate into a single shopping list (item 5 fed back into grocery);
+   (c) render a one-page HTML summary route of the week's plan + shopping list (designed for screenshot or browser print-to-pdf — no PDF lib, no share-link auth model in scope);
+   (d) after shopping, mark items that weren't purchased — meals and lunches whose ingredients are now incomplete surface as "needs revision" with inline editing of the affected plan entries.
+   Depends on items 1, 4, 5.
+8. LLM-assisted grocery dedup: a `grocery.update_item` tool plus a prompt rule that matches user requests against canonical ingredient names from the catalogs and folds same-thing-different-wording adds into the existing open row (synonyms, plurals, `1 dozen eggs` ≈ `12 eggs`). Naturally feasible once items 1 + 6 land — canonical names are the prerequisite.
+9. Lunch templates.
+10. AI-generated weekly summary card on the dashboard.
+11. PWA installation and offline-friendly grocery list.
+12. Memory archiving / expiration workflows.
+13. Inferred memories with user review (the AI proposes, the user approves).
 
 ### Phase 3: AI and Retrieval Expansion
 

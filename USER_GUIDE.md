@@ -102,6 +102,8 @@ Add eggs, milk, bread, butter, cheese to grocery.         → >3 items, asks to 
 I ran 5k this morning.                                    → one exercise log, runs immediately
 ```
 
+**A note on dates.** When a date matters (meal plan, lunch plan, exercise log), prefer absolute `YYYY-MM-DD` (`"plan tacos for dinner on 2026-05-27"`) over weekday names. The local model (llama3.1:8b) sees today's date in context but isn't reliable at resolving "Wednesday" or "this Friday" to the right day — it sometimes lands several days off. The action still runs; it just runs on the wrong date. Check the affected page after asking, or use absolute dates to skip the issue.
+
 **History.** Below the latest interaction the page lists your recent prompts with their tool names and status — useful for "what just happened?" or auditing past assistant actions.
 
 **If something goes wrong:**
