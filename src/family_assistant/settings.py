@@ -13,6 +13,12 @@ class Settings(BaseSettings):
     app_base_url: str
     cookie_secure: bool = True
 
+    # Which live LLM transport to use: "ollama" (local/self-hosted, the
+    # home/GPU deployment) or "openrouter" (cloud, OpenAI-compatible API, for
+    # hosts without a GPU). The offline mock is selected separately via
+    # use_mock_llm. See ai_gateway/llm.py:default_client.
+    llm_provider: str = "ollama"
+
     ollama_base_url: str = "http://ollama:11434"
     ollama_model: str = "llama3.1:8b"
     ollama_embedding_model: str = "nomic-embed-text"
@@ -28,6 +34,17 @@ class Settings(BaseSettings):
     # for UI dev on machines without a GPU, and for end-to-end tests that
     # don't want to depend on inference. See ai_gateway/llm_mock.py.
     use_mock_llm: bool = False
+
+    # OpenRouter (cloud) settings — only used when llm_provider="openrouter".
+    # Default model mirrors the local llama3.1:8b for behavioural parity; swap
+    # for any OpenRouter model that supports JSON `response_format`.
+    openrouter_api_key: str | None = None
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_model: str = "meta-llama/llama-3.1-8b-instruct"
+    # Optional app-attribution headers OpenRouter uses for its leaderboard;
+    # harmless when unset.
+    openrouter_app_url: str | None = None
+    openrouter_app_title: str | None = None
 
     user1_email: str | None = None
     user1_password_hash: str | None = None

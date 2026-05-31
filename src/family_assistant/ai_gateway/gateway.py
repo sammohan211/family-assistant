@@ -12,7 +12,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session as DbSession
 
-from family_assistant.ai_gateway.llm import LLMClient, OllamaClient
+from family_assistant.ai_gateway.llm import LLMClient, default_client
 from family_assistant.ai_gateway.models import AssistantInteraction
 from family_assistant.ai_gateway.prompt import build_context, render_messages
 from family_assistant.ai_gateway.risk import RiskTier, classify
@@ -86,7 +86,7 @@ def process_command(
     llm: LLMClient | None = None,
 ) -> GatewayResult:
     started = time.monotonic()
-    llm = llm or OllamaClient()
+    llm = llm or default_client()
     tracer = TraceRecorder(_start=started)
 
     tracer.log("input", "received", {"user_id": user.id, "input_chars": len(input_text)})
