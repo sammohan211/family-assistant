@@ -212,6 +212,28 @@ Two patterns, pick whichever fits the moment:
 - **Laptop runs the app and tests; desktop only provides the LLM.** Set `OLLAMA_BASE_URL=http://<desktop>:11434` in the laptop's `.env`. The 14 currently-DB-needing tests still need a local Postgres on the laptop too. Most dev is fake-LLM anyway (the test suite proves this), so this is mostly for "I want a real LLM response right now."
 - **Develop directly on the desktop over SSH** (VS Code Remote-SSH or similar). Simpler — one machine has Postgres + app + Ollama all sharing the compose network — but ties you to the desktop being up while coding.
 
+## 13. Optional: cloud deployment (no GPU, OpenRouter)
+
+An alternative to the home/GPU box: run the app on a plain VPS (Hostinger KVM, Hetzner, etc.) and send chat to OpenRouter instead of a local model. Uses the standalone `compose.cloud.yml` (app + postgres + caddy, **no `ollama` service** — nothing needs it once chat is an API call; semantic search is keyword-only today).
+
+```bash
+# On the VPS, after installing Docker and cloning the repo:
+cp .env.example .env
+# Edit .env — same as §4, plus:
+#   LLM_PROVIDER=openrouter
+#   OPENROUTER_API_KEY=sk-or-...        (from https://openrouter.ai/keys)
+#   OPENROUTER_MODEL=meta-llama/llama-3.1-8b-instruct   (or any JSON-capable model)
+#   APP_HOSTNAME / APP_BASE_URL=<your public domain>
+#   CADDY_TLS=you@email.com             (real Let's Encrypt cert, not `internal`)
+
+docker compose -f compose.cloud.yml up -d --build
+docker compose -f compose.cloud.yml exec app alembic upgrade head
+```
+
+Point the domain's A record at the VPS first so Caddy can complete the ACME challenge on ports 80/443. Set `export COMPOSE_FILE=compose.cloud.yml` (as in `OPERATIONS.md` §setup) so plain `docker compose …` commands target the cloud stack.
+
+Trade-offs vs. the home box: prompts leave your network to OpenRouter's chosen provider (pick a no-retention model for household data), and you pay per token instead of using local hardware. Privacy-first alternative: keep the home/GPU stack and use §11 Tailscale to reach it from your phone.
+
 ---
 
 For day-to-day operations once the stack is running (updates, logs, database, backups, model switching, common issues), see `OPERATIONS.md`. For using the app's features (grocery, meal plan, assistant, etc.), see `USER_GUIDE.md`.
