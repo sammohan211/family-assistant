@@ -67,3 +67,6 @@ logs/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Personal source data (health logs, etc.) — keep out of git
+Data/
