@@ -38,6 +38,7 @@ from family_assistant.lunch_plan.services import (
 from family_assistant.lunch_plan.services import (
     list_week_entries as list_lunch_week_entries,
 )
+from family_assistant.meal_plan.services import list_recipes
 from family_assistant.meal_plan.services import list_week_entries as list_meal_week_entries
 from family_assistant.memory.services import list_memories
 
@@ -90,6 +91,18 @@ Note: meal_plan.create_entry requires a title — don't guess one.
 Input: "plan tacos for Friday"
 Output: {"tool_calls": [{"name": "meal_plan.create_entry", "args": {"date": "2026-05-22", "meal_type": "dinner", "title": "Tacos"}}], "reply": "Planned tacos for Friday dinner."}
 Note: infer meal_type from the meal named in the request when it is explicit.
+
+Input: "what can I make for dinner with what we have?"  (CONTEXT.recipe_catalog has dinner recipes; CONTEXT.open_grocery_items lists what's on hand)
+Output: {"tool_calls": [], "reply": "From your recipes, Butter Chicken & Rice fits — you've got chicken and rice on the list. Want me to plan it?"}
+Note: suggest from recipe_catalog, preferring recipes whose ingredients already appear in open_grocery_items. Do NOT invent recipes that aren't in the catalog; if nothing matches, say so and offer to plan something anyway.
+
+Input: "plan butter chicken for Friday"  (CONTEXT.recipe_catalog has "Butter Chicken & Rice")
+Output: {"tool_calls": [{"name": "meal_plan.create_entry", "args": {"date": "2026-05-22", "meal_type": "dinner", "title": "Butter Chicken & Rice"}}], "reply": "Planned Butter Chicken & Rice for Friday dinner."}
+Note: when the request names a recipe that exists in recipe_catalog, use that recipe's exact name as the meal title.
+
+Input: "pack a lunch for <family member name> tomorrow"  (CONTEXT.family_members has <family member name> id 7; CONTEXT.recipe_catalog has lunch components grouped by note: Carb/Fruit/Veg/Treat)
+Output: {"tool_calls": [{"name": "lunch_plan.create_entry", "args": {"family_member_id": 7, "date": "2026-05-21", "items": [{"name": "Grilled Cheese"}, {"name": "Apple"}, {"name": "Cookies"}]}}], "reply": "Packed grilled cheese, an apple, and a cookie for <family member name>."}
+Note: compose a school lunch from recipe_catalog lunch components — typically one Carb plus a Fruit and a Treat. Respect any hard restriction in household_memories.
 
 Input: "pack <family member name> a turkey sandwich and apple slices tomorrow"  (CONTEXT.family_members has <family member name> id 7)
 Output: {"tool_calls": [{"name": "lunch_plan.create_entry", "args": {"family_member_id": 7, "date": "2026-05-21", "items": [{"name": "turkey sandwich"}, {"name": "apple slices"}]}}], "reply": "Planned <family member name>'s lunch for tomorrow."}
@@ -150,6 +163,7 @@ class PromptContext:
     family_members: list[dict]
     this_weeks_meals: list[dict]
     this_weeks_lunches: list[dict]
+    recipe_catalog: list[dict]
     household_memories: list[dict]
 
 
@@ -183,8 +197,11 @@ def build_context(db: DbSession, input_text: str, today: date | None = None) -> 
     today = today or date.today()
     week_start = start_of_week(today)
 
+    # Groceries also load for meal/lunch-relevant input so the assistant can
+    # suggest recipes that use what's already on hand ("what can I make for
+    # dinner?", "pack a lunch from what we have").
     open_grocery_items: list[dict] = []
-    if _grocery_relevant(input_text):
+    if _grocery_relevant(input_text) or _meal_relevant(input_text) or _lunch_relevant(input_text):
         open_grocery_items = [
             {
                 "id": item.id,
@@ -226,6 +243,24 @@ def build_context(db: DbSession, input_text: str, today: date | None = None) -> 
             for e in list_lunch_week_entries(db, week_start=week_start)
         ]
 
+    # Recipe catalog (read-only) for meal/lunch planning: lets the assistant
+    # suggest a dish/lunch from the household's saved recipes rather than
+    # inventing one. Ingredients are names only — match against groceries above.
+    recipe_catalog: list[dict] = []
+    if _meal_relevant(input_text) or _lunch_relevant(input_text):
+        recipe_catalog = [
+            {
+                "id": r.id,
+                "name": r.name,
+                "meal_type": r.meal_type,
+                "ingredients": list(r.ingredients),
+                "notes": r.notes,
+                "calories": r.calories,
+                "protein_g": r.protein_g,
+            }
+            for r in list_recipes(db)
+        ]
+
     household_memories = [
         {
             "id": m.id,
@@ -244,6 +279,7 @@ def build_context(db: DbSession, input_text: str, today: date | None = None) -> 
         family_members=family_members,
         this_weeks_meals=this_weeks_meals,
         this_weeks_lunches=this_weeks_lunches,
+        recipe_catalog=recipe_catalog,
         household_memories=household_memories,
     )
 
@@ -255,6 +291,7 @@ def render_messages(context: PromptContext, input_text: str) -> list[dict[str, s
         "family_members": context.family_members,
         "this_weeks_meals": context.this_weeks_meals,
         "this_weeks_lunches": context.this_weeks_lunches,
+        "recipe_catalog": context.recipe_catalog,
         "household_memories": context.household_memories,
     }
     system_content = (

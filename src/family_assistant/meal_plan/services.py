@@ -7,9 +7,72 @@ from sqlalchemy.orm import Session as DbSession
 from sqlalchemy.orm import selectinload
 
 from family_assistant.auth.models import User
-from family_assistant.meal_plan.models import MealPlanEntry
+from family_assistant.meal_plan.models import MealPlanEntry, Recipe
 
 MEAL_TYPES = ("breakfast", "lunch", "dinner", "snack")
+
+
+# ---------------------------------------------------------------------------
+# Recipe catalog (household-shared)
+# ---------------------------------------------------------------------------
+
+
+def _normalize_ingredients(ingredients: list[str]) -> list[str]:
+    seen: list[str] = []
+    for raw in ingredients:
+        cleaned = raw.strip().lower()
+        if cleaned and cleaned not in seen:
+            seen.append(cleaned)
+    return seen
+
+
+def list_recipes(db: DbSession, *, meal_type: str | None = None) -> list[Recipe]:
+    statement = select(Recipe)
+    if meal_type is not None:
+        statement = statement.where(Recipe.meal_type == meal_type)
+    return list(db.scalars(statement.order_by(Recipe.name.asc())).all())
+
+
+def get_recipe_by_name(db: DbSession, name: str) -> Recipe | None:
+    cleaned = name.strip()
+    if not cleaned:
+        return None
+    return db.scalars(select(Recipe).where(Recipe.name.ilike(cleaned))).first()
+
+
+def create_recipe(
+    db: DbSession,
+    *,
+    name: str,
+    meal_type: str,
+    ingredients: list[str],
+    notes: str | None = None,
+    calories: int | None = None,
+    protein_g: int | None = None,
+) -> Recipe:
+    if meal_type not in MEAL_TYPES:
+        raise ValueError(f"Unknown meal_type: {meal_type!r}")
+    recipe = Recipe(
+        name=name.strip(),
+        meal_type=meal_type,
+        ingredients=_normalize_ingredients(ingredients),
+        notes=notes.strip() if notes else None,
+        calories=calories,
+        protein_g=protein_g,
+    )
+    db.add(recipe)
+    db.commit()
+    db.refresh(recipe)
+    return recipe
+
+
+def delete_recipe(db: DbSession, recipe_id: int) -> bool:
+    recipe = db.get(Recipe, recipe_id)
+    if recipe is None:
+        return False
+    db.delete(recipe)
+    db.commit()
+    return True
 
 
 def start_of_week(day: date) -> date:
