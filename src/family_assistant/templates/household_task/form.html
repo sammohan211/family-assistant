@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}{% if task %}Edit{% else %}New{% endif %} task · Family Assistant{% endblock %}
+
+{% set unit_labels = {"once": "One-off (no repeat)", "day": "Day(s)", "week": "Week(s)", "month": "Month(s)"} %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-8">
+  {% set active = "todo" %}
+  {% include "household_task/_header.html" with context %}
+
+  <h1 class="font-serif text-3xl tracking-tight mb-1">
+    {% if task %}Edit task{% else %}New task{% endif %}
+  </h1>
+  <p class="text-sm text-gray-500 mb-6">
+    <a href="/tasks" class="text-accent hover:underline">&larr; Back to to-do</a>
+  </p>
+
+  {% if error %}
+  <div class="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+    {{ error }}
+  </div>
+  {% endif %}
+
+  {% set name_val = form_data.name if 'name' in form_data else (task.name if task else '') %}
+  {% set details_val = form_data.details if 'details' in form_data else (task.details if task and task.details else '') %}
+  {% set assignee_val = form_data.assignee if 'assignee' in form_data else (task.assignee_id|string if task and task.assignee_id else '') %}
+  {% set unit_val = form_data.frequency_unit if 'frequency_unit' in form_data else (task.frequency_unit if task else 'week') %}
+  {% set count_val = form_data.frequency_count if 'frequency_count' in form_data else (task.frequency_count|string if task else '1') %}
+  {% set due_val = form_data.next_due_date if 'next_due_date' in form_data else (task.next_due_date.isoformat() if task else today.isoformat()) %}
+  {% set active_checked = (form_data.active if 'active' in form_data else ('on' if (task is none or task.active) else '')) %}
+
+  <form method="post"
+        action="/tasks{% if task %}/{{ task.id }}{% endif %}"
+        class="space-y-4 bg-white rounded-lg border border-gray-200 p-6">
+    {{ csrf_input() }}
+
+    <div>
+      <label for="name" class="block text-sm font-medium text-gray-700">Name</label>
+      <input id="name" name="name" type="text" required maxlength="120" value="{{ name_val }}"
+             placeholder="e.g. Laundry"
+             class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-accent focus:ring-accent">
+    </div>
+
+    <div>
+      <label for="details" class="block text-sm font-medium text-gray-700">Details</label>
+      <textarea id="details" name="details" rows="3" placeholder="Optional notes — what's involved"
+                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-accent focus:ring-accent">{{ details_val }}</textarea>
+    </div>
+
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div>
+        <label for="assignee" class="block text-sm font-medium text-gray-700">Assignee</label>
+        <select id="assignee" name="assignee"
+                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-accent focus:ring-accent">
+          <option value="" {% if not assignee_val %}selected{% endif %}>Anyone</option>
+          {% for u in users %}
+          <option value="{{ u.id }}" {% if assignee_val == u.id|string %}selected{% endif %}>{{ u.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="next_due_date" class="block text-sm font-medium text-gray-700">Next due</label>
+        <input id="next_due_date" name="next_due_date" type="date" required value="{{ due_val }}"
+               class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-accent focus:ring-accent">
+      </div>
+    </div>
+
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div>
+        <label for="frequency_count" class="block text-sm font-medium text-gray-700">Repeat every</label>
+        <input id="frequency_count" name="frequency_count" type="number" min="1" step="1" value="{{ count_val }}"
+               class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-accent focus:ring-accent">
+      </div>
+      <div>
+        <label for="frequency_unit" class="block text-sm font-medium text-gray-700">Unit</label>
+        <select id="frequency_unit" name="frequency_unit"
+                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-accent focus:ring-accent">
+          {% for unit in frequency_units %}
+          <option value="{{ unit }}" {% if unit_val == unit %}selected{% endif %}>{{ unit_labels[unit] }}</option>
+          {% endfor %}
+        </select>
+        <p class="mt-1 text-xs text-gray-500">Pick "One-off" for a task that won't repeat.</p>
+      </div>
+    </div>
+
+    {% if task %}
+    <label class="flex items-center gap-2 text-sm text-gray-700">
+      <input type="checkbox" name="active" {% if active_checked %}checked{% endif %}
+             class="rounded border-gray-300 text-accent focus:ring-accent">
+      Active (uncheck to archive without deleting)
+    </label>
+    {% endif %}
+
+    <div class="flex justify-end gap-2 pt-2">
+      <a href="/tasks"
+         class="rounded-md border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+        Cancel
+      </a>
+      <button type="submit"
+              class="rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-700">
+        Save
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

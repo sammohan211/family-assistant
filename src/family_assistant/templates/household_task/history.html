@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Task history · Family Assistant{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8">
+  {% set active = "history" %}
+  {% include "household_task/_header.html" with context %}
+
+  <h1 class="font-serif text-3xl tracking-tight mb-1">Completion history</h1>
+  <p class="text-sm text-gray-500 mb-6">Who finished what, most recent first.</p>
+
+  {% if completions %}
+  <div class="rounded-lg border border-gray-200 bg-white overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200 text-sm">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-4 py-2 text-left font-medium text-gray-600">Completed</th>
+          <th class="px-4 py-2 text-left font-medium text-gray-600">Task</th>
+          <th class="px-4 py-2 text-left font-medium text-gray-600">By</th>
+          <th class="px-4 py-2 text-left font-medium text-gray-600">Was due</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200">
+        {% for c in completions %}
+        <tr>
+          <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ c.completed_at.strftime('%a %b %-d, %-I:%M %p') }}</td>
+          <td class="px-4 py-2 text-gray-900">{{ c.task.name if c.task else '(deleted task)' }}</td>
+          <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ c.completed_by.name if c.completed_by else '—' }}</td>
+          <td class="px-4 py-2 whitespace-nowrap text-gray-500">{{ c.due_on.strftime('%b %-d') if c.due_on else '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center">
+    <p class="text-sm text-gray-600">Nothing completed yet.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

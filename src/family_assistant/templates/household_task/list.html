@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Household tasks · Family Assistant{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8">
+  {% set active = "todo" %}
+  {% include "household_task/_header.html" with context %}
+
+  <div class="flex items-center justify-between gap-4 mb-4">
+    <div>
+      <h1 class="font-serif text-3xl tracking-tight">Household tasks</h1>
+      <p class="text-sm text-gray-500">
+        {% if counts.overdue %}
+          <span class="text-red-600 font-medium">{{ counts.overdue }} overdue</span> ·
+        {% endif %}
+        {{ counts.due_today }} due today · {{ counts.upcoming }} upcoming
+      </p>
+    </div>
+    <a href="/tasks/new"
+       class="rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-700">
+      New task
+    </a>
+  </div>
+
+  {% if tasks %}
+  <div class="rounded-lg border border-gray-200 bg-white overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200 text-sm">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-4 py-2 text-left font-medium text-gray-600">Task</th>
+          <th class="px-4 py-2 text-left font-medium text-gray-600">Assignee</th>
+          <th class="px-4 py-2 text-left font-medium text-gray-600">Repeats</th>
+          <th class="px-4 py-2 text-left font-medium text-gray-600">Due</th>
+          <th class="px-4 py-2 text-right font-medium text-gray-600"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200">
+        {% for task in tasks %}
+        <tr>
+          <td class="px-4 py-2 align-top">
+            <div class="font-medium text-gray-900">{{ task.name }}</div>
+            {% if task.details %}
+            <div class="text-xs text-gray-500 max-w-md whitespace-pre-line">{{ task.details }}</div>
+            {% endif %}
+          </td>
+          <td class="px-4 py-2 align-top whitespace-nowrap text-gray-700">
+            {{ task.assignee.name if task.assignee else '—' }}
+          </td>
+          <td class="px-4 py-2 align-top whitespace-nowrap text-gray-600">{{ task.frequency_label }}</td>
+          <td class="px-4 py-2 align-top whitespace-nowrap">
+            {% if task.next_due_date < today %}
+              <span class="text-xs font-medium px-2 py-1 rounded-full bg-red-100 text-red-800">
+                Overdue · {{ task.next_due_date.strftime('%b %-d') }}
+              </span>
+            {% elif task.next_due_date == today %}
+              <span class="text-xs font-medium px-2 py-1 rounded-full bg-amber-100 text-amber-800">
+                Due today
+              </span>
+            {% else %}
+              <span class="text-gray-600">{{ task.next_due_date.strftime('%a %b %-d') }}</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-2 align-top text-right whitespace-nowrap">
+            <form method="post" action="/tasks/{{ task.id }}/done" class="inline">
+              {{ csrf_input() }}
+              <button type="submit"
+                      class="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700">
+                Done
+              </button>
+            </form>
+            <a href="/tasks/{{ task.id }}/edit" class="text-accent hover:underline ml-3">Edit</a>
+            <form method="post" action="/tasks/{{ task.id }}/delete"
+                  class="inline"
+                  onsubmit="return confirm('Delete this task?');">
+              {{ csrf_input() }}
+              <button type="submit" class="text-red-600 hover:underline ml-3">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center space-y-2">
+    <p class="text-sm text-gray-600">No tasks yet.</p>
+    <p class="text-xs text-gray-500">
+      <a href="/tasks/new" class="text-accent hover:underline">Add your first chore</a>.
+    </p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
