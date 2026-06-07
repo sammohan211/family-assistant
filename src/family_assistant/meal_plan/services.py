@@ -26,11 +26,26 @@ def _normalize_ingredients(ingredients: list[str]) -> list[str]:
     return seen
 
 
+def parse_ingredients(raw: str) -> list[str]:
+    """Split a free-text ingredients block (one per line) into a normalized list."""
+    return _normalize_ingredients(raw.splitlines())
+
+
 def list_recipes(db: DbSession, *, meal_type: str | None = None) -> list[Recipe]:
     statement = select(Recipe)
     if meal_type is not None:
         statement = statement.where(Recipe.meal_type == meal_type)
     return list(db.scalars(statement.order_by(Recipe.name.asc())).all())
+
+
+def list_meal_recipes(db: DbSession) -> list[Recipe]:
+    """Catalog recipes that are NOT school-lunch components (the meal catalog)."""
+    statement = select(Recipe).where(Recipe.meal_type != "lunch").order_by(Recipe.name.asc())
+    return list(db.scalars(statement).all())
+
+
+def get_recipe(db: DbSession, recipe_id: int) -> Recipe | None:
+    return db.get(Recipe, recipe_id)
 
 
 def get_recipe_by_name(db: DbSession, name: str) -> Recipe | None:
@@ -46,6 +61,7 @@ def create_recipe(
     name: str,
     meal_type: str,
     ingredients: list[str],
+    instructions: str | None = None,
     notes: str | None = None,
     calories: int | None = None,
     protein_g: int | None = None,
@@ -56,11 +72,41 @@ def create_recipe(
         name=name.strip(),
         meal_type=meal_type,
         ingredients=_normalize_ingredients(ingredients),
+        instructions=instructions.strip() if instructions else None,
         notes=notes.strip() if notes else None,
         calories=calories,
         protein_g=protein_g,
     )
     db.add(recipe)
+    db.commit()
+    db.refresh(recipe)
+    return recipe
+
+
+def update_recipe(
+    db: DbSession,
+    *,
+    recipe_id: int,
+    name: str,
+    meal_type: str,
+    ingredients: list[str],
+    instructions: str | None = None,
+    notes: str | None = None,
+    calories: int | None = None,
+    protein_g: int | None = None,
+) -> Recipe | None:
+    if meal_type not in MEAL_TYPES:
+        raise ValueError(f"Unknown meal_type: {meal_type!r}")
+    recipe = db.get(Recipe, recipe_id)
+    if recipe is None:
+        return None
+    recipe.name = name.strip()
+    recipe.meal_type = meal_type
+    recipe.ingredients = _normalize_ingredients(ingredients)
+    recipe.instructions = instructions.strip() if instructions else None
+    recipe.notes = notes.strip() if notes else None
+    recipe.calories = calories
+    recipe.protein_g = protein_g
     db.commit()
     db.refresh(recipe)
     return recipe

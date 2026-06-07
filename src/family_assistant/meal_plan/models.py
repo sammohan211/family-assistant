@@ -30,6 +30,7 @@ class Recipe(Base):
     name: Mapped[str] = mapped_column(String(140), unique=True)
     meal_type: Mapped[str] = mapped_column(String(20))
     ingredients: Mapped[list[str]] = mapped_column(JSONB(), default=list, server_default="[]")
+    instructions: Mapped[str | None] = mapped_column(Text(), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text(), nullable=True)
     calories: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     protein_g: Mapped[int | None] = mapped_column(Integer(), nullable=True)

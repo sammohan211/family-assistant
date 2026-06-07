@@ -1,0 +1,17 @@
+{# Shared header for all /meal-plan/* pages.
+   Caller sets `active` to "plan" or "catalog" so the right tab is highlighted. #}
+
+{% set tab_base = "px-3 py-2 text-sm font-medium rounded-md" %}
+{% set tab_active = "bg-white text-gray-900 shadow-sm" %}
+{% set tab_idle = "text-gray-600 hover:text-gray-900" %}
+
+<nav class="flex gap-1 bg-gray-100 p-1 rounded-lg mb-6 w-max">
+  <a href="/meal-plan"
+     class="{{ tab_base }} {{ tab_active if active == 'plan' else tab_idle }}">
+    Plan
+  </a>
+  <a href="/meal-plan/catalog"
+     class="{{ tab_base }} {{ tab_active if active == 'catalog' else tab_idle }}">
+    Catalog
+  </a>
+</nav>

@@ -51,12 +51,46 @@
       </div>
     </div>
 
+    {% if lunch_recipes %}
+    <div class="rounded-md border border-gray-200 bg-gray-50 p-3">
+      <p class="text-sm font-medium text-gray-700">Pick from catalog <span class="text-gray-400">(optional)</span></p>
+      <div class="mt-2 grid grid-cols-2 gap-1 sm:grid-cols-3">
+        {% for r in lunch_recipes %}
+        <label class="flex items-center gap-1.5 text-sm text-gray-700">
+          <input type="checkbox" class="lunch-component rounded border-gray-300 text-accent focus:ring-accent" value="{{ r.name }}">
+          <span>{{ r.name }}</span>
+        </label>
+        {% endfor %}
+      </div>
+      <button type="button" onclick="addLunchComponents()"
+              class="mt-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+        Add selected
+      </button>
+      <p class="mt-1 text-xs text-gray-500">
+        Manage components on the <a href="/lunch-plan/catalog" class="text-accent hover:underline">Catalog</a> tab.
+      </p>
+    </div>
+    {% endif %}
+
     <div>
       <label for="items_text" class="block text-sm font-medium text-gray-700">Items</label>
       <p class="text-xs text-gray-500">One item per line. Optional notes format: `Turkey sandwich: no mayo`.</p>
       <textarea id="items_text" name="items_text" rows="6"
                 class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-accent focus:ring-accent">{% if form_data and 'items_text' in form_data %}{{ form_data.items_text }}{% endif %}</textarea>
     </div>
+
+    <script>
+      function addLunchComponents() {
+        const ta = document.getElementById('items_text');
+        const boxes = document.querySelectorAll('.lunch-component:checked');
+        let value = ta.value.trim();
+        boxes.forEach(function (b) {
+          value = value ? value + '\n' + b.value : b.value;
+          b.checked = false;
+        });
+        ta.value = value;
+      }
+    </script>
 
     <div>
       <label for="notes" class="block text-sm font-medium text-gray-700">Lunch notes</label>

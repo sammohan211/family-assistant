@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 
 from family_assistant.family_member.models import FamilyMember
 from family_assistant.lunch_plan.models import LunchPlanEntry
+from family_assistant.meal_plan.models import Recipe
+from family_assistant.meal_plan.services import create_recipe
 
 
 def test_lunch_plan_requires_auth(client: TestClient) -> None:
@@ -335,3 +337,90 @@ def test_lunch_grid_shows_hint_when_no_school_days_configured(
     body = response.content
     assert b"No school days configured for Lila" in body
     assert b"May 18" not in body  # No day cards rendered for this member
+
+
+# ---------------------------------------------------------------------------
+# Lunch catalog (lunch components in the recipes table) UI
+# ---------------------------------------------------------------------------
+
+
+def test_lunch_catalog_list_renders(authenticated_client: TestClient, db_session: Session) -> None:
+    create_recipe(db_session, name="Grilled Cheese", meal_type="lunch", ingredients=["bread"])
+    response = authenticated_client.get("/lunch-plan/catalog")
+    assert response.status_code == 200
+    assert b"Lunch catalog" in response.content
+    assert b"Grilled Cheese" in response.content
+
+
+def test_lunch_catalog_create_forces_lunch_meal_type(
+    authenticated_client: TestClient, db_session: Session
+) -> None:
+    response = authenticated_client.post(
+        "/lunch-plan/catalog",
+        data={
+            "name": "Apple",
+            "ingredients": "apple",
+            "notes": "Fruit",
+            "calories": "95",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    recipe = db_session.scalars(select(Recipe)).one()
+    assert recipe.name == "Apple"
+    assert recipe.meal_type == "lunch"
+    assert recipe.notes == "Fruit"
+    assert recipe.calories == 95
+
+
+def test_lunch_catalog_create_requires_name(authenticated_client: TestClient) -> None:
+    response = authenticated_client.post(
+        "/lunch-plan/catalog", data={"name": "  "}, follow_redirects=False
+    )
+    assert response.status_code == 400
+    assert b"Name is required" in response.content
+
+
+def test_lunch_catalog_duplicate_name_conflicts(
+    authenticated_client: TestClient, db_session: Session
+) -> None:
+    create_recipe(db_session, name="Apple", meal_type="lunch", ingredients=["apple"])
+    response = authenticated_client.post(
+        "/lunch-plan/catalog", data={"name": "Apple"}, follow_redirects=False
+    )
+    assert response.status_code == 409
+    assert b"already exists" in response.content
+
+
+def test_lunch_catalog_update_and_delete(
+    authenticated_client: TestClient, db_session: Session
+) -> None:
+    recipe = create_recipe(db_session, name="Apple", meal_type="lunch", ingredients=["apple"])
+    update = authenticated_client.post(
+        f"/lunch-plan/catalog/{recipe.id}",
+        data={"name": "Green Apple", "notes": "Fruit"},
+        follow_redirects=False,
+    )
+    assert update.status_code == 303
+    db_session.expire_all()
+    assert db_session.get(Recipe, recipe.id).name == "Green Apple"
+
+    delete = authenticated_client.post(
+        f"/lunch-plan/catalog/{recipe.id}/delete", follow_redirects=False
+    )
+    assert delete.status_code == 303
+    assert db_session.get(Recipe, recipe.id) is None
+
+
+def test_lunch_form_offers_component_picker(
+    authenticated_client: TestClient, db_session: Session
+) -> None:
+    member = FamilyMember(name="Lila", notes=None, school_days=["monday"])
+    db_session.add(member)
+    db_session.commit()
+    create_recipe(db_session, name="Grilled Cheese", meal_type="lunch", ingredients=["bread"])
+
+    response = authenticated_client.get("/lunch-plan/new")
+    assert response.status_code == 200
+    assert b"Pick from catalog" in response.content
+    assert b"Grilled Cheese" in response.content
