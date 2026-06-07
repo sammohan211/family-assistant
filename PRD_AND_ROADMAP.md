@@ -69,7 +69,7 @@ The MVP will not attempt to provide:
 1. Multi-household / multi-tenant support. The app serves one household.
 2. Child or teen login accounts, or child-facing interfaces.
 3. A native iOS or Android app.
-4. Medical record storage, medical diagnosis, or clinical health advice.
+4. Medical record storage, medical diagnosis, or clinical health advice. (The blood-pressure module added after MVP — §10.9 — is personal self-tracking only: it stores readings and shows descriptive category labels, never diagnosis or clinical advice.)
 5. Automatic grocery purchasing or any external commerce integration.
 6. Budgeting or financial management.
 7. Complex autonomous AI agents (chains of agents acting without per-step user confirmation).
@@ -78,7 +78,7 @@ The MVP will not attempt to provide:
 10. An in-app calendar surface. Calendar lives outside the app.
 11. Production auth ceremony: email verification, password reset, member invitations, role hierarchies beyond a single adult role.
 12. PWA installation, offline support, or push notifications in MVP.
-13. Reminders, household tasks, and time-based notifications. Section 10.8 is dropped from MVP. The shopping list, meal plan, and lunch plan each carry their own to-do semantics; a separate generic task list is not needed.
+13. Reminders, time-based notifications, and a generic household task list — **in MVP**. The shopping list, meal plan, and lunch plan each carry their own to-do semantics, so a separate task list isn't needed for MVP. (A shared, recurring household-tasks feature is now planned for Phase 4 — see §21.)
 
 ---
 
@@ -159,7 +159,22 @@ Object storage and a generic mutation audit log are deferred — see Sections 11
 - As an adult, I want to view my own exercise history; both adults can see each other's history (no privacy controls in MVP).
 - As an adult, I want the assistant to log a workout by referencing an exercise by name.
 
-### 9.6 Embedded Assistant
+### 9.6 Blood Pressure Logging
+
+- As an adult, I want to log a blood-pressure reading (systolic, diastolic, optional heart rate, date, optional time, notes) so I can keep a personal record over time.
+- As an adult, I want mean arterial pressure (MAP) computed for each reading so I don't have to calculate it.
+- As an adult, I want each reading labelled against standard thresholds (normal / elevated / stage 1 / stage 2 / crisis) so I can see at a glance where it sits — descriptive only, not medical advice.
+- As an adult, I want a trends view with weekly averages and a category breakdown so I can see the direction over time.
+- As an adult, I want my readings private to me — each adult sees only their own — since this is personal health data.
+
+### 9.7 Hike Logging
+
+- As an adult, I want to log a Bruce Trail hike (section, segment name, date, start/end map links and times, distance, duration, notes) so I have a record of the segments I've completed.
+- As an adult, I want average speed computed automatically from distance and duration.
+- As an adult, I want a progress view showing total distance, hike count, total time, and a per-section breakdown, so I can track how far along the trail I am.
+- As an adult, I want my hikes private to me — each adult sees only their own.
+
+### 9.8 Embedded Assistant
 
 - As an adult, I want to type natural-language commands so I can update the app without navigating multiple screens.
 - As an adult, I want to ask what is planned today (meals, lunches) so I can quickly orient myself.
@@ -298,6 +313,33 @@ The application shall provide a household dashboard showing:
 4. Recent assistant activity (last few interactions, links to affected records).
 
 An AI-generated weekly summary card is deferred to phase 2.
+
+### 10.9 Blood Pressure Module
+
+A per-user log of blood-pressure readings. There is no shared catalog — readings are inherently personal. In the UI, Exercise (§10.7), Blood Pressure, and Hikes (§10.10) are grouped under a single **Health** navigation menu.
+
+The application shall support:
+
+1. **Reading log (per user).** A reading has: `date`; optional `reading_time`; `systolic` and `diastolic` (mmHg, required); `heart_rate` (bpm, optional); `notes` (optional).
+2. **Mean arterial pressure (MAP).** Computed at write time and persisted as `MAP = (systolic + 2 × diastolic) / 3`. Persisted (not recomputed on read) for the same reason exercise persists `work_score`.
+3. **Category classification.** Each reading is labelled against standard thresholds (normal / elevated / stage 1 / stage 2 / hypertensive crisis) and shown as a badge. Derived on read from systolic/diastolic; not stored. **Descriptive only — not medical advice or diagnosis** (§5 Non-Goal 4).
+4. **List view** at `/bp`, newest first, showing BP, MAP, heart rate, category, and notes.
+5. **Trends view** at `/bp/trends`: latest reading, overall averages, category distribution, and a per-ISO-week breakdown of average systolic/diastolic/heart rate.
+6. **Per-user privacy.** Each adult sees and edits only their own readings. This deliberately diverges from the exercise module (§10.7.5), where both adults can view each other's logs — blood pressure is treated as more sensitive.
+7. **No assistant tool in the initial build.** Conversational logging and reads are deferred (see §21).
+
+### 10.10 Hike Log Module
+
+A per-user log of Bruce Trail hikes, walked section by section. No shared catalog. Part of the **Health** navigation menu (§10.9).
+
+The application shall support:
+
+1. **Hike log (per user).** A hike has: `date`; `section` (e.g. Toronto, Niagara); segment `name`; optional `start_location` / `end_location` (map URLs); optional `start_time` / `end_time`; `distance_km` (required); `duration_minutes` (required); `notes` (optional).
+2. **Average speed.** Computed at write time and persisted as `distance_km ÷ (duration_minutes / 60)` km/h. Persisted for stability, like `work_score` / MAP.
+3. **List view** at `/hike`, newest first, with start/end map URLs rendered as outbound links.
+4. **Progress view** at `/hike/progress`: total distance, hike count, total time, average speed, and a per-section breakdown (most distance first) — reflecting progress along the trail section by section.
+5. **Per-user privacy.** Each adult sees and edits only their own hikes.
+6. **No assistant tool in the initial build** (deferred, see §21).
 
 ---
 
@@ -597,6 +639,42 @@ Catalog is shared across both adults. Not pre-seeded; user populates as needed.
 - updated_at
 
 Persisting `work_score` is deliberate: if a user later updates their body weight, the historical score on prior log rows stays stable so week-over-week comparisons aren't retroactively distorted.
+
+#### BloodPressureReading (per-user)
+
+- id
+- user_id (FK → User)
+- date
+- reading_time (nullable time)
+- systolic (int — mmHg)
+- diastolic (int — mmHg)
+- heart_rate (nullable int — bpm)
+- map_value (decimal; computed and persisted at write time as (systolic + 2 × diastolic) / 3)
+- notes
+- created_at
+- updated_at
+
+Private to the owner (each adult sees only their own). MAP is persisted for the same reason as `work_score` — derived values are stored, not recomputed. The category label (normal … crisis) is derived on read from systolic/diastolic, not stored. See §10.9.
+
+#### Hike (per-user)
+
+- id
+- user_id (FK → User)
+- date
+- section (string)
+- name (string)
+- start_location (nullable text — map URL)
+- start_time (nullable time)
+- end_location (nullable text — map URL)
+- end_time (nullable time)
+- distance_km (decimal)
+- duration_minutes (int)
+- speed_kmh (decimal; computed and persisted at write time as distance_km ÷ (duration_minutes / 60))
+- notes
+- created_at
+- updated_at
+
+Private to the owner. Speed is persisted for stability. See §10.10.
 
 #### Memory
 
@@ -1118,6 +1196,7 @@ Two tiers. **Near-term backlog** is the unphased queue — work picked up as nee
 - **Clarification Policy Phase 3 — multi-turn clarification threads.** Per §11.5a. `assistant_interactions` gains `thread_id`; a new `confirmation_status = "pending_clarification"` lets the user's next message resume the same context ("which milk?" → "the 2%" → tool fires). Needs a migration and a small router change to thread messages through `process_command`. Real conversational follow-up — today every input is independent.
 - **Deterministic eval set for the assistant.** A `tests/eval/` folder of `(input, expected_tool_calls)` pairs run through `MockLLMClient(force_mode=...)` or against the real LLM, with a 0–1 score. Catches prompt regressions on model upgrades. Building block already in place: `MockLLMClient` and the per-stage trace surface make pipeline-level assertions cheap.
 - **Output guardrails as a named pipeline layer.** Today blank-field, FK, and confirm checks are scattered across `tools.py`, `services.py`, and `gateway.py`. Pulling them into one `output_guardrails(...) → ALLOW | BLOCK | ESCALATE | FALLBACK` step would mostly be reorganization — but it sets up a clean home for future cross-tool semantic checks (e.g., "no tool_call references a family_member_id outside the household").
+- **Assistant + dashboard surfaces for blood pressure and hikes.** The BP (§10.9) and hike (§10.10) modules shipped UI-only: CRUD + trends/progress views, but no assistant tools and no dashboard cards (deliberate — same posture as the exercise read-support gap above). Add `bp.log_reading` / `hike.log_hike` write tools, read support for both, and dashboard cards (latest BP reading, Bruce Trail progress) when an actual flow demands them.
 
 ### Deferred decisions / notes
 
@@ -1169,12 +1248,20 @@ Two tiers. **Near-term backlog** is the unphased queue — work picked up as nee
 
 ### Phase 4: Broader Household Operations
 
-1. Chores tracking.
-2. Reminders and time-based notifications (re-evaluate now that the household has lived without them).
-3. Calendar integration (one-way export of planned meals/lunches to an external calendar).
-4. Budget-adjacent household planning.
-5. Pet care tracking.
-6. Elder care routines.
+1. **Household tasks (shared, recurring chores).** A common, household-wide view of tasks to be done around the house. Each task has: a **name**; a free-text **details** box; an **assignee** (which adult / household member is doing it); and a **done** action. Tasks recur at a **settable frequency** (e.g. laundry = weekly) and reappear in the to-do view when next due. **Shared across the whole household** — not per-user — which distinguishes it from the personal logs (exercise / BP / hikes) and from the to-do semantics already baked into grocery/meal/lunch. This reverses the MVP stance in §5 Non-Goal 13, which ruled a generic task list out of MVP but not out of the roadmap. Open design points: completion history vs. a simple reset-on-done; how the assignee interacts with recurrence (sticky assignee vs. rotation); whether overdue tasks escalate or just stay visible.
+2. **Personal projects tracker (per-user).** A space for each adult to track their own projects — learning projects, side projects, or any personal initiative — kept separate from shared household operations. Per-user and private. **Direction: hybrid — a journal spine plus light next-actions** — reusing the app's container + dated-entries + roll-up pattern (Exercise / BP / Hikes). Three nested pieces:
+   - **Project** — `name`; `status` (idea | active | on hold | done | abandoned); optional `goal`; optional `target_date`.
+   - **ProjectEntry** (the journal) — `date`; `note`; optional `link`. **No time/effort tracking** (decided out).
+   - **Next actions** — a short per-project checklist (`title`, `done`), deliberately *not* tasks-with-due-dates.
+
+   Design decisions locked: (a) completing a next-action **auto-writes a journal line**, linking the checklist to the timeline; (b) next-actions stay a short "what's next" list — **no due dates, no subtasks, no recurrence** (anything dated or recurring belongs to Household Tasks, item 1), and completed actions collapse out of view; (c) a `last_touched` value (= latest entry date) drives a **"stale project" signal** (an active project untouched for N weeks) — sharing a nudge mechanism with Household Tasks recurrence and the deferred reminders; the surfacing UI may land later.
+
+   Assistant tooling mirrors `exercise.log_activity`: `project.log_progress` (add a journal entry by project name), a next-action add/complete tool, and reads ("what have I done on X lately / what's next on X") — a self-contained tool-use exercise. Boundaries: distinct from **Memory** (static facts/preferences) and **Household Tasks** (shared, recurring, dated). Open point: whether `done` / `abandoned` projects stay fully browsable (a record of what you've tried) or just drop out of the active view — currently leaning **browsable but collapsed**.
+3. Reminders and time-based notifications (re-evaluate now that the household has lived without them).
+4. Calendar integration (one-way export of planned meals/lunches to an external calendar).
+5. Budget-adjacent household planning.
+6. Pet care tracking.
+7. Elder care routines.
 
 ### Phase 5: Beyond One Household / Beyond Adult Users
 
