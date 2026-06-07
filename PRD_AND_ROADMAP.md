@@ -78,7 +78,7 @@ The MVP will not attempt to provide:
 10. An in-app calendar surface. Calendar lives outside the app.
 11. Production auth ceremony: email verification, password reset, member invitations, role hierarchies beyond a single adult role.
 12. PWA installation, offline support, or push notifications in MVP.
-13. Reminders, time-based notifications, and a generic household task list — **in MVP**. The shopping list, meal plan, and lunch plan each carry their own to-do semantics, so a separate task list isn't needed for MVP. (A shared, recurring household-tasks feature is now planned for Phase 4 — see §21.)
+13. Reminders and time-based notifications — still a non-goal (see Phase 4, §21). A generic household task list *was* a non-goal in MVP, but a shared, recurring household-tasks module shipped after MVP — see §10.11; it has no time-based reminders, only a due date that surfaces overdue items in the list.
 
 ---
 
@@ -174,7 +174,15 @@ Object storage and a generic mutation audit log are deferred — see Sections 11
 - As an adult, I want a progress view showing total distance, hike count, total time, and a per-section breakdown, so I can track how far along the trail I am.
 - As an adult, I want my hikes private to me — each adult sees only their own.
 
-### 9.8 Embedded Assistant
+### 9.8 Household Tasks
+
+- As a member of the household, I want a shared list of chores to be done around the house, so everyone sees the same to-do board rather than tracking chores separately.
+- As a member of the household, I want each task to have a name, free-text details, and an assignee (which adult), so it's clear what needs doing and who's doing it.
+- As a member of the household, I want to set how often a task recurs (one-off, or every N days/weeks/months — e.g. laundry weekly), so routine chores reappear when they're next due without re-entering them.
+- As a member of the household, I want a one-click Done action that reschedules a recurring task (or archives a one-off), so closing out a chore is effortless.
+- As a member of the household, I want overdue tasks to stand out and a history of who completed what, so nothing slips and the household can see what's been done.
+
+### 9.9 Embedded Assistant
 
 - As an adult, I want to type natural-language commands so I can update the app without navigating multiple screens.
 - As an adult, I want to ask what is planned today (meals, lunches) so I can quickly orient myself.
@@ -340,6 +348,21 @@ The application shall support:
 4. **Progress view** at `/hike/progress`: total distance, hike count, total time, average speed, and a per-section breakdown (most distance first) — reflecting progress along the trail section by section.
 5. **Per-user privacy.** Each adult sees and edits only their own hikes.
 6. **No assistant tool in the initial build** (deferred, see §21).
+
+### 10.11 Household Tasks Module
+
+A **household-shared** board of chores at `/tasks` — deliberately *not* per-user, which distinguishes it from the personal logs (Exercise §10.7, Blood Pressure §10.9, Hikes §10.10) and from the to-do semantics already baked into grocery / meal / lunch. Any logged-in adult can view, create, edit, complete, or delete any task. This is the Phase 4 household-tasks feature (§21) shipped ahead of schedule.
+
+The application shall support:
+
+1. **Task definition.** A task has: `name`; optional free-text `details`; an optional **assignee** (a `User` — the adult responsible; nullable = anyone); a **frequency** (`frequency_unit` ∈ once / day / week / month, and `frequency_count` for "every N units", e.g. laundry = every 1 week); a `next_due_date`; and an `active` flag (uncheck to archive without deleting).
+2. **To-do view** at `/tasks`, ordered by due date so overdue tasks float to the top, each flagged **Overdue** (red) or **Due today** (amber). Shows a header count of overdue / due-today / upcoming.
+3. **One-click Done.** Completing a task appends a completion record (who + when + the due date it satisfied), then: a **one-off** task is archived (`active = false`); a **recurring** task's `next_due_date` rolls forward from the **completion date** (so a chore done a little late doesn't pile up), keeping its assignee (sticky, no rotation).
+4. **Completion history** at `/tasks/history`: an append-only log of who completed what and when, newest first.
+5. **Settable assignee and frequency**, editable any time via the task form.
+6. **No assistant tool in the initial build** (deferred, see §21) — and no dashboard card yet.
+
+**Design decisions** (resolving the open points the roadmap flagged): completion **history** is kept (not reset-on-done); the assignee is **sticky** across recurrences (not rotated); overdue tasks **stay visible** and float to the top (no escalation / notification). Recurrence anchors to the completion date, not the prior due date.
 
 ---
 
@@ -675,6 +698,33 @@ Private to the owner (each adult sees only their own). MAP is persisted for the 
 - updated_at
 
 Private to the owner. Speed is persisted for stability. See §10.10.
+
+#### HouseholdTask (household-shared)
+
+- id
+- name (string)
+- details (nullable text)
+- assignee_id (nullable FK → User, ON DELETE SET NULL — the adult responsible; null = anyone)
+- frequency_unit (string: once | day | week | month)
+- frequency_count (int — "every N units"; ignored for `once`)
+- next_due_date (date, indexed)
+- last_completed_at (nullable timestamp — denormalized snapshot for quick display)
+- last_completed_by_id (nullable FK → User, ON DELETE SET NULL)
+- active (boolean — false archives a task without deleting it; one-off tasks set this false on completion)
+- created_at
+- updated_at
+
+Household-shared (no `user_id` scope) — any adult can read/write. This is the one post-MVP module that is *not* per-user, by design. See §10.11.
+
+#### HouseholdTaskCompletion (household-shared)
+
+- id
+- task_id (FK → HouseholdTask, ON DELETE CASCADE, indexed)
+- completed_at (timestamp)
+- completed_by_id (nullable FK → User, ON DELETE SET NULL)
+- due_on (nullable date — the due date this completion satisfied; preserved even after the task's `next_due_date` rolls forward)
+
+An append-only completion log (the dated-entries pattern, like the personal logs) backing the history view. See §10.11.
 
 #### Memory
 
@@ -1196,7 +1246,7 @@ Two tiers. **Near-term backlog** is the unphased queue — work picked up as nee
 - **Clarification Policy Phase 3 — multi-turn clarification threads.** Per §11.5a. `assistant_interactions` gains `thread_id`; a new `confirmation_status = "pending_clarification"` lets the user's next message resume the same context ("which milk?" → "the 2%" → tool fires). Needs a migration and a small router change to thread messages through `process_command`. Real conversational follow-up — today every input is independent.
 - **Deterministic eval set for the assistant.** A `tests/eval/` folder of `(input, expected_tool_calls)` pairs run through `MockLLMClient(force_mode=...)` or against the real LLM, with a 0–1 score. Catches prompt regressions on model upgrades. Building block already in place: `MockLLMClient` and the per-stage trace surface make pipeline-level assertions cheap.
 - **Output guardrails as a named pipeline layer.** Today blank-field, FK, and confirm checks are scattered across `tools.py`, `services.py`, and `gateway.py`. Pulling them into one `output_guardrails(...) → ALLOW | BLOCK | ESCALATE | FALLBACK` step would mostly be reorganization — but it sets up a clean home for future cross-tool semantic checks (e.g., "no tool_call references a family_member_id outside the household").
-- **Assistant + dashboard surfaces for blood pressure and hikes.** The BP (§10.9) and hike (§10.10) modules shipped UI-only: CRUD + trends/progress views, but no assistant tools and no dashboard cards (deliberate — same posture as the exercise read-support gap above). Add `bp.log_reading` / `hike.log_hike` write tools, read support for both, and dashboard cards (latest BP reading, Bruce Trail progress) when an actual flow demands them.
+- **Assistant + dashboard surfaces for blood pressure, hikes, and household tasks.** The BP (§10.9), hike (§10.10), and household-tasks (§10.11) modules shipped UI-only: CRUD + their respective views, but no assistant tools and no dashboard cards (deliberate — same posture as the exercise read-support gap above). Add write tools (`bp.log_reading` / `hike.log_hike` / `task.add` + `task.complete`), read support, and dashboard cards (latest BP reading, Bruce Trail progress, what's due today) when an actual flow demands them.
 
 ### Deferred decisions / notes
 
@@ -1248,7 +1298,7 @@ Two tiers. **Near-term backlog** is the unphased queue — work picked up as nee
 
 ### Phase 4: Broader Household Operations
 
-1. **Household tasks (shared, recurring chores).** A common, household-wide view of tasks to be done around the house. Each task has: a **name**; a free-text **details** box; an **assignee** (which adult / household member is doing it); and a **done** action. Tasks recur at a **settable frequency** (e.g. laundry = weekly) and reappear in the to-do view when next due. **Shared across the whole household** — not per-user — which distinguishes it from the personal logs (exercise / BP / hikes) and from the to-do semantics already baked into grocery/meal/lunch. This reverses the MVP stance in §5 Non-Goal 13, which ruled a generic task list out of MVP but not out of the roadmap. Open design points: completion history vs. a simple reset-on-done; how the assignee interacts with recurrence (sticky assignee vs. rotation); whether overdue tasks escalate or just stay visible.
+1. **Household tasks (shared, recurring chores).** ✅ **Shipped ahead of schedule** — see §10.11 for the as-built spec and §9.8 for the user stories. Built as a household-shared board at `/tasks` with name, details, sticky assignee, settable frequency (once / every N days/weeks/months), a one-click Done that reschedules recurring tasks (or archives one-offs), overdue surfacing, and a completion-history view. The roadmap's open design points were resolved as: completion **history** kept; assignee **sticky** (no rotation); overdue tasks **stay visible** (no escalation). Still deferred: assistant tools + a dashboard card (see Near-term backlog).
 2. **Personal projects tracker (per-user).** A space for each adult to track their own projects — learning projects, side projects, or any personal initiative — kept separate from shared household operations. Per-user and private. **Direction: hybrid — a journal spine plus light next-actions** — reusing the app's container + dated-entries + roll-up pattern (Exercise / BP / Hikes). Three nested pieces:
    - **Project** — `name`; `status` (idea | active | on hold | done | abandoned); optional `goal`; optional `target_date`.
    - **ProjectEntry** (the journal) — `date`; `note`; optional `link`. **No time/effort tracking** (decided out).
