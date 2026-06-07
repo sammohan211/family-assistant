@@ -174,7 +174,10 @@ class PromptContext:
 def _matches(text: str, words: tuple[str, ...]) -> bool:
     # Word-boundary match so "add" doesn't pull the grocery list for
     # "add a family member" and "list" doesn't pull it for "list memories".
-    return re.search(r"\b(?:" + "|".join(re.escape(w) for w in words) + r")\b", text) is not None
+    # The trailing `(?:e?s)?` also accepts simple plurals so natural phrasing
+    # like "next week's dinners" / "lunches" still triggers the right context.
+    pattern = r"\b(?:" + "|".join(re.escape(w) for w in words) + r")(?:e?s)?\b"
+    return re.search(pattern, text) is not None
 
 
 # Token sets pruned of overly generic verbs ("add", "list", "plan") that fire

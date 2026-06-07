@@ -149,3 +149,28 @@ def test_lunch_relevant_true_for_lunch_phrases(text: str) -> None:
 )
 def test_lunch_relevant_false_for_unrelated(text: str) -> None:
     assert not _lunch_relevant(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "for next week's dinners, is the grocery list enough?",
+        "what meals are planned this week",
+        "we had snacks",
+    ],
+)
+def test_meal_relevant_true_for_plurals(text: str) -> None:
+    # Regression: word-boundary matching used to miss plurals ("dinners"),
+    # so natural grocery-vs-plan questions never loaded the meal plan.
+    assert _meal_relevant(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "pack lunches for the week",
+        "school lunches for next week",
+    ],
+)
+def test_lunch_relevant_true_for_plurals(text: str) -> None:
+    assert _lunch_relevant(text)
