@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Blood pressure · Family Assistant{% endblock %}
+
+{% set tone_badge = {
+  "normal": "bg-green-100 text-green-800",
+  "elevated": "bg-yellow-100 text-yellow-800",
+  "stage1": "bg-orange-100 text-orange-800",
+  "stage2": "bg-red-100 text-red-800",
+  "crisis": "bg-red-200 text-red-900",
+} %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8">
+  {% set active = "log" %}
+  {% include "bp/_header.html" with context %}
+
+  <div class="flex items-center justify-between gap-4 mb-4">
+    <div>
+      <h1 class="font-serif text-3xl tracking-tight">Blood pressure</h1>
+      <p class="text-sm text-gray-500">Your readings, most recent first.</p>
+    </div>
+    <a href="/bp/new"
+       class="rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-700">
+      Log reading
+    </a>
+  </div>
+
+  {% if rows %}
+  <div class="rounded-lg border border-gray-200 bg-white overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200 text-sm">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-4 py-2 text-left font-medium text-gray-600">When</th>
+          <th class="px-4 py-2 text-right font-medium text-gray-600">BP</th>
+          <th class="px-4 py-2 text-right font-medium text-gray-600">MAP</th>
+          <th class="px-4 py-2 text-right font-medium text-gray-600">HR</th>
+          <th class="px-4 py-2 text-left font-medium text-gray-600">Category</th>
+          <th class="px-4 py-2 text-left font-medium text-gray-600">Notes</th>
+          <th class="px-4 py-2 text-right font-medium text-gray-600"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200">
+        {% for reading, label, tone in rows %}
+        <tr>
+          <td class="px-4 py-2 whitespace-nowrap text-gray-700">
+            {{ reading.date.strftime('%a %b %-d') }}
+            {% if reading.reading_time %}
+              <span class="text-xs text-gray-500">{{ reading.reading_time.strftime('%-I:%M %p') }}</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-2 text-right font-medium tabular-nums whitespace-nowrap">
+            {{ reading.systolic }}/{{ reading.diastolic }}
+          </td>
+          <td class="px-4 py-2 text-right tabular-nums text-gray-600">{{ "%g"|format(reading.map_value) }}</td>
+          <td class="px-4 py-2 text-right tabular-nums text-gray-600">{{ reading.heart_rate if reading.heart_rate is not none else '—' }}</td>
+          <td class="px-4 py-2 whitespace-nowrap">
+            <span class="text-xs font-medium px-2 py-1 rounded-full {{ tone_badge[tone] }}">{{ label }}</span>
+          </td>
+          <td class="px-4 py-2 text-gray-500 max-w-[14rem] truncate">{{ reading.notes or '' }}</td>
+          <td class="px-4 py-2 text-right whitespace-nowrap">
+            <a href="/bp/{{ reading.id }}/edit" class="text-accent hover:underline mr-3">Edit</a>
+            <form method="post" action="/bp/{{ reading.id }}/delete"
+                  class="inline"
+                  onsubmit="return confirm('Delete this reading?');">
+              {{ csrf_input() }}
+              <button type="submit" class="text-red-600 hover:underline">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center space-y-2">
+    <p class="text-sm text-gray-600">No readings logged yet.</p>
+    <p class="text-xs text-gray-500">
+      <a href="/bp/new" class="text-accent hover:underline">Log your first reading</a>.
+    </p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

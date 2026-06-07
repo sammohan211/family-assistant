@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}BP trends · Family Assistant{% endblock %}
+
+{% set tone_badge = {
+  "normal": "bg-green-100 text-green-800",
+  "elevated": "bg-yellow-100 text-yellow-800",
+  "stage1": "bg-orange-100 text-orange-800",
+  "stage2": "bg-red-100 text-red-800",
+  "crisis": "bg-red-200 text-red-900",
+} %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 py-8">
+  {% set active = "trends" %}
+  {% include "bp/_header.html" with context %}
+
+  <h1 class="font-serif text-3xl tracking-tight mb-6">Trends</h1>
+
+  {% if summary.count == 0 %}
+  <div class="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center">
+    <p class="text-sm text-gray-600">No readings yet.</p>
+    <p class="mt-1 text-xs text-gray-500">
+      <a href="/bp/new" class="text-accent hover:underline">Log a reading</a> to start tracking.
+    </p>
+  </div>
+  {% else %}
+
+  <div class="grid gap-4 sm:grid-cols-3 mb-6">
+    <div class="rounded-lg border border-gray-200 bg-white p-5">
+      <p class="text-sm text-gray-500">Latest</p>
+      <p class="text-3xl font-semibold tabular-nums mt-1">
+        {{ summary.latest.systolic }}/{{ summary.latest.diastolic }}
+      </p>
+      {% if latest_category %}
+      <span class="mt-2 inline-block text-xs font-medium px-2 py-1 rounded-full {{ tone_badge[latest_category[1]] }}">
+        {{ latest_category[0] }}
+      </span>
+      {% endif %}
+      <p class="mt-1 text-xs text-gray-500">{{ summary.latest.date.strftime('%b %-d, %Y') }}</p>
+    </div>
+    <div class="rounded-lg border border-gray-200 bg-white p-5">
+      <p class="text-sm text-gray-500">Average ({{ summary.count }} readings)</p>
+      <p class="text-3xl font-semibold tabular-nums mt-1">
+        {{ "%g"|format(summary.avg_systolic) }}/{{ "%g"|format(summary.avg_diastolic) }}
+      </p>
+      {% if summary.avg_heart_rate is not none %}
+      <p class="mt-1 text-xs text-gray-500">{{ "%g"|format(summary.avg_heart_rate) }} bpm avg</p>
+      {% endif %}
+    </div>
+    <div class="rounded-lg border border-gray-200 bg-white p-5">
+      <p class="text-sm text-gray-500">By category</p>
+      <ul class="mt-2 space-y-1 text-sm">
+        {% for label, tone, count in summary.category_counts %}
+        <li class="flex items-center justify-between gap-2">
+          <span class="text-xs font-medium px-2 py-0.5 rounded-full {{ tone_badge[tone] }}">{{ label }}</span>
+          <span class="tabular-nums text-gray-600">{{ count }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <section class="rounded-lg border border-gray-200 bg-white overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200 text-sm">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-4 py-2 text-left font-medium text-gray-600">Week of</th>
+          <th class="px-4 py-2 text-right font-medium text-gray-600">Readings</th>
+          <th class="px-4 py-2 text-right font-medium text-gray-600">Avg BP</th>
+          <th class="px-4 py-2 text-right font-medium text-gray-600">Avg HR</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200">
+        {% for w in summary.weekly %}
+        <tr>
+          <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ w.week_start.strftime('%b %-d, %Y') }}</td>
+          <td class="px-4 py-2 text-right tabular-nums text-gray-600">{{ w.count }}</td>
+          <td class="px-4 py-2 text-right tabular-nums font-medium">{{ "%g"|format(w.avg_systolic) }}/{{ "%g"|format(w.avg_diastolic) }}</td>
+          <td class="px-4 py-2 text-right tabular-nums text-gray-600">{{ "%g"|format(w.avg_heart_rate) if w.avg_heart_rate is not none else '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  <p class="mt-2 text-xs text-gray-500">Weekly averages, most recent {{ summary.weekly|length }} week(s).</p>
+  {% endif %}
+</div>
+{% endblock %}

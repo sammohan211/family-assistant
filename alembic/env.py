@@ -10,10 +10,12 @@ from alembic import context
 # Add new lines here as modules introduce models.
 from family_assistant.ai_gateway import models as _ai_gateway_models  # noqa: F401
 from family_assistant.auth import models as _auth_models  # noqa: F401
+from family_assistant.bp import models as _bp_models  # noqa: F401
 from family_assistant.db import Base
 from family_assistant.exercise import models as _exercise_models  # noqa: F401
 from family_assistant.family_member import models as _family_member_models  # noqa: F401
 from family_assistant.grocery import models as _grocery_models  # noqa: F401
+from family_assistant.hike import models as _hike_models  # noqa: F401
 from family_assistant.lunch_plan import models as _lunch_plan_models  # noqa: F401
 from family_assistant.meal_plan import models as _meal_plan_models  # noqa: F401
 from family_assistant.memory import models as _memory_models  # noqa: F401

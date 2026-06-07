@@ -1,0 +1,20 @@
+{# Shared header for all /bp/* pages.
+   Caller sets `active` to "log" or "trends" so the right tab is highlighted. #}
+
+{% set tab_base = "px-3 py-2 text-sm font-medium rounded-md" %}
+{% set tab_active = "bg-white text-gray-900 shadow-sm" %}
+{% set tab_idle = "text-gray-600 hover:text-gray-900" %}
+
+<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
+  <nav class="flex gap-1 bg-gray-100 p-1 rounded-lg">
+    <a href="/bp"
+       class="{{ tab_base }} {{ tab_active if active == 'log' else tab_idle }}">
+      Log
+    </a>
+    <a href="/bp/trends"
+       class="{{ tab_base }} {{ tab_active if active == 'trends' else tab_idle }}">
+      Trends
+    </a>
+  </nav>
+  <p class="text-xs text-gray-500">Health · Blood pressure</p>
+</div>
