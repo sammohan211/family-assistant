@@ -137,11 +137,13 @@ docker compose exec postgres createdb -U family_assistant family_assistant_test
   Paste the hash into `.env` as `USER1_PASSWORD_HASH=...`, **with every `$` doubled** (Compose treats a single `$` as a variable reference and will silently blank out parts of the hash with `WARN ... variable is not set`). Example: `$argon2id$v=19$m=...$salt$hash` becomes `$$argon2id$$v=19$$m=...$$salt$$hash`. Also fill `USER1_EMAIL` and (optionally) `USER1_NAME`. Then:
 
   ```bash
-  docker compose restart app
+  docker compose up -d app
   docker compose logs --tail=20 app
   ```
 
-  No `WARN ... variable is not set` lines = hash made it through intact.
+  No `WARN ... variable is not set` lines = hash made it through intact. (Use
+  `up -d`, not `restart` — `restart` doesn't re-read `.env`, so a later hash/user
+  change wouldn't take effect.)
 - Hit the login page in a browser and sign in with the plaintext password you chose (not the hash).
 - Send an assistant command and watch `docker compose logs -f app ollama` — confirms the LLM round-trip works on the GPU.
 
@@ -222,7 +224,7 @@ cp .env.example .env
 # Edit .env — same as §4, plus:
 #   LLM_PROVIDER=openrouter
 #   OPENROUTER_API_KEY=sk-or-...        (from https://openrouter.ai/keys)
-#   OPENROUTER_MODEL=meta-llama/llama-3.1-8b-instruct   (or any JSON-capable model)
+#   OPENROUTER_MODEL=google/gemini-2.5-flash-lite        (or any JSON-capable, currently-listed model)
 #   APP_HOSTNAME / APP_BASE_URL=<your public domain>
 #   CADDY_TLS=you@email.com             (real Let's Encrypt cert, not `internal`)
 

@@ -197,10 +197,12 @@ docker compose exec app python -c \
 Paste the hash into `.env` as `USERn_PASSWORD_HASH`, **doubling every `$` to `$$`** (Compose interpolation — see `.env.example`). Set `USERn_EMAIL` and `USERn_NAME` alongside.
 
 ```bash
-docker compose restart app
+docker compose up -d app
 ```
 
 The app re-seeds users from `.env` at startup — the new credentials are now active.
+
+> **Use `up -d`, not `restart`.** `docker compose restart` reuses the container's existing environment and does **not** re-read `.env`, so a changed hash would silently not take effect. `up -d` recreates the container with the new env. (Same applies to any `.env` change below.)
 
 (The code currently supports `USER1_*` and `USER2_*`. For more, extend `settings.py` and `auth/services.py:_seed_initial_users`.)
 
@@ -222,7 +224,7 @@ The 3090 has 24 GB VRAM, so anything up to a ~30 B parameter Q4-quantized model 
 
 **Switch which model the app uses:**
 
-Edit `.env` → `OLLAMA_MODEL=<new-tag>` → `docker compose restart app`. Ollama keeps the previous one in its volume; pull it again is free.
+Edit `.env` → `OLLAMA_MODEL=<new-tag>` → `docker compose up -d app` (recreate so the new value is picked up — `restart` won't re-read `.env`). Ollama keeps the previous one in its volume; pull it again is free.
 
 **Delete an unused model** (reclaim disk):
 ```bash
