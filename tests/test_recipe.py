@@ -170,3 +170,38 @@ def test_build_context_omits_recipes_for_unrelated_input(db_session: Session) ->
     create_recipe(db_session, name="Egg Tacos", meal_type="dinner", ingredients=["eggs"])
     ctx = build_context(db_session, "add milk to the grocery list", today=date(2026, 5, 31))
     assert ctx.recipe_catalog == []
+
+
+def test_build_context_includes_next_weeks_meals(db_session: Session) -> None:
+    from family_assistant.auth.models import User
+    from family_assistant.meal_plan.models import MealPlanEntry
+
+    user = User(name="Planner", email="planner@example.com", password_hash="x")
+    db_session.add(user)
+    db_session.commit()
+
+    today = date(2026, 6, 1)  # Monday; current week 1-7, next week 8-14
+    db_session.add_all(
+        [
+            MealPlanEntry(
+                date=date(2026, 6, 3),
+                meal_type="dinner",
+                title="This Week Tacos",
+                created_by_user_id=user.id,
+            ),
+            MealPlanEntry(
+                date=date(2026, 6, 10),
+                meal_type="dinner",
+                title="Next Week Curry",
+                created_by_user_id=user.id,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    ctx = build_context(
+        db_session, "for next week's dinner, is the grocery list enough?", today=today
+    )
+    titles = {m["title"] for m in ctx.planned_meals}
+    # Both the current and the upcoming week are now in context.
+    assert {"This Week Tacos", "Next Week Curry"} <= titles

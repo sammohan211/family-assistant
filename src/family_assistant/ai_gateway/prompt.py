@@ -25,7 +25,7 @@ Prompt improvement plan:
 import json
 import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -96,6 +96,10 @@ Input: "what can I make for dinner with what we have?"  (CONTEXT.recipe_catalog 
 Output: {"tool_calls": [], "reply": "From your recipes, Butter Chicken & Rice fits — you've got chicken and rice on the list. Want me to plan it?"}
 Note: suggest from recipe_catalog, preferring recipes whose ingredients already appear in open_grocery_items. Do NOT invent recipes that aren't in the catalog; if nothing matches, say so and offer to plan something anyway.
 
+Input: "for next week's dinners, is the grocery list enough or do we need more?"  (CONTEXT.planned_meals lists this week's and next week's dinners by title and date; CONTEXT.recipe_catalog has their ingredients; CONTEXT.open_grocery_items is what's on hand)
+Output: {"tool_calls": [], "reply": "Next week you've planned Butter Chicken & Rice and Egg Tacos. You already have rice and eggs, but you're missing chicken breast, butter chicken sauce, tortillas, and cheese. Want me to add those to the grocery list?"}
+Note: match each planned meal title to a recipe in recipe_catalog, compare that recipe's ingredients against open_grocery_items, and report what's missing. planned_meals and planned_lunches cover the current AND upcoming week — use each entry's date to focus on the week the user asked about. Offer to add the missing items rather than adding them unprompted.
+
 Input: "plan butter chicken for Friday"  (CONTEXT.recipe_catalog has "Butter Chicken & Rice")
 Output: {"tool_calls": [{"name": "meal_plan.create_entry", "args": {"date": "2026-05-22", "meal_type": "dinner", "title": "Butter Chicken & Rice"}}], "reply": "Planned Butter Chicken & Rice for Friday dinner."}
 Note: when the request names a recipe that exists in recipe_catalog, use that recipe's exact name as the meal title.
@@ -161,8 +165,8 @@ class PromptContext:
     today: date
     open_grocery_items: list[dict]
     family_members: list[dict]
-    this_weeks_meals: list[dict]
-    this_weeks_lunches: list[dict]
+    planned_meals: list[dict]
+    planned_lunches: list[dict]
     recipe_catalog: list[dict]
     household_memories: list[dict]
 
@@ -218,9 +222,14 @@ def build_context(db: DbSession, input_text: str, today: date | None = None) -> 
         for m in list_family_members(db)
     ]
 
-    this_weeks_meals: list[dict] = []
+    # Load the current AND upcoming week so "for next week's dinner, is the
+    # grocery list enough?" works — shopping is planned a week ahead. Each entry
+    # carries its date, so the LLM disambiguates which week against `today`.
+    next_week_start = week_start + timedelta(days=7)
+
+    planned_meals: list[dict] = []
     if _meal_relevant(input_text):
-        this_weeks_meals = [
+        planned_meals = [
             {
                 "id": e.id,
                 "date": e.date.isoformat(),
@@ -228,11 +237,12 @@ def build_context(db: DbSession, input_text: str, today: date | None = None) -> 
                 "title": e.title,
             }
             for e in list_meal_week_entries(db, week_start=week_start)
+            + list_meal_week_entries(db, week_start=next_week_start)
         ]
 
-    this_weeks_lunches: list[dict] = []
+    planned_lunches: list[dict] = []
     if _lunch_relevant(input_text):
-        this_weeks_lunches = [
+        planned_lunches = [
             {
                 "id": e.id,
                 "family_member_id": e.family_member_id,
@@ -241,6 +251,7 @@ def build_context(db: DbSession, input_text: str, today: date | None = None) -> 
                 "packed_status": e.packed_status,
             }
             for e in list_lunch_week_entries(db, week_start=week_start)
+            + list_lunch_week_entries(db, week_start=next_week_start)
         ]
 
     # Recipe catalog (read-only) for meal/lunch planning: lets the assistant
@@ -277,8 +288,8 @@ def build_context(db: DbSession, input_text: str, today: date | None = None) -> 
         today=today,
         open_grocery_items=open_grocery_items,
         family_members=family_members,
-        this_weeks_meals=this_weeks_meals,
-        this_weeks_lunches=this_weeks_lunches,
+        planned_meals=planned_meals,
+        planned_lunches=planned_lunches,
         recipe_catalog=recipe_catalog,
         household_memories=household_memories,
     )
@@ -289,8 +300,8 @@ def render_messages(context: PromptContext, input_text: str) -> list[dict[str, s
         "today": context.today.isoformat(),
         "open_grocery_items": context.open_grocery_items,
         "family_members": context.family_members,
-        "this_weeks_meals": context.this_weeks_meals,
-        "this_weeks_lunches": context.this_weeks_lunches,
+        "planned_meals": context.planned_meals,
+        "planned_lunches": context.planned_lunches,
         "recipe_catalog": context.recipe_catalog,
         "household_memories": context.household_memories,
     }
