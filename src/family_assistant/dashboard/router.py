@@ -18,6 +18,11 @@ from family_assistant.grocery.services import (
     find_open_item_with_name,
     list_open_items,
 )
+from family_assistant.household_task.services import (
+    complete_task,
+    get_task,
+    list_active_tasks,
+)
 from family_assistant.lunch_plan.models import LunchPlanEntry
 from family_assistant.lunch_plan.services import (
     list_family_members,
@@ -64,12 +69,16 @@ def index(
     today = date.today()
     week_start = start_of_week(today)
     open_items = list_open_items(db)
+    # Active tasks come back due-soonest-first; anything due on or before today
+    # is something to do now (overdue floats to the top).
+    due_tasks = [t for t in list_active_tasks(db) if t.next_due_date <= today]
     return templates.TemplateResponse(
         request,
         "dashboard/index.html",
         {
             "today": today,
             "todays_meals": list_entries_for_date(db, day=today),
+            "due_tasks": due_tasks,
             "lunch_summary": _lunch_summary(
                 list_family_members(db),
                 list_lunch_week_entries(db, week_start=week_start),
@@ -99,4 +108,16 @@ def quick_add_grocery(
             unit=None,
             notes=None,
         )
+    return RedirectResponse(url="/dashboard", status_code=303)
+
+
+@router.post("/tasks/{task_id}/done")
+def complete_due_task(
+    user: Annotated[User, Depends(require_user)],
+    db: Annotated[DbSession, Depends(get_session)],
+    task_id: int,
+) -> Response:
+    task = get_task(db, task_id)
+    if task is not None and task.active:
+        complete_task(db, task=task, user=user)
     return RedirectResponse(url="/dashboard", status_code=303)
