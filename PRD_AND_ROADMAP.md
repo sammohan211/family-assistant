@@ -190,6 +190,15 @@ Object storage and a generic mutation audit log are deferred — see Sections 11
 - As an adult, I want to review, edit, and delete stored memories so I remain in control of what the system remembers.
 - As an adult, I want the assistant to ask for confirmation before making medium- or high-risk changes so accidental commands don't disrupt plans.
 
+### 9.10 Horoscopes
+
+- As a member of the household, I want a horoscope section for one shared birth profile, so the household can read its outlook in one common place.
+- As a member of the household, I want readings for eight windows — today, tomorrow, this week, next week, this month, next month, this year, next year — so I can look as near or far as I feel like.
+- As a member of the household, I want each window read in three traditions (Vedic, Chinese, Western), so the readings are richer than a single newspaper-style sun-sign blurb.
+- As a member of the household, I want the readings grounded in real computed planetary positions, not invented ones, so the astrology is at least astronomically honest.
+- As a member of the household, I want a reading written only when someone asks for it (and then kept), so quiet days cost nothing.
+- As a member of the household, I want no personal details — no name, no birth date, time, or place — anywhere in the app, since only the horoscope text matters.
+
 ---
 
 ## 10. Functional Requirements
@@ -363,6 +372,19 @@ The application shall support:
 6. **No assistant tool in the initial build** (deferred, see §21) — and no dashboard card yet.
 
 **Design decisions** (resolving the open points the roadmap flagged): completion **history** is kept (not reset-on-done); the assignee is **sticky** across recurrences (not rotated); overdue tasks **stay visible** and float to the top (no escalation / notification). Recurrence anchors to the completion date, not the prior due date.
+
+### 10.12 Horoscope Module
+
+A **household-shared** section at `/horoscope` for **one birth profile**: readings in three traditions (Vedic, Chinese, Western) across eight period windows. Like Household Tasks (§10.11) it is common-area — any logged-in adult sees the same pages. This is the Phase 4 horoscope feature (§21) shipped at design time.
+
+The application shall support:
+
+1. **Hybrid generation — code computes, the LLM writes.** `horoscope/astro.py` computes all chart facts deterministically: planetary longitudes via Skyfield + the bundled JPL DE421 ephemeris (pure Python — chosen over `pyswisseph`, which needs a C toolchain everywhere); the ascendant, Lahiri ayanamsa (linear approximation around J2000), nakshatra/pada, the full 120-year Vimshottari maha/antar-dasha timeline, and the Chinese sexagenary year pillar as small classical formulas. Verified against a reference natal chart to ~1 arcminute. The LLM (existing gateway client, §16.7) writes one reading per tradition **grounded strictly in the supplied facts** — natal summary plus period transits (counted as whole-sign houses from the natal ascendant for Western, from the natal moon for Vedic gochara, with the running dasha; natal vs period year pillar for Chinese) — and is instructed to invent no positions.
+2. **Birth data never enters the cloud.** `scripts/build_natal_facts.py` runs **locally**, converts birth date/time/place into derived facts only (signs, nakshatra, dasha timeline, year pillar) at `Data/natal_facts.json`, and prints a summary to verify against a trusted chart source. The gitignored file is mounted **single-file, read-only** into the app container (`compose.yml` / `compose.cloud.yml`); raw birth details appear in no UI, DB row, repo, image, or LLM prompt. If the file is missing the section degrades to a setup hint.
+3. **Eight period windows** — today, tomorrow, this week, next week, this month, next month, this year, next year — each mapping to a stable cache key (`day` ISO date, `week` `YYYY-Www`, `month` `YYYY-MM`, `year` `YYYY`), so "tomorrow" simply becomes today's cache hit when its date arrives. Transit snapshots are taken at a representative moment (the day itself / Wednesday / the 15th / July 1); day-scale facts include the moon, year-scale facts narrow to Jupiter/Saturn/Rahu/Ketu.
+4. **Lazy generate-and-cache.** No background or scheduled generation. The landing page is a grid of the eight windows with ready/unrevealed badges; a period page serves cached readings, or shows a **Reveal** button whose POST generates all three readings in one LLM call, stores them in `horoscope_readings` (unique per system + period type + key), and redirects. Days nobody looks generate nothing and cost nothing.
+5. **Provenance and posture.** Each reading records the generating model and timestamp, shown in the card footer. **Entertainment only — descriptive, not advice** (§5 Non-Goal 4 posture); the page footer says so.
+6. **No assistant tool and no dashboard card** in the initial build (deferred, see §21).
 
 ---
 
@@ -725,6 +747,18 @@ Household-shared (no `user_id` scope) — any adult can read/write. This is the 
 - due_on (nullable date — the due date this completion satisfied; preserved even after the task's `next_due_date` rolls forward)
 
 An append-only completion log (the dated-entries pattern, like the personal logs) backing the history view. See §10.11.
+
+#### HoroscopeReading (household-shared)
+
+- id
+- system (string: vedic | chinese | western)
+- period_type (string: day | week | month | year, indexed)
+- period_key (string, indexed — `2026-06-12` / `2026-W24` / `2026-06` / `2026`)
+- content (text — the reading)
+- model (nullable string — generating LLM, for provenance)
+- generated_at (timestamp)
+
+Unique on (system, period_type, period_key). A lazy cache, not a log: rows are written on first reveal and never updated. Deliberately contains no birth data and no user scope — the natal facts live outside the DB entirely (mounted file, see §10.12). See §10.12.
 
 #### Memory
 
@@ -1307,11 +1341,7 @@ Two tiers. **Near-term backlog** is the unphased queue — work picked up as nee
    Design decisions locked: (a) completing a next-action **auto-writes a journal line**, linking the checklist to the timeline; (b) next-actions stay a short "what's next" list — **no due dates, no subtasks, no recurrence** (anything dated or recurring belongs to Household Tasks, item 1), and completed actions collapse out of view; (c) a `last_touched` value (= latest entry date) drives a **"stale project" signal** (an active project untouched for N weeks) — sharing a nudge mechanism with Household Tasks recurrence and the deferred reminders; the surfacing UI may land later.
 
    Assistant tooling mirrors `exercise.log_activity`: `project.log_progress` (add a journal entry by project name), a next-action add/complete tool, and reads ("what have I done on X lately / what's next on X") — a self-contained tool-use exercise. Boundaries: distinct from **Memory** (static facts/preferences) and **Household Tasks** (shared, recurring, dated). Open point: whether `done` / `abandoned` projects stay fully browsable (a record of what you've tried) or just drop out of the active view — currently leaning **browsable but collapsed**.
-3. **Horoscopes (household-shared, single profile).** A common-area section at `/horoscope` showing readings for **one shared birth profile** across **eight periods** — today, tomorrow, this week, next week, this month, next month, this year, next year — in **three systems**: **Vedic, Chinese, and Western**. The UI shows horoscope text only — no names, no birth details, no personal information anywhere. Design decisions locked:
-   - **Hybrid generation — code computes the astrology, the LLM writes the prose.** Deterministic Python computes the chart facts for each period (current transits vs the natal chart and active dasha via a Swiss-Ephemeris-class library for Western/Vedic; sexagenary-cycle facts via a lunar-calendar library for Chinese), and the existing OpenRouter gateway turns those computed facts into the reading. A hand-authored interpretation rule-base was explicitly rejected (months of domain work across 3 systems × 8 periods); equally, the LLM never free-guesses the astronomy — it writes grounded in the computed facts.
-   - **Birth data never enters the cloud.** A run-once **local** script converts birth date/time/place into a derived **natal-facts JSON** (Western sun/moon/ascendant + natal planet positions; Vedic rashi, nakshatra, dasha timeline; Chinese animal + element). Only that file is deployed to the server (gitignored; mounted or baked into the image) — raw birth details appear in no UI, no DB row, no repo, and no LLM prompt. Accepted caveat: natal positions mathematically encode the approximate birth moment; mitigated by the chart carrying no name and the app sitting behind login.
-   - **Lazy generate-and-cache — nothing runs when nobody looks.** No scheduled or background generation. When a user opens a period, the app serves the cached reading for the current `(system, period_type, period_key)` if one exists; otherwise it computes the period facts, generates via the LLM, stores a `HoroscopeReading` (`system` vedic|chinese|western; `period_type` day|week|month|year; `period_key` e.g. `2026-06-12` / `2026-W24` / `2026-06` / `2026`; `content`; `model`; `generated_at`; unique on the system/type/key triple), and serves it. "Tomorrow" and "next week/month/year" are simply future period keys, so a reading generated early naturally becomes the cache hit when its period arrives. Days with no visits generate nothing and cost nothing.
-   - **Household-shared** (any logged-in adult sees the same readings, like Household Tasks §10.11). **Entertainment only** — descriptive, not advice or prediction to act on (same posture as the BP module's not-medical-advice stance, §10.9.3). No assistant tool and no dashboard card in the initial build.
+3. **Horoscopes (household-shared, single profile).** ✅ **Shipped at design time** — see §10.12 for the as-built spec and §9.10 for the user stories. Built as designed: `/horoscope` with eight period windows × three systems (Vedic, Chinese, Western); hybrid generation (Skyfield-computed chart facts → LLM prose via the existing gateway — Skyfield + bundled DE421 replaced the planned Swiss-Ephemeris library, which needs a C toolchain); birth data kept out of the cloud via the locally-run `scripts/build_natal_facts.py` → single-file read-only mount of derived facts; lazy generate-and-cache in `horoscope_readings` (migration 0021), no background generation. Still deferred: assistant tools + a dashboard card.
 4. Reminders and time-based notifications (re-evaluate now that the household has lived without them).
 5. Calendar integration (one-way export of planned meals/lunches to an external calendar).
 6. Budget-adjacent household planning.
