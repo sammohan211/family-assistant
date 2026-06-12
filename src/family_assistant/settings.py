@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     openrouter_app_url: str | None = None
     openrouter_app_title: str | None = None
 
+    # Horoscope module: precomputed natal-facts file (derived chart facts
+    # only, never raw birth data — see scripts/build_natal_facts.py). Lives
+    # in the gitignored Data/ directory, mounted read-only in Docker.
+    natal_facts_path: str = "Data/natal_facts.json"
+
     user1_email: str | None = None
     user1_password_hash: str | None = None
     user1_name: str | None = None

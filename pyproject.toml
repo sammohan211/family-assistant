@@ -22,6 +22,9 @@ dependencies = [
     "itsdangerous>=2.2",
     "argon2-cffi>=23.1",
     "httpx>=0.27",
+    "skyfield>=1.54",
+    "skyfield-data>=7.0.0",
+    "lunardate>=0.2.2",
 ]
 
 [project.optional-dependencies]

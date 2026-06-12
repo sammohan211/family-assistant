@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Horoscope · Family Assistant{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8">
+  <div class="mb-6">
+    <h1 class="font-serif text-3xl tracking-tight">Horoscope</h1>
+    <p class="text-sm text-gray-500">
+      One household profile · Vedic, Chinese, and Western readings.
+      Each window is written the first time someone reveals it, then kept.
+    </p>
+  </div>
+
+  {% if natal_missing %}
+  <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+    <p class="font-medium mb-1">Natal facts file not found.</p>
+    <p>
+      Run <code class="font-mono text-xs bg-amber-100 px-1 py-0.5 rounded">scripts/build_natal_facts.py</code>
+      on a trusted machine (it converts birth details into derived chart facts — the birth
+      data itself never leaves that machine) and place the resulting
+      <code class="font-mono text-xs bg-amber-100 px-1 py-0.5 rounded">natal_facts.json</code>
+      in this server's <code class="font-mono text-xs bg-amber-100 px-1 py-0.5 rounded">Data/</code> directory.
+    </p>
+  </div>
+  {% else %}
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    {% for spec in periods %}
+    {% set ready = (spec.period_type, spec.period_key) in ready_keys %}
+    <a href="/horoscope/{{ spec.token }}"
+       class="rounded-lg border bg-white p-4 hover:border-accent transition-colors
+              {{ 'border-gray-200' if not ready else 'border-accent/40' }}">
+      <p class="font-medium text-gray-900">{{ spec.label }}</p>
+      <p class="text-xs text-gray-500 mt-0.5">
+        {% if spec.period_type == 'day' %}{{ spec.start.strftime('%a %b %-d') }}
+        {% elif spec.period_type == 'week' %}{{ spec.start.strftime('%b %-d') }} – {{ spec.end.strftime('%b %-d') }}
+        {% elif spec.period_type == 'month' %}{{ spec.start.strftime('%B %Y') }}
+        {% else %}{{ spec.period_key }}{% endif %}
+      </p>
+      <span class="inline-block mt-2 text-xs font-medium px-2 py-0.5 rounded-full
+                   {{ 'bg-green-100 text-green-800' if ready else 'bg-gray-100 text-gray-500' }}">
+        {{ 'Ready' if ready else 'Tap to reveal' }}
+      </span>
+    </a>
+    {% endfor %}
+  </div>
+  <p class="mt-6 text-xs text-gray-400">
+    For reflection and entertainment only — not advice. Readings are written by a language
+    model from computed planetary positions; no personal details are stored or shown.
+  </p>
+  {% endif %}
+</div>
+{% endblock %}

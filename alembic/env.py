@@ -16,6 +16,7 @@ from family_assistant.exercise import models as _exercise_models  # noqa: F401
 from family_assistant.family_member import models as _family_member_models  # noqa: F401
 from family_assistant.grocery import models as _grocery_models  # noqa: F401
 from family_assistant.hike import models as _hike_models  # noqa: F401
+from family_assistant.horoscope import models as _horoscope_models  # noqa: F401
 from family_assistant.household_task import models as _household_task_models  # noqa: F401
 from family_assistant.lunch_plan import models as _lunch_plan_models  # noqa: F401
 from family_assistant.meal_plan import models as _meal_plan_models  # noqa: F401
