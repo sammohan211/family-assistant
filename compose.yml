@@ -9,6 +9,9 @@ services:
       ollama:
         condition: service_started
     environment:
+      # Household-local time: "today" (dashboard, tasks, horoscope) follows
+      # this rather than UTC, which is a day ahead every evening.
+      TZ: ${TZ:-America/Toronto}
       DATABASE_URL: ${DATABASE_URL}
       SESSION_SECRET: ${SESSION_SECRET}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
