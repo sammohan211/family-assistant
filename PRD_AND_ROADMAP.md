@@ -192,6 +192,8 @@ Object storage and a generic mutation audit log are deferred — see Sections 11
 
 ### 9.10 Horoscopes
 
+> **Removed 2026-06-28.** The horoscope module was built then later removed at the household's request. The stories below are kept as historical record; the feature, its code, and its `horoscope_readings` table no longer exist.
+
 - As a member of the household, I want a horoscope section for one shared birth profile, so the household can read its outlook in one common place.
 - As a member of the household, I want readings for eight windows — today, tomorrow, this week, next week, this month, next month, this year, next year — so I can look as near or far as I feel like.
 - As a member of the household, I want each window read in three traditions (Vedic, Chinese, Western), so the readings are richer than a single newspaper-style sun-sign blurb.
@@ -374,6 +376,8 @@ The application shall support:
 **Design decisions** (resolving the open points the roadmap flagged): completion **history** is kept (not reset-on-done); the assignee is **sticky** across recurrences (not rotated); overdue tasks **stay visible** and float to the top (no escalation / notification). Recurrence anchors to the completion date, not the prior due date.
 
 ### 10.12 Horoscope Module
+
+> **Removed 2026-06-28.** This module shipped and was then removed entirely (module, templates, `scripts/build_natal_facts.py`, the Skyfield/lunardate deps, the natal-facts mount, and the `horoscope_readings` table — dropped by migration `0022`). The design below is retained for historical reference only.
 
 A **household-shared** section at `/horoscope` for **one birth profile**: readings in three traditions (Vedic, Chinese, Western) across eight period windows. Like Household Tasks (§10.11) it is common-area — any logged-in adult sees the same pages. This is the Phase 4 horoscope feature (§21) shipped at design time.
 
@@ -748,7 +752,7 @@ Household-shared (no `user_id` scope) — any adult can read/write. This is the 
 
 An append-only completion log (the dated-entries pattern, like the personal logs) backing the history view. See §10.11.
 
-#### HoroscopeReading (household-shared)
+#### HoroscopeReading (household-shared) — removed 2026-06-28 (table dropped by migration 0022)
 
 - id
 - system (string: vedic | chinese | western)

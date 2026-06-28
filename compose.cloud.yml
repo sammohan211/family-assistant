@@ -21,7 +21,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      # Household-local time: "today" (dashboard, tasks, horoscope) follows
+      # Household-local time: "today" (dashboard, tasks) follows
       # this rather than UTC, which is a day ahead every evening.
       TZ: ${TZ:-America/Toronto}
       DATABASE_URL: ${DATABASE_URL}
@@ -36,11 +36,6 @@ services:
       USER1_PASSWORD_HASH: ${USER1_PASSWORD_HASH:-}
       USER2_EMAIL: ${USER2_EMAIL:-}
       USER2_PASSWORD_HASH: ${USER2_PASSWORD_HASH:-}
-    volumes:
-      # Horoscope natal facts (derived chart facts only, no birth data).
-      # Built locally by scripts/build_natal_facts.py and scp'd to the
-      # server's Data/ dir; single-file mount keeps everything else out.
-      - ./Data/natal_facts.json:/app/Data/natal_facts.json:ro
     expose:
       - "8000"
     healthcheck:
