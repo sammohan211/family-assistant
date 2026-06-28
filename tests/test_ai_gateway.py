@@ -35,7 +35,7 @@ class FakeLLM:
 
 class BrokenLLM:
     def chat_json(self, messages: list[dict[str, str]]) -> dict[str, Any]:
-        raise RuntimeError("ollama is on fire")
+        raise RuntimeError("the llm is on fire")
 
 
 # --- Tool validation -------------------------------------------------------
@@ -347,11 +347,11 @@ def test_process_command_llm_failure_logs_and_recovers(
 ) -> None:
     result = process_command(seeded_user, "anything", db_session, llm=BrokenLLM())
 
-    assert result.error is not None and "ollama is on fire" in result.error
+    assert result.error is not None and "the llm is on fire" in result.error
     interaction = db_session.get(AssistantInteraction, result.interaction_id)
     assert interaction is not None
     assert interaction.error_log is not None
-    assert "ollama is on fire" in interaction.error_log
+    assert "the llm is on fire" in interaction.error_log
     assert interaction.executed_tool_calls == []
 
 
@@ -573,7 +573,7 @@ def test_tracing_records_llm_failure(db_session: Session, seeded_user: User) -> 
     assert ("llm", "call_failed") in events
     assert ("llm", "call_succeeded") not in events
     failed = next(t for t in traces if t.event == "call_failed")
-    assert "ollama is on fire" in failed.payload["error"]
+    assert "the llm is on fire" in failed.payload["error"]
 
 
 def test_tracing_records_validation_error_branch(db_session: Session, seeded_user: User) -> None:

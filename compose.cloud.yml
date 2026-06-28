@@ -1,12 +1,10 @@
 # Cloud deployment: no GPU, no local inference.
 #
-# Standalone stack (app + postgres + caddy) for a plain VPS (Hostinger KVM,
-# Hetzner, etc.). Chat runs through OpenRouter (LLM_PROVIDER=openrouter), so
-# there is no `ollama` service here — nothing in the app uses it once chat is
-# an API call. (Semantic search is keyword-only today; when it grows an
-# embedding step, choose an embeddings provider then.)
+# The only compose stack (app + postgres + caddy) for a plain VPS (Hostinger
+# KVM, Hetzner, etc.). Chat runs through OpenRouter (LLM_PROVIDER=openrouter);
+# the app has no local-inference service. (Semantic search is keyword-only
+# today; when it grows an embedding step, choose an embeddings provider then.)
 #
-# Use it on its own, NOT layered over compose.yml:
 #   docker compose -f compose.cloud.yml up -d --build
 # or set COMPOSE_FILE=compose.cloud.yml in the environment.
 #

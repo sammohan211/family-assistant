@@ -1023,6 +1023,8 @@ Object storage is deferred. When phase 2 or 3 introduces it (recipes, document i
 
 ### 16.7 AI Gateway
 
+> **Superseded 2026-06-28.** The app is now OpenRouter-only (cloud, OpenAI-compatible API) via `OpenRouterClient`; the local Ollama runtime, the home-GPU box, and `compose.yml`/`compose.gpu.yml` were retired. References to Ollama, GPU/VRAM, embedding generation (not yet wired), and local model serving in §16–§17 describe the original design, kept for historical reference. The `LLMClient` Protocol, gateway flow, and offline mock are unchanged.
+
 The AI Gateway is a Python module (`ai_gateway/`) inside the FastAPI app. Its responsibilities:
 
 1. Prompt template loading and rendering.

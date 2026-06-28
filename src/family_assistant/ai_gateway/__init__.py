@@ -6,7 +6,6 @@ from family_assistant.ai_gateway.gateway import (
 )
 from family_assistant.ai_gateway.llm import (
     LLMClient,
-    OllamaClient,
     OpenRouterClient,
     default_client,
 )
@@ -14,7 +13,6 @@ from family_assistant.ai_gateway.llm import (
 __all__ = [
     "GatewayResult",
     "LLMClient",
-    "OllamaClient",
     "OpenRouterClient",
     "cancel_pending",
     "confirm_pending",

@@ -123,10 +123,11 @@ def process_command(
                 "num_ctx": num_ctx,
             },
         )
-        # Catch silent truncation regressions: Ollama drops the tail of any
-        # prompt that exceeds num_ctx and the response shape stays valid
-        # (empty reply, zero tool calls), so this is the only place we'd
-        # see it before the user notices the assistant going quiet.
+        # Catch silent truncation regressions: a provider that drops the tail
+        # of an over-long prompt can still return a valid-looking response
+        # (empty reply, zero tool calls). This fires only when the client
+        # reports a context ceiling (num_ctx); OpenRouter doesn't, so it's
+        # inert today but stays as a guardrail for any client that does.
         if (
             prompt_tokens is not None
             and num_ctx is not None

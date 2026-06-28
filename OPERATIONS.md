@@ -1,8 +1,10 @@
 # Operations
 
-Day-to-day running of the Family Assistant stack on the Omarchy desktop. For first-time install, see `SETUP.md`. For using the app's features (grocery, meal plan, assistant, etc.), see `USER_GUIDE.md`.
+Day-to-day running of the Family Assistant stack. For first-time install, see `SETUP.md`. For using the app's features (grocery, meal plan, assistant, etc.), see `USER_GUIDE.md`.
 
-All commands run from `~/Projects/family_assistant` on the desktop (over SSH from the laptop, or directly).
+> **Current deployment: cloud VPS, OpenRouter (`compose.cloud.yml`).** The DB backup/restore and migration sections below are current. Sections that mention a local **Ollama** service, **GPU/VRAM**, model pulling/switching, `compose.yml`/`compose.gpu.yml`, or `scripts/family.sh` describe the **retired** home-GPU deployment and no longer apply.
+
+On the cloud box, commands run from `~/family-assistant` with `export COMPOSE_FILE=compose.cloud.yml`.
 
 ---
 
@@ -154,23 +156,12 @@ gunzip -c ~/backups/family_assistant_YYYYMMDD_HHMM.sql.gz \
 
 (Restore into an empty DB. If you're recovering, `docker compose down -v` first to drop the existing volume, then `up -d`, then restore *before* running new migrations.)
 
-**Automated daily backups (cloud box):** on the VPS there's no one to run the dump by hand, so it's scripted and scheduled. `/root/db-backup.sh` does the same `pg_dump | gzip` to `/root/backups/`, then rotates — keeping only the newest 14 dumps so the disk can't fill. It dumps to a `.tmp` file and only promotes it on success, so a failed dump never overwrites a good one.
+**Automated daily backups (cloud box):** on the VPS there's no one to run the dump by hand, so it's scripted and scheduled. The script lives in the repo at `scripts/db-backup.sh` and is deployed to the box at `/root/db-backup.sh`. It does the same `pg_dump | gzip` to `/root/backups/`, then rotates — keeping only the newest 14 dumps so the disk can't fill. Two guards keep a bad run from destroying good backups: it dumps to a `.tmp` file and only promotes on success, and it refuses to promote (or rotate) a dump smaller than `MIN_BYTES` (default 5K — a healthy dump is ~17K), so an empty/truncated dump can't silently rotate out the good ones.
+
+Deploy or update it after a `git pull` on the box:
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
-REPO="$HOME/family-assistant"
-BACKUP_DIR="$HOME/backups"
-KEEP=14
-cd "$REPO"
-export COMPOSE_FILE=compose.cloud.yml
-mkdir -p "$BACKUP_DIR"
-STAMP=$(date +%Y%m%d_%H%M)
-OUT="$BACKUP_DIR/family_assistant_${STAMP}.sql.gz"
-docker compose exec -T postgres pg_dump -U family_assistant family_assistant | gzip > "$OUT.tmp"
-mv "$OUT.tmp" "$OUT"
-ls -1t "$BACKUP_DIR"/family_assistant_*.sql.gz 2>/dev/null | tail -n +$((KEEP+1)) | xargs -r rm -- || true
-echo "$(date '+%F %T') backup OK: $OUT ($(du -h "$OUT" | cut -f1))"
+cp ~/family-assistant/scripts/db-backup.sh /root/db-backup.sh && chmod +x /root/db-backup.sh
 ```
 
 A cron entry runs it daily at 03:00 and logs output:
@@ -179,9 +170,15 @@ A cron entry runs it daily at 03:00 and logs output:
 0 3 * * * /root/db-backup.sh >> /root/backups/backup.log 2>&1
 ```
 
-Check it's firing with `cat /root/backups/backup.log` (one `backup OK:` line per day). Restore from a cloud dump is identical to the desktop restore above, after `export COMPOSE_FILE=compose.cloud.yml`.
+Check it's firing with `cat /root/backups/backup.log` (one `backup OK:` line per day; a bad run logs `backup FAILED:` instead). Restore from a cloud dump is identical to the desktop restore above, after `export COMPOSE_FILE=compose.cloud.yml`. To rehearse a restore without touching the live DB, load the newest dump into a throwaway database (`createdb restore_test` → `psql -d restore_test` → check table counts → `dropdb restore_test`).
 
-**Off-box safety:** these dumps live on the same VPS disk, so they survive app/DB corruption, a bad migration, or `docker compose down -v` — but **not** loss of the whole server (deletion, disk failure). For true off-box recovery, take a Hetzner snapshot (whole-disk, point-in-time) or copy dumps home with `scp`/`rsync` (e.g. `rsync -avz root@<vps-ip>:/root/backups/ ~/family-backups/`).
+**Off-box safety:** these dumps live on the same VPS disk, so they survive app/DB corruption, a bad migration, or `docker compose down -v` — but **not** loss of the whole server (deletion, disk failure). The off-box copy is a manual pull onto a **laptop**, done occasionally (the dumps are tiny and the data changes slowly, so a copy a few days stale is still a real safety net). Run this from the laptop whenever you think of it:
+
+```
+rsync -avz root@<vps-ip>:/root/backups/ ~/family-backups/
+```
+
+The trade-off: the off-box copy is only as fresh as the last time you ran it. For a belt-and-suspenders whole-server safety net, also take an occasional Hetzner snapshot (console or `hcloud server create-image --type snapshot`).
 
 ---
 

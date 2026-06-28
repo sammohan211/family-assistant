@@ -1,6 +1,8 @@
 # User Guide
 
-How to use the Family Assistant app once it's running. For installing the stack see `SETUP.md`; for keeping it running (logs, backups, model switching) see `OPERATIONS.md`.
+How to use the Family Assistant app once it's running. For installing the stack see `SETUP.md`; for keeping it running (logs, backups) see `OPERATIONS.md`.
+
+> **Note:** The app now runs in the cloud with chat via OpenRouter, so there's no model-loading cold start. The "Starting up" / VRAM / `OLLAMA_*` notes just below describe the **retired** home-GPU setup and no longer apply.
 
 The app has nine pages, reachable from the top nav: **Dashboard, Assistant, Grocery, Meal plan, Lunch plan, Exercise, Family, Memory** (plus Login).
 

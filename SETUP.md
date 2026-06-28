@@ -1,4 +1,6 @@
-# Family Assistant Setup (Omarchy + RTX 3090)
+# Family Assistant Setup
+
+> **Current path: cloud / OpenRouter (§13).** The app now runs on a cloud VPS using `compose.cloud.yml`, with chat via OpenRouter — there is no local Ollama or GPU. **Start at [§13 Cloud deployment](#13-optional-cloud-deployment-no-gpu-openrouter).** Sections 1–12 below document the **retired** home-GPU deployment (Omarchy + RTX 3090 + local Ollama) and are kept for historical reference only.
 
 Steps to turn the desktop into the deployment host for the Family Assistant stack (Postgres + app + Ollama + Caddy). Aligned with the home-first topology in `PRD_AND_ROADMAP.md` §17.2.
 

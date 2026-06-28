@@ -14,7 +14,6 @@ import pytest
 
 from family_assistant.ai_gateway import llm as llm_module
 from family_assistant.ai_gateway.llm import (
-    OllamaClient,
     OpenRouterClient,
     default_client,
 )
@@ -115,20 +114,6 @@ def test_openrouter_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_default_client_selects_openrouter(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(llm_module, "get_settings", _openrouter_settings)
     assert isinstance(default_client(), OpenRouterClient)
-
-
-def test_default_client_selects_ollama(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        llm_module,
-        "get_settings",
-        lambda: SimpleNamespace(
-            llm_provider="ollama",
-            ollama_base_url="http://ollama:11434",
-            ollama_model="llama3.1:8b",
-            ollama_num_ctx=8192,
-        ),
-    )
-    assert isinstance(default_client(), OllamaClient)
 
 
 def test_default_client_rejects_unknown_provider(monkeypatch: pytest.MonkeyPatch) -> None:

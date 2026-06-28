@@ -3,8 +3,8 @@
 Two use cases:
 
 1. **Offline app dev.** With `USE_MOCK_LLM=true` in `.env`, `get_llm()` returns
-   this client and the assistant runs without Ollama. Lets you exercise the
-   UI on machines without a GPU / inference server.
+   this client and the assistant runs without a live LLM provider. Lets you
+   exercise the UI without hitting (or paying for) inference.
 
 2. **End-to-end tests.** Force a specific failure mode (`mode="blank_name"`)
    and run `process_command` through the real validation, risk, and tracing
@@ -184,7 +184,7 @@ def _prompt_injection_echo() -> dict[str, Any]:
 
 
 class MockCrashError(RuntimeError):
-    """Raised by the `crash` mode to simulate an Ollama/network failure."""
+    """Raised by the `crash` mode to simulate an LLM/network failure."""
 
 
 # --- Scenarios -------------------------------------------------------------
@@ -242,7 +242,7 @@ FORCED_MODES: dict[str, ResponseFn] = {
 
 @dataclass
 class MockLLMClient:
-    """Drop-in replacement for `OllamaClient` that returns canned outputs.
+    """Drop-in replacement for the live `LLMClient` that returns canned outputs.
 
     Implements the `LLMClient` protocol: `chat_json(messages) -> dict`.
 
@@ -262,8 +262,8 @@ class MockLLMClient:
     force_mode: str | None = None
     last_label: str | None = field(default=None, init=False)
     calls: list[list[dict[str, str]]] = field(default_factory=list, init=False)
-    # Mirror OllamaClient surface so gateway tracing reads the same attribute
-    # without special-casing the client type. Mock has no token count.
+    # Mirror the live client surface so gateway tracing reads the same
+    # attributes without special-casing the client type. Mock has no token count.
     last_prompt_tokens: int | None = field(default=None, init=False)
     last_num_ctx: int | None = field(default=None, init=False)
 

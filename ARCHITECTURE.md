@@ -5,6 +5,8 @@ How the codebase fits together. For *what* the app is supposed to do, see
 see [`README.md`](README.md). This doc is about *what each piece is and
 why it's there*.
 
+> **Deployment note:** the live LLM is now **OpenRouter** (cloud, OpenAI-compatible API) via `OpenRouterClient`; the app runs on a single cloud VPS (`compose.cloud.yml`). Mentions below of an **Ollama** container, `OllamaClient`, `compose.gpu.yml`, or a home GPU box describe the retired home deployment — the `LLMClient` Protocol and mock are unchanged.
+
 ---
 
 ## Mental model

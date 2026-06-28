@@ -13,31 +13,18 @@ class Settings(BaseSettings):
     app_base_url: str
     cookie_secure: bool = True
 
-    # Which live LLM transport to use: "ollama" (local/self-hosted, the
-    # home/GPU deployment) or "openrouter" (cloud, OpenAI-compatible API, for
-    # hosts without a GPU). The offline mock is selected separately via
-    # use_mock_llm. See ai_gateway/llm.py:default_client.
-    llm_provider: str = "ollama"
+    # Which live LLM transport to use. Only "openrouter" (cloud, OpenAI-
+    # compatible API) is supported. The offline mock is selected separately
+    # via use_mock_llm. See ai_gateway/llm.py:default_client.
+    llm_provider: str = "openrouter"
 
-    ollama_base_url: str = "http://ollama:11434"
-    ollama_model: str = "llama3.1:8b"
-    ollama_embedding_model: str = "nomic-embed-text"
-    # Context window passed to Ollama on every /api/chat call. Default 4096
-    # silently truncated real prompts (system + tools + context can hit ~5k).
-    # 8192 sized for an 8 GB GPU (RTX 3070): llama3.1:8b Q4 weights ~4.7 GB +
-    # ~1 GB KV cache + overhead leaves headroom without spilling layers to CPU.
-    # If `llm.prompt_near_ceiling` fires in traces, prefer trimming the context
-    # builder (memories cap, current-week-only data) over raising this — each
-    # extra 4096 tokens costs ~0.5 GB KV you don't have on this card.
-    ollama_num_ctx: int = 8192
-    # Swap the live Ollama client for an offline keyword-driven mock. Useful
-    # for UI dev on machines without a GPU, and for end-to-end tests that
-    # don't want to depend on inference. See ai_gateway/llm_mock.py.
+    # Swap the live client for an offline keyword-driven mock. Useful for UI
+    # dev without hitting a real provider, and for end-to-end tests that don't
+    # want to depend on inference. See ai_gateway/llm_mock.py.
     use_mock_llm: bool = False
 
-    # OpenRouter (cloud) settings — only used when llm_provider="openrouter".
-    # Default model mirrors the local llama3.1:8b for behavioural parity; swap
-    # for any OpenRouter model that supports JSON `response_format`.
+    # OpenRouter (cloud) settings. Swap the model for any OpenRouter model that
+    # supports JSON `response_format`.
     openrouter_api_key: str | None = None
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_model: str = "meta-llama/llama-3.1-8b-instruct"

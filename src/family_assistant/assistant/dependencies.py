@@ -9,8 +9,8 @@ def get_llm() -> LLMClient:
     """Default LLM client. Tests override via app.dependency_overrides.
 
     `USE_MOCK_LLM=true` in `.env` swaps in the offline mock so the app can
-    run without inference (UI dev, demo, no-GPU machines). Otherwise the live
-    provider is chosen by `LLM_PROVIDER` (ollama | openrouter).
+    run without inference (UI dev, demo, tests). Otherwise the live provider
+    (OpenRouter) is built by `default_client()`.
     """
     if get_settings().use_mock_llm:
         return MockLLMClient()

@@ -1,14 +1,12 @@
-"""LLM client interface + provider implementations.
+"""LLM client interface + provider implementation.
 
-A thin Protocol so tests can inject a fake. Two real clients implement it:
+A thin Protocol so tests can inject a fake. The real client implements it:
 
-- `OllamaClient` wraps Ollama's `/api/chat` with `format: "json"` (local /
-  self-hosted inference; the home/GPU deployment).
 - `OpenRouterClient` wraps OpenRouter's OpenAI-compatible
   `/v1/chat/completions` with `response_format: {"type": "json_object"}`
-  (cloud deployment with no local GPU).
+  (cloud deployment, no local GPU).
 
-`default_client()` picks one from settings (`LLM_PROVIDER`). The offline
+`default_client()` constructs it, validated against `LLM_PROVIDER`. The offline
 `MockLLMClient` is selected one layer up, in the assistant dependency, since
 it's tied to the web app / tests rather than the inference transport.
 """
@@ -25,49 +23,10 @@ class LLMClient(Protocol):
     def chat_json(self, messages: list[dict[str, str]]) -> dict[str, Any]: ...
 
 
-class OllamaClient:
-    def __init__(
-        self,
-        base_url: str | None = None,
-        model: str | None = None,
-        num_ctx: int | None = None,
-        timeout: float = 180.0,
-    ) -> None:
-        settings = get_settings()
-        self._base_url = (base_url or settings.ollama_base_url).rstrip("/")
-        self._model = model or settings.ollama_model
-        self._num_ctx = num_ctx or settings.ollama_num_ctx
-        self._timeout = timeout
-        # Set by chat_json so the gateway can record it in the trace; None
-        # until the first successful call. Default 4096 silently truncated
-        # real prompts — surfacing this lets future drift be caught fast.
-        self.last_prompt_tokens: int | None = None
-        self.last_num_ctx: int | None = None
-
-    def chat_json(self, messages: list[dict[str, str]]) -> dict[str, Any]:
-        response = httpx.post(
-            f"{self._base_url}/api/chat",
-            json={
-                "model": self._model,
-                "format": "json",
-                "stream": False,
-                "messages": messages,
-                "options": {"num_ctx": self._num_ctx},
-            },
-            timeout=httpx.Timeout(connect=10.0, read=self._timeout, write=10.0, pool=10.0),
-        )
-        response.raise_for_status()
-        body = response.json()
-        self.last_prompt_tokens = body.get("prompt_eval_count")
-        self.last_num_ctx = self._num_ctx
-        content = body["message"]["content"]
-        return json.loads(content)
-
-
 class OpenRouterClient:
     """OpenAI-compatible client for OpenRouter (cloud, no local GPU).
 
-    Same `LLMClient` surface as `OllamaClient`, including the
+    Implements the `LLMClient` protocol, including the
     `last_prompt_tokens` / `last_num_ctx` attributes the gateway reads for
     tracing. There's no local context window we control on a hosted model, so
     `last_num_ctx` stays `None` — the gateway's prompt-near-ceiling check is
@@ -139,6 +98,4 @@ def default_client() -> LLMClient:
     provider = get_settings().llm_provider
     if provider == "openrouter":
         return OpenRouterClient()
-    if provider == "ollama":
-        return OllamaClient()
-    raise ValueError(f"Unknown LLM_PROVIDER {provider!r}. Expected 'ollama' or 'openrouter'.")
+    raise ValueError(f"Unknown LLM_PROVIDER {provider!r}. Expected 'openrouter'.")
