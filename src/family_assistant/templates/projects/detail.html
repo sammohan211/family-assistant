@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} · Projects · Family Assistant{% endblock %}
+
+{% set status_styles = {
+  "idea": "bg-purple-100 text-purple-800",
+  "active": "bg-green-100 text-green-800",
+  "on_hold": "bg-amber-100 text-amber-800",
+  "done": "bg-gray-100 text-gray-600",
+  "abandoned": "bg-gray-100 text-gray-500",
+} %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 py-8">
+  <p class="text-sm text-gray-500 mb-3">
+    <a href="/projects" class="text-accent hover:underline">&larr; All projects</a>
+  </p>
+
+  <div class="flex items-start justify-between gap-4 mb-6">
+    <div class="min-w-0">
+      <div class="flex items-center gap-2 flex-wrap">
+        <h1 class="font-serif text-3xl tracking-tight">{{ project.name }}</h1>
+        <span class="text-xs font-medium px-2 py-0.5 rounded-full {{ status_styles.get(project.status, 'bg-gray-100 text-gray-700') }}">
+          {{ project.status_label }}
+        </span>
+        {% if project.is_stale(today) %}
+        <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-red-50 text-red-700" title="No activity in 3+ weeks">⚠ stale</span>
+        {% endif %}
+      </div>
+      {% if project.target_date %}
+      <p class="text-sm text-gray-500 mt-1">Target {{ project.target_date.strftime('%b %-d, %Y') }}</p>
+      {% endif %}
+      {% if project.goal %}
+      <p class="text-sm text-gray-700 mt-3 whitespace-pre-line">{{ project.goal }}</p>
+      {% endif %}
+    </div>
+    <div class="flex items-center gap-3 whitespace-nowrap">
+      <a href="/projects/{{ project.id }}/edit" class="text-accent hover:underline text-sm">Edit</a>
+      <form method="post" action="/projects/{{ project.id }}/delete"
+            onsubmit="return confirm('Delete this project and everything in it?');">
+        {{ csrf_input() }}
+        <button type="submit" class="text-red-600 hover:underline text-sm">Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Milestones ------------------------------------------------------- -->
+  <section class="mb-8">
+    <div class="flex items-baseline justify-between mb-2">
+      <h2 class="font-serif text-xl">Milestones</h2>
+      <span class="text-xs text-gray-500">{{ project.milestones_done }}/{{ project.milestones_total }} done</span>
+    </div>
+
+    <div class="rounded-lg border border-gray-200 bg-white divide-y divide-gray-100">
+      {% for milestone in project.milestones %}
+      <div class="flex items-center gap-3 px-4 py-2.5">
+        <form method="post" action="/projects/milestones/{{ milestone.id }}/toggle" class="flex">
+          {{ csrf_input() }}
+          <button type="submit" aria-label="Toggle milestone"
+                  class="w-5 h-5 rounded border flex items-center justify-center
+                         {% if milestone.done %}bg-green-600 border-green-600 text-white{% else %}border-gray-300 text-transparent hover:border-accent{% endif %}">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+          </button>
+        </form>
+        <div class="flex-1 min-w-0">
+          <span class="text-sm {% if milestone.done %}line-through text-gray-400{% else %}text-gray-800{% endif %}">{{ milestone.title }}</span>
+          {% if milestone.target_date %}
+          <span class="ml-2 text-xs {% if not milestone.done and milestone.target_date < today %}text-red-600{% else %}text-gray-500{% endif %}">· {{ milestone.target_date.strftime('%b %-d') }}</span>
+          {% endif %}
+        </div>
+        <form method="post" action="/projects/milestones/{{ milestone.id }}/delete"
+              onsubmit="return confirm('Delete this milestone?');">
+          {{ csrf_input() }}
+          <button type="submit" class="text-gray-400 hover:text-red-600 text-xs">Remove</button>
+        </form>
+      </div>
+      {% else %}
+      <p class="px-4 py-3 text-sm text-gray-500">No milestones yet.</p>
+      {% endfor %}
+
+      <form method="post" action="/projects/{{ project.id }}/milestones"
+            class="flex flex-col sm:flex-row gap-2 px-4 py-3 bg-gray-50">
+        {{ csrf_input() }}
+        <input name="title" type="text" required maxlength="200" placeholder="Add a milestone"
+               class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-accent">
+        <input name="target_date" type="date" aria-label="Target date"
+               class="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-accent">
+        <button type="submit"
+                class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-700">
+          Add
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Journal ---------------------------------------------------------- -->
+  <section>
+    <h2 class="font-serif text-xl mb-2">Journal</h2>
+    <div class="rounded-lg border border-gray-200 bg-white divide-y divide-gray-100">
+      <form method="post" action="/projects/{{ project.id }}/entries"
+            class="grid gap-2 sm:grid-cols-[1fr_auto] px-4 py-3 bg-gray-50">
+        {{ csrf_input() }}
+        <input name="note" type="text" required maxlength="1000" placeholder="Add a note"
+               class="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-accent sm:col-span-2">
+        <input name="link" type="url" placeholder="https://… (optional)"
+               class="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-accent">
+        <div class="flex items-center gap-2">
+          <input name="entry_date" type="date" aria-label="Entry date"
+                 class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-accent">
+          <button type="submit"
+                  class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-700">
+            Add
+          </button>
+        </div>
+      </form>
+
+      {% for entry in project.entries %}
+      <div class="flex items-start gap-3 px-4 py-2.5">
+        <div class="w-20 shrink-0 text-xs text-gray-400 pt-0.5">{{ entry.entry_date.strftime('%b %-d') }}</div>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm {% if entry.is_auto %}italic text-gray-500{% else %}text-gray-800{% endif %} whitespace-pre-line">{{ entry.note }}</p>
+          {% if entry.link %}
+          <a href="{{ entry.link }}" target="_blank" rel="noopener" class="text-xs text-accent hover:underline">{{ entry.link }}</a>
+          {% endif %}
+        </div>
+        {% if not entry.is_auto %}
+        <form method="post" action="/projects/entries/{{ entry.id }}/delete"
+              onsubmit="return confirm('Delete this journal entry?');">
+          {{ csrf_input() }}
+          <button type="submit" class="text-gray-400 hover:text-red-600 text-xs">Remove</button>
+        </form>
+        {% endif %}
+      </div>
+      {% else %}
+      <p class="px-4 py-3 text-sm text-gray-500">No journal entries yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Projects · Family Assistant{% endblock %}
+
+{% set status_styles = {
+  "idea": "bg-purple-100 text-purple-800",
+  "active": "bg-green-100 text-green-800",
+  "on_hold": "bg-amber-100 text-amber-800",
+  "done": "bg-gray-100 text-gray-600",
+  "abandoned": "bg-gray-100 text-gray-500",
+} %}
+
+{% macro project_row(project) %}
+<a href="/projects/{{ project.id }}"
+   class="block rounded-lg border border-gray-200 bg-white p-4 hover:border-accent hover:shadow-sm transition">
+  <div class="flex items-start justify-between gap-3">
+    <div class="min-w-0">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="font-medium text-gray-900">{{ project.name }}</span>
+        <span class="text-xs font-medium px-2 py-0.5 rounded-full {{ status_styles.get(project.status, 'bg-gray-100 text-gray-700') }}">
+          {{ project.status_label }}
+        </span>
+        {% if project.is_stale(today) %}
+        <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-red-50 text-red-700" title="No activity in 3+ weeks">⚠ stale</span>
+        {% endif %}
+      </div>
+      {% if project.target_date %}
+      <p class="text-xs text-gray-500 mt-1">Target {{ project.target_date.strftime('%b %-d, %Y') }}</p>
+      {% endif %}
+    </div>
+    <div class="text-right whitespace-nowrap text-xs text-gray-500">
+      <div>{{ project.milestones_done }}/{{ project.milestones_total }} milestones</div>
+      <div class="mt-1">
+        {% if project.last_touched %}
+          Last active {{ project.last_touched.strftime('%b %-d') }}
+        {% else %}
+          <span class="text-gray-400">No activity yet</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</a>
+{% endmacro %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8">
+  <div class="flex items-center justify-between gap-4 mb-6">
+    <div>
+      <h1 class="font-serif text-3xl tracking-tight">Projects</h1>
+      <p class="text-sm text-gray-500">Your personal initiatives — milestones, journal, progress.</p>
+    </div>
+    <a href="/projects/new"
+       class="rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-700 whitespace-nowrap">
+      New project
+    </a>
+  </div>
+
+  {% set open_projects = projects | rejectattr('is_closed') | list %}
+  {% set closed_projects = projects | selectattr('is_closed') | list %}
+
+  {% if open_projects %}
+  <div class="space-y-3">
+    {% for project in open_projects %}{{ project_row(project) }}{% endfor %}
+  </div>
+  {% elif not closed_projects %}
+  <div class="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center space-y-2">
+    <p class="text-sm text-gray-600">No projects yet.</p>
+    <p class="text-xs text-gray-500">
+      <a href="/projects/new" class="text-accent hover:underline">Start your first project</a>.
+    </p>
+  </div>
+  {% endif %}
+
+  {% if closed_projects %}
+  <details class="mt-6" {% if not open_projects %}open{% endif %}>
+    <summary class="text-sm text-gray-500 cursor-pointer hover:text-gray-700">
+      Show completed &amp; abandoned ({{ closed_projects | length }})
+    </summary>
+    <div class="space-y-3 mt-3">
+      {% for project in closed_projects %}{{ project_row(project) }}{% endfor %}
+    </div>
+  </details>
+  {% endif %}
+</div>
+{% endblock %}
