@@ -1,0 +1,22 @@
+{# Create-or-update form for a lesson's single test. Expects `lesson` in context. #}
+<form method="post" action="/lessons/{{ lesson.id }}/test" class="space-y-2 mt-2">
+  {{ csrf_input() }}
+  <input name="title" type="text" required maxlength="150"
+         value="{{ lesson.test.title if lesson.has_test else '' }}"
+         placeholder="Test name (e.g. Times-tables quiz)"
+         class="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-accent">
+  <div class="grid gap-2 sm:grid-cols-2">
+    <input name="score" type="text" maxlength="50"
+           value="{{ lesson.test.score if lesson.has_test and lesson.test.score else '' }}"
+           placeholder="Score (optional, e.g. 8/10)"
+           class="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-accent">
+    <input name="notes" type="text" maxlength="200"
+           value="{{ lesson.test.notes if lesson.has_test and lesson.test.notes else '' }}"
+           placeholder="Notes (optional)"
+           class="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-accent">
+  </div>
+  <button type="submit"
+          class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-700">
+    {% if lesson.has_test %}Save test{% else %}Add test{% endif %}
+  </button>
+</form>
