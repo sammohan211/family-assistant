@@ -24,6 +24,7 @@ from family_assistant.lessons import router as lessons_router
 from family_assistant.lunch_plan import router as lunch_plan_router
 from family_assistant.meal_plan import router as meal_plan_router
 from family_assistant.memory import router as memory_router
+from family_assistant.projects import router as projects_router
 
 
 @asynccontextmanager
@@ -42,6 +43,7 @@ app.include_router(meal_plan_router)
 app.include_router(lunch_plan_router)
 app.include_router(household_task_router)
 app.include_router(lessons_router)
+app.include_router(projects_router)
 app.include_router(exercise_router)
 app.include_router(hike_router)
 app.include_router(bp_router)

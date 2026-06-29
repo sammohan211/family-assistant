@@ -21,6 +21,7 @@ from family_assistant.lessons import models as _lessons_models  # noqa: F401
 from family_assistant.lunch_plan import models as _lunch_plan_models  # noqa: F401
 from family_assistant.meal_plan import models as _meal_plan_models  # noqa: F401
 from family_assistant.memory import models as _memory_models  # noqa: F401
+from family_assistant.projects import models as _projects_models  # noqa: F401
 from family_assistant.settings import get_settings
 
 config = context.config
