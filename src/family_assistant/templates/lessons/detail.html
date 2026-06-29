@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}{{ lesson.title }} · Lessons · Family Assistant{% endblock %}
+
+{% set status_styles = {
+  "planned": "bg-gray-100 text-gray-700",
+  "in_progress": "bg-amber-100 text-amber-800",
+  "done": "bg-green-100 text-green-800",
+} %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 py-8">
+  <p class="text-sm text-gray-500 mb-3">
+    <a href="/lessons" class="text-accent hover:underline">&larr; All lessons</a>
+  </p>
+
+  <div class="flex items-start justify-between gap-4 mb-6">
+    <div class="min-w-0">
+      <div class="flex items-center gap-2 flex-wrap">
+        <h1 class="font-serif text-3xl tracking-tight">{{ lesson.title }}</h1>
+        <span class="text-xs font-medium px-2 py-0.5 rounded-full {{ status_styles.get(lesson.status, 'bg-gray-100 text-gray-700') }}">
+          {{ lesson.status_label }}
+        </span>
+      </div>
+      <p class="text-sm text-gray-500 mt-1">
+        {% if lesson.subject %}{{ lesson.subject }}{% endif %}
+        {% if lesson.start_date or lesson.end_date %}
+          {% if lesson.subject %} · {% endif %}
+          {{ lesson.start_date.strftime('%b %-d') if lesson.start_date else '…' }}
+          &ndash;
+          {{ lesson.end_date.strftime('%b %-d') if lesson.end_date else '…' }}
+        {% endif %}
+      </p>
+      {% if lesson.description %}
+      <p class="text-sm text-gray-700 mt-3 whitespace-pre-line">{{ lesson.description }}</p>
+      {% endif %}
+    </div>
+    <div class="flex items-center gap-3 whitespace-nowrap">
+      <a href="/lessons/{{ lesson.id }}/edit" class="text-accent hover:underline text-sm">Edit</a>
+      <form method="post" action="/lessons/{{ lesson.id }}/delete"
+            onsubmit="return confirm('Delete this lesson and everything in it?');">
+        {{ csrf_input() }}
+        <button type="submit" class="text-red-600 hover:underline text-sm">Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Objectives ------------------------------------------------------- -->
+  <section class="mb-8">
+    <div class="flex items-baseline justify-between mb-2">
+      <h2 class="font-serif text-xl">Learning objectives</h2>
+      <span class="text-xs text-gray-500">{{ lesson.objectives_done }}/{{ lesson.objectives_total }} done</span>
+    </div>
+
+    <div class="rounded-lg border border-gray-200 bg-white divide-y divide-gray-100">
+      {% for objective in lesson.objectives %}
+      <div class="flex items-center gap-3 px-4 py-2.5">
+        <form method="post" action="/lessons/objectives/{{ objective.id }}/toggle" class="flex">
+          {{ csrf_input() }}
+          <button type="submit" aria-label="Toggle objective"
+                  class="w-5 h-5 rounded border flex items-center justify-center
+                         {% if objective.done %}bg-green-600 border-green-600 text-white{% else %}border-gray-300 text-transparent hover:border-accent{% endif %}">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+          </button>
+        </form>
+        <div class="flex-1 min-w-0">
+          <span class="text-sm {% if objective.done %}line-through text-gray-400{% else %}text-gray-800{% endif %}">{{ objective.title }}</span>
+          {% if objective.scheduled_date %}
+          <span class="ml-2 text-xs text-gray-500">· {{ objective.scheduled_date.strftime('%a %b %-d') }}</span>
+          {% endif %}
+        </div>
+        <form method="post" action="/lessons/objectives/{{ objective.id }}/delete"
+              onsubmit="return confirm('Delete this objective?');">
+          {{ csrf_input() }}
+          <button type="submit" class="text-gray-400 hover:text-red-600 text-xs">Remove</button>
+        </form>
+      </div>
+      {% else %}
+      <p class="px-4 py-3 text-sm text-gray-500">No objectives yet.</p>
+      {% endfor %}
+
+      <form method="post" action="/lessons/{{ lesson.id }}/objectives"
+            class="flex flex-col sm:flex-row gap-2 px-4 py-3 bg-gray-50">
+        {{ csrf_input() }}
+        <input name="title" type="text" required maxlength="200" placeholder="Add an objective"
+               class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-accent">
+        <input name="scheduled_date" type="date" aria-label="Scheduled date"
+               class="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-accent">
+        <button type="submit"
+                class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-700">
+          Add
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Resources -------------------------------------------------------- -->
+  <section class="mb-8">
+    <h2 class="font-serif text-xl mb-2">Resources</h2>
+    <div class="rounded-lg border border-gray-200 bg-white divide-y divide-gray-100">
+      {% for resource in lesson.resources %}
+      <div class="flex items-center gap-3 px-4 py-2.5">
+        <div class="flex-1 min-w-0">
+          {% if resource.url %}
+          <a href="{{ resource.url }}" target="_blank" rel="noopener"
+             class="text-sm text-accent hover:underline">{{ resource.label }}</a>
+          {% else %}
+          <span class="text-sm text-gray-800">{{ resource.label }}</span>
+          {% endif %}
+          {% if resource.note %}<span class="ml-2 text-xs text-gray-500">{{ resource.note }}</span>{% endif %}
+        </div>
+        <form method="post" action="/lessons/resources/{{ resource.id }}/delete">
+          {{ csrf_input() }}
+          <button type="submit" class="text-gray-400 hover:text-red-600 text-xs">Remove</button>
+        </form>
+      </div>
+      {% else %}
+      <p class="px-4 py-3 text-sm text-gray-500">No resources yet.</p>
+      {% endfor %}
+
+      <form method="post" action="/lessons/{{ lesson.id }}/resources"
+            class="grid gap-2 sm:grid-cols-2 px-4 py-3 bg-gray-50">
+        {{ csrf_input() }}
+        <input name="label" type="text" required maxlength="150" placeholder="Label (e.g. Khan Academy video)"
+               class="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-accent">
+        <input name="url" type="url" placeholder="https://… (optional)"
+               class="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-accent">
+        <input name="note" type="text" maxlength="200" placeholder="Note (optional)"
+               class="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-accent sm:col-span-1">
+        <div class="flex items-center gap-2 sm:col-span-1">
+          {% if lesson.objectives %}
+          <select name="objective_id" aria-label="Attach to objective"
+                  class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-accent">
+            <option value="">Whole lesson</option>
+            {% for objective in lesson.objectives %}
+            <option value="{{ objective.id }}">{{ objective.title|truncate(40) }}</option>
+            {% endfor %}
+          </select>
+          {% endif %}
+          <button type="submit"
+                  class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-700">
+            Add
+          </button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- Test ------------------------------------------------------------- -->
+  <section>
+    <h2 class="font-serif text-xl mb-2">Final test</h2>
+    <div class="rounded-lg border border-gray-200 bg-white p-4">
+      {% if lesson.has_test %}
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="font-medium text-gray-900">{{ lesson.test.title }}</span>
+            {% if lesson.test.done %}
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-800">Passed</span>
+            {% endif %}
+          </div>
+          {% if lesson.test.score %}<p class="text-sm text-gray-600 mt-1">Score: {{ lesson.test.score }}</p>{% endif %}
+          {% if lesson.test.notes %}<p class="text-sm text-gray-500 mt-1 whitespace-pre-line">{{ lesson.test.notes }}</p>{% endif %}
+          {% if lesson.test.done and lesson.test.done_at %}
+          <p class="text-xs text-gray-400 mt-1">Completed {{ lesson.test.done_at.strftime('%b %-d, %Y') }}</p>
+          {% endif %}
+        </div>
+        <form method="post" action="/lessons/{{ lesson.id }}/test/toggle">
+          {{ csrf_input() }}
+          {% if lesson.test.done %}
+          <button type="submit" class="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
+            Mark not done
+          </button>
+          {% else %}
+          <button type="submit" class="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700">
+            Mark passed
+          </button>
+          {% endif %}
+        </form>
+      </div>
+
+      <details class="mt-3">
+        <summary class="text-xs text-accent cursor-pointer">Edit test</summary>
+        {% include "lessons/_test_form.html" with context %}
+      </details>
+      {% else %}
+      <p class="text-sm text-gray-500 mb-3">Every lesson ends with a test — checking it off marks the lesson done.</p>
+      {% include "lessons/_test_form.html" with context %}
+      {% endif %}
+    </div>
+  </section>
+</div>
+{% endblock %}
