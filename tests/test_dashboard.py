@@ -15,7 +15,8 @@ from family_assistant.meal_plan.models import MealPlanEntry
 
 def test_dashboard_requires_auth(client: TestClient) -> None:
     response = client.get("/dashboard", follow_redirects=False)
-    assert response.status_code == 401
+    assert response.status_code == 303
+    assert response.headers["location"] == "/auth/login"
 
 
 def test_dashboard_renders_empty_state(authenticated_client: TestClient) -> None:

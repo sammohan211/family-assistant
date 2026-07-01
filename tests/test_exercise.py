@@ -399,7 +399,8 @@ def test_weekly_summary_delta_pct_none_when_no_prior(
 
 def test_exercise_route_requires_auth(client: TestClient) -> None:
     response = client.get("/exercise", follow_redirects=False)
-    assert response.status_code == 401
+    assert response.status_code == 303
+    assert response.headers["location"] == "/auth/login"
 
 
 def test_log_list_empty_state(authenticated_client: TestClient) -> None:

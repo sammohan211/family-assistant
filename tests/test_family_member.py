@@ -9,7 +9,8 @@ from family_assistant.family_member.models import FamilyMember
 
 def test_list_requires_auth(client: TestClient) -> None:
     response = client.get("/family", follow_redirects=False)
-    assert response.status_code == 401
+    assert response.status_code == 303
+    assert response.headers["location"] == "/auth/login"
 
 
 def test_list_renders_empty_for_authenticated_user(

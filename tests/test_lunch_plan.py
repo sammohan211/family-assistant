@@ -14,7 +14,8 @@ from family_assistant.meal_plan.services import create_recipe
 
 def test_lunch_plan_requires_auth(client: TestClient) -> None:
     response = client.get("/lunch-plan", follow_redirects=False)
-    assert response.status_code == 401
+    assert response.status_code == 303
+    assert response.headers["location"] == "/auth/login"
 
 
 def test_lunch_plan_renders_empty_state_for_authenticated_user(

@@ -4,9 +4,11 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Cookie, Depends, FastAPI
-from fastapi.responses import RedirectResponse
+from fastapi import Cookie, Depends, FastAPI, Request, status
+from fastapi.exception_handlers import http_exception_handler
+from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session as DbSession
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from family_assistant.assistant import router as assistant_router
 from family_assistant.auth import router as auth_router
@@ -35,6 +37,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Family Assistant", lifespan=lifespan, dependencies=[Depends(require_csrf)])
+
+
+@app.exception_handler(StarletteHTTPException)
+async def unauthenticated_redirect(request: Request, exc: StarletteHTTPException) -> Response:
+    """Send unauthenticated browsers to the login page instead of raw 401 JSON.
+
+    The whole app is server-rendered navigation, so a bare ``{"detail": ...}`` body
+    is never useful to show. A missing/expired session (401 from ``require_user``)
+    redirects to login and clears any stale cookie; all other errors keep FastAPI's
+    default handling.
+    """
+    if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+        redirect = RedirectResponse(url="/auth/login", status_code=303)
+        redirect.delete_cookie(SESSION_COOKIE_NAME, path="/")
+        return redirect
+    return await http_exception_handler(request, exc)
+
 
 app.include_router(auth_router)
 app.include_router(family_member_router)

@@ -20,7 +20,8 @@ def _other_user(db_session: Session) -> User:
 
 def test_memory_requires_auth(client: TestClient) -> None:
     response = client.get("/memory", follow_redirects=False)
-    assert response.status_code == 401
+    assert response.status_code == 303
+    assert response.headers["location"] == "/auth/login"
 
 
 def test_memory_list_renders_for_authenticated_user(authenticated_client: TestClient) -> None:
