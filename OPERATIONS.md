@@ -33,6 +33,9 @@ This doc remains the source of truth for what each underlying command does.
 ## Quick reference
 
 ```bash
+./scripts/deploy.sh                            # safe one-command deploy (pull, backup, build, migrate, health-check, rollback-on-fail)
+./scripts/doctor.sh                            # read-only status snapshot
+./scripts/rollback.sh [commit]                 # roll code back (default HEAD~1) and rebuild
 docker compose ps                              # service status
 docker compose logs -f app                     # tail one service
 docker compose logs -f app ollama caddy        # tail multiple
@@ -73,9 +76,21 @@ sudo tailscale status                          # tailnet up on the desktop?
 
 ---
 
-## Update the app after a `git pull`
+## Deploy (update the app after new code)
 
-The flow whenever you pull new code:
+Once `scripts/deploy.sh` is on the box, deploying is one command:
+
+```bash
+./scripts/deploy.sh
+```
+
+It fast-forwards the checkout to `origin/main`, backs up the DB *before* migrating, rebuilds the app image, waits for the app's compose healthcheck to report `healthy`, applies migrations, and verifies `/health`. If any step fails it resets the checkout to the commit it started from, rebuilds, and exits non-zero — so a broken deploy doesn't linger. Tune the health wait with `HEALTH_TIMEOUT=<seconds>` (default 120) or deploy a non-`main` branch with `BRANCH=<name> ./scripts/deploy.sh`.
+
+**Caveat: rollback reverts _code_, not schema.** Migrations are not auto-downgraded. That's why the script dumps the DB right before migrating — if a migration is the culprit, restore that dump (see the Database section) rather than relying on the code rollback.
+
+After a deploy, `./scripts/doctor.sh` gives a read-only status snapshot (commit, containers, `/health`, `alembic current`, disk, recent logs). If a deploy landed clean but the app misbehaves, `./scripts/rollback.sh [commit]` resets to a prior commit (default `HEAD~1`) and rebuilds.
+
+**First time / bootstrapping the scripts** (or if you ever prefer to do it by hand), the flow the script automates is:
 
 ```bash
 git pull
@@ -84,9 +99,7 @@ docker compose exec app alembic upgrade head   # apply any new migrations
 docker compose logs --tail=30 app              # sanity check it came up cleanly
 ```
 
-`up -d --build` is idempotent — Compose only recreates containers whose images or env actually changed. Everything else keeps running.
-
-Skip the `alembic upgrade head` if you know the commit didn't touch `alembic/versions/`. Running it when nothing's pending is a no-op anyway, so when in doubt, run it.
+`up -d --build` is idempotent — Compose only recreates containers whose images or env actually changed. Everything else keeps running. Skip the `alembic upgrade head` if you know the commit didn't touch `alembic/versions/`; running it when nothing's pending is a no-op anyway, so when in doubt, run it.
 
 ---
 
@@ -288,6 +301,7 @@ docker compose logs --tail=50 app
 ├── Caddyfile               # reverse proxy config
 ├── Dockerfile              # app image build
 ├── alembic/versions/       # database migrations
+├── scripts/                # deploy.sh, doctor.sh, rollback.sh, db-backup.sh
 ├── src/family_assistant/   # app code
 └── tests/                  # pytest suite
 
