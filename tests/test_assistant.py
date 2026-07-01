@@ -36,7 +36,8 @@ def fake_llm(authenticated_client: TestClient) -> Iterator[FakeLLM]:
 
 def test_assistant_requires_auth(client: TestClient) -> None:
     response = client.get("/assistant", follow_redirects=False)
-    assert response.status_code == 401
+    assert response.status_code == 303
+    assert response.headers["location"] == "/auth/login"
 
 
 def test_assistant_get_renders_empty_state(authenticated_client: TestClient) -> None:
@@ -290,7 +291,8 @@ def test_recent_interactions_are_scoped_per_user(
 
 def test_trace_view_requires_auth(client: TestClient) -> None:
     response = client.get("/assistant/interactions/1/trace", follow_redirects=False)
-    assert response.status_code == 401
+    assert response.status_code == 303
+    assert response.headers["location"] == "/auth/login"
 
 
 def test_trace_view_404_for_missing_interaction(authenticated_client: TestClient) -> None:

@@ -12,7 +12,8 @@ from family_assistant.grocery.services import list_recent_items
 
 def test_grocery_list_requires_auth(client: TestClient) -> None:
     response = client.get("/grocery", follow_redirects=False)
-    assert response.status_code == 401
+    assert response.status_code == 303
+    assert response.headers["location"] == "/auth/login"
 
 
 def test_grocery_list_renders_for_authenticated_user(authenticated_client: TestClient) -> None:
