@@ -7,10 +7,18 @@
 
     encode gzip
 
-    reverse_proxy app:8000
+    # family-app is the pinned container_name in compose.cloud.yml. Don't use
+    # the bare service name "app": Caddy also sits on the shared caddy_net,
+    # where tenant apps can expose an "app" alias too, and Docker DNS may
+    # resolve the bare name to a tenant instead of this app.
+    reverse_proxy family-app:8000
 
     log {
         output stdout
         format json
     }
 }
+
+# Tenant site blocks, one file per app (see CADDY_ROBUSTNESS_RUNBOOK.md).
+# Tenant-owned: each app's repo is the source of truth for its .caddy file.
+import sites/*.caddy
