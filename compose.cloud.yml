@@ -12,6 +12,11 @@
 # CADDY_TLS=<your-email> for a real Let's Encrypt cert on a public host.
 services:
   app:
+    # Pinned name: the family site block in the Caddyfile proxies to
+    # family-app:8000. The generic service name "app" is ambiguous from
+    # Caddy's point of view — tenant apps on the shared caddy_net (e.g.
+    # options-helper) also expose an "app" DNS alias there.
+    container_name: family-app
     build: .
     image: family-assistant:latest
     restart: unless-stopped
@@ -69,8 +74,12 @@ services:
     environment:
       APP_HOSTNAME: ${APP_HOSTNAME}
       CADDY_TLS: ${CADDY_TLS:-internal}
+    networks:
+      - default
+      - caddy_net
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./sites:/etc/caddy/sites:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
@@ -80,3 +89,10 @@ volumes:
   postgres_data:
   caddy_data:
   caddy_config:
+
+networks:
+  # Shared edge network for tenant apps behind this Caddy (see
+  # CADDY_ROBUSTNESS_RUNBOOK.md). Created once with `docker network create
+  # caddy_net`; owned by no compose project — never remove it.
+  caddy_net:
+    external: true
