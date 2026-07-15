@@ -80,6 +80,10 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./sites:/etc/caddy/sites:ro
+      # Static tenants (notes, books, …): each serves /srv/static/<app> via a
+      # sites/<app>.caddy file. Content updates on the host need no reload;
+      # the whole directory is mounted, so no single-file inode gotcha either.
+      - /root/static:/srv/static:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
