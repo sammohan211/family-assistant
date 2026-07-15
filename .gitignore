@@ -38,6 +38,10 @@ backups/
 *.sql.gz
 *.dump
 
+# Tenant site blocks: each tenant's own repo is the source of truth
+# (see sites/README.md); only the README is tracked.
+sites/*.caddy
+
 # Docker / persistent volumes (named volumes only; never commit data dirs)
 caddy_data/
 caddy_config/
