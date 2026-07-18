@@ -2,7 +2,7 @@
 
 Each app hosted behind this VM's Caddy drops one `<app>.caddy` file here; the
 main `Caddyfile` ends with `import sites/*.caddy`. See
-`CADDY_ROBUSTNESS_RUNBOOK.md` for the topology and how to add a tenant.
+`PRD_AND_ROADMAP.md` §17.10 for the topology and how to add a tenant.
 
 The `.caddy` files are deliberately **not** committed to this repo — each
 tenant app's own repo is the source of truth for its site block (e.g. the

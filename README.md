@@ -13,10 +13,9 @@ Household management web app with an embedded AI assistant. Personal project for
 
 - [`PRD_AND_ROADMAP.md`](PRD_AND_ROADMAP.md) — what the app does, plus near-term backlog and phased roadmap (§21)
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — how the code fits together
-- [`SETUP.md`](SETUP.md) — deployment setup (§13 = current cloud/OpenRouter path; earlier sections describe the retired home-GPU box)
+- [`SETUP.md`](SETUP.md) — cloud deployment setup
 - [`OPERATIONS.md`](OPERATIONS.md) — day-to-day ops (updates, logs, backups)
 - [`USER_GUIDE.md`](USER_GUIDE.md) — using the app
-- [`BUGS.md`](BUGS.md) — bug review
 
 ## Dev setup (laptop)
 

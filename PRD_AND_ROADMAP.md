@@ -1,1453 +1,366 @@
 # Product Requirements Document: Family Assistant App
 
-**Version:** 1.0 — ready to build (2026-05-16)  
-**Project type:** Personal project for one household; not shipped or sold  
-**Primary platform:** Responsive web app  
-**Users:** Two adult accounts (pre-seeded, simple session), plus non-login entries for other family members (kids) for planning purposes  
-**Deployment model:** Containerized; portable between home machine and rented cloud VM (home is the initial target). See Section 17.  
-**Build cadence:** Weekend project, no hard deadline  
+**Version:** 1.0 written 2026-05-16, "ready to build"; maintained since as a living spec — shipped changes are folded into their sections in-place.
+**Project type:** Personal project for one household; not shipped or sold.
+**Platform:** Responsive web app (phone + laptop browsers).
+**Users:** Two adult accounts (pre-seeded, simple session) + non-login family-member entries (kids) for planning.
+**Deployment:** Containerized on a cloud VPS (see §17).
+**Cadence:** Weekend project, no deadline.
 
 ---
 
 ## 1. Overview
 
-The Family Assistant App is a household management platform that helps two adults coordinate the groceries, meals, kids' school lunches, and exercise logging that run our house — with dedicated weekend planning sessions as a primary workflow.
-
-The product is accessible from phone and laptop browsers through a responsive web interface. Two adults log in; kids and other family members are represented as non-login entries used for planning purposes (school lunches, food preferences, allergies, schedule notes).
-
-A core element of the product is an embedded AI layer that reduces interaction friction. The AI layer includes a lightweight LLM, structured tool execution, vector retrieval, and explicit household and user memory. The assistant lets the adults interact naturally with the system, while the backend remains the source of truth for business logic, validation, and data integrity.
-
----
+A household management platform for two adults coordinating groceries, meals, kids' school lunches, chores, and personal logs — with an embedded AI assistant (LLM + structured tool execution + explicit memory) that reduces interaction friction while the backend stays the source of truth for validation and data integrity.
 
 ## 2. Why I'm Building This
 
-I want a single place to manage our household — groceries, meals, kids' lunches, reminders, tasks, exercise — that fits how we actually work. Existing apps each solve one narrow piece (groceries OR recipes OR reminders) and aren't extensible enough to host an embedded AI layer over our own household data.
-
-I'm also building this as a learning project: a real, daily-use codebase to experiment with an embedded LLM, tool execution, household memory, and vector retrieval against data I actually care about. The dual goal — real utility AND learning — drives most tradeoffs in this PRD: features should earn their place by being useful in our house, and the AI layer should be substantial enough to teach me something while staying deterministic and safe where it matters.
-
----
+One place to manage the household, extensible enough to host an AI layer over our own data — existing apps each solve one narrow piece. Equally a learning project: a real, daily-use codebase for experimenting with an embedded LLM, tool execution, memory, and retrieval. The dual goal drives most tradeoffs: features must earn their place in our house, and the AI layer should teach something while staying deterministic and safe where it matters.
 
 ## 3. Product Vision
 
-The Family Assistant App will become a modular, extensible household operating system for adult family members. The MVP is intentionally narrower than this vision — see Section 7 for what is in scope first.
-
-The app should make it easy to answer and act on questions such as:
-
-- What groceries do we need?
-- What are we eating this week?
-- What school lunches need to be prepared?
-- What needs to be done today?
-- What reminders or tasks are coming up?
-- What exercise have I logged this week?
-
-The long-term vision is to combine structured household data, AI-assisted natural language interaction, semantic retrieval, and explicit memory into a unified system that helps the household **plan, remember, and act**.
-
----
+A modular household operating system that helps the household **plan, remember, and act**: what groceries do we need, what are we eating this week, what lunches need prep, what's due today, what exercise have I logged. The MVP was intentionally narrower (§7).
 
 ## 4. Goals
 
-The product should:
-
-1. Provide a household workspace for the two adults in the household.
-2. Work well on phone and laptop browsers (mobile-first responsive). Tablet and desktop browser are not explicit MVP targets.
-3. Provide modular household features that can expand over time. *Modular* here means: each feature module owns its own tables, API routes, AI tools, and UI; there is no shared plugin framework or generic module loader.
-4. Support grocery tracking, meal planning, school lunch planning, exercise logging, reminders, and tasks in the MVP.
-5. Represent kids as non-login family member entries for planning purposes.
-6. Include an embedded AI assistant that can parse natural language, retrieve household context, remember preferences, and trigger safe structured actions.
-7. Use deterministic backend services as the source of truth for permissions, validation, and data mutation.
-8. Be containerized and deployable to rented cloud infrastructure.
-9. Protect private household and preference data; avoid sending it to third-party LLM providers by default.
-
-PWA installation is deferred to phase 2.
-
----
+1. A household workspace for the two adults; mobile-first responsive (phone + laptop).
+2. Modular features — each module owns its tables, routes, AI tools, and UI. No plugin framework.
+3. MVP surface: grocery, meal planning, school lunches, exercise logging, assistant, memory.
+4. Kids as non-login `FamilyMember` entries.
+5. An assistant that parses natural language, retrieves household context, remembers preferences, and triggers safe structured actions — with deterministic backend services as the source of truth for permissions, validation, mutation.
+6. Containerized, cloud-deployable. Household data protected (see §15.2 for the LLM-provider posture).
 
 ## 5. Non-Goals
 
-The MVP will not attempt to provide:
-
-1. Multi-household / multi-tenant support. The app serves one household.
-2. Child or teen login accounts, or child-facing interfaces.
-3. A native iOS or Android app.
-4. Medical record storage, medical diagnosis, or clinical health advice. (The blood-pressure module added after MVP — §10.9 — is personal self-tracking only: it stores readings and shows descriptive category labels, never diagnosis or clinical advice.)
-5. Automatic grocery purchasing or any external commerce integration.
-6. Budgeting or financial management.
-7. Complex autonomous AI agents (chains of agents acting without per-step user confirmation).
-8. A full document intelligence pipeline (OCR, structured extraction from PDFs, etc.).
-9. Fully on-device LLM inference or vector storage.
-10. An in-app calendar surface. Calendar lives outside the app.
-11. Production auth ceremony: email verification, password reset, member invitations, role hierarchies beyond a single adult role.
-12. PWA installation, offline support, or push notifications in MVP.
-13. Reminders and time-based notifications — still a non-goal (see Phase 4, §21). A generic household task list *was* a non-goal in MVP, but a shared, recurring household-tasks module shipped after MVP — see §10.11; it has no time-based reminders, only a due date that surfaces overdue items in the list.
-
----
+1. Multi-household / multi-tenant support.
+2. Child or teen logins, or child-facing interfaces.
+3. Native mobile apps.
+4. Medical records, diagnosis, or clinical advice (the BP module §10.9 is personal self-tracking with descriptive labels only).
+5. Automatic purchasing / commerce integration; budgeting / financial management.
+6. Autonomous AI agents (chains acting without per-step confirmation).
+7. Document intelligence pipeline (OCR, PDF extraction).
+8. An in-app calendar surface — calendar lives outside the app.
+9. Production auth ceremony (verification, reset, invitations, roles).
+10. PWA install, offline support, push notifications.
+11. Reminders / time-based notifications (still deferred — §21 Phase 4). A shared recurring household-tasks module *did* ship post-MVP (§10.11): due dates surface overdue items in-list, but nothing notifies.
 
 ## 6. Users
 
-### 6.1 The Two Adults
+**Two adults** with identical permissions — no admin/member distinction. **Non-login FamilyMembers** (kids): name, school days, notes; facts the AI uses (preferences, allergies) live in Memory (§11.7), subject-tagged to the member. Pets etc. may come later.
 
-Both adults coordinate groceries, meal planning, kids' school lunches, and exercise logging. Both have the same permissions and capabilities in the app — there is no admin/member distinction or role hierarchy in MVP.
+## 7. MVP Scope (as shipped)
 
-### 6.2 Non-Login Family Members
-
-Kids are represented as non-login `FamilyMember` entries: name, food preferences, allergies, school days, and free-form notes. These entries exist for planning purposes (especially school lunches) and do not log in or interact with the app directly. Pets and other household members may be added in later phases (see Section 21).
-
----
-
-## 7. MVP Scope
-
-The MVP shall include the following capabilities:
-
-1. Login with two pre-seeded user accounts (simple session).
-2. Shared grocery list.
-3. Weekly meal planner.
-4. School lunch planner using non-login FamilyMember entries.
-5. Personal exercise logging.
-6. Embedded assistant input with LLM-backed natural language command parsing.
-7. Household and user memory with full CRUD UI (create, view, edit, delete, search).
-8. Vector-backed semantic retrieval over memories (pgvector or equivalent).
-9. Assistant interaction log (every user command, parsed intent, proposed action, confirmation, execution outcome).
-10. Responsive web interface optimized for phone and laptop.
-11. Containerized deployment.
-
-Object storage and a generic mutation audit log are deferred — see Sections 11.9 and 12 (the `AuditLog` entity is removed in MVP; the `AssistantInteraction` log remains).
-
----
+Login (two pre-seeded users) · shared grocery list · weekly meal planner · school lunch planner · personal exercise logging · assistant with LLM command parsing · memory with full CRUD UI · assistant interaction log · responsive UI · containerized deployment. Vector retrieval was specced for MVP but deferred (§11.8); object storage and a generic audit log deferred (§11.9, §12).
 
 ## 8. Product Principles
 
-1. **Mobile-first, laptop-friendly.** The app should work very well on phones for quick capture and daily use, while supporting richer planning workflows on laptops.
-2. **Modular by design.** Each feature module owns its own tables, API routes, AI tools, and UI. There is no shared plugin framework or generic module loader.
-3. **AI as an input accelerator.** The assistant reduces friction but does not replace deterministic app logic.
-4. **Structured data is the source of truth.** LLM outputs are validated and converted into structured backend actions; the LLM does not mutate data directly.
-5. **Memory should be explicit and controllable.** Users can inspect, edit, and delete any stored memory at any time.
-6. **Safe failure over silent mutation.** Invalid or ambiguous assistant outputs ask for clarification or fail without changing data.
-7. **Privacy by default.** Household data stays in the app's own infrastructure. No household data is sent to third-party LLM providers in MVP.
+1. **Mobile-first, laptop-friendly** — quick capture on phone, planning workflows on laptop.
+2. **Modular by design.**
+3. **AI as an input accelerator**, not a replacement for deterministic logic.
+4. **Structured data is the source of truth** — LLM output is validated into backend actions; the LLM never mutates data directly.
+5. **Memory is explicit and controllable** — inspect, edit, delete anything stored.
+6. **Safe failure over silent mutation** — ambiguous or invalid output asks for clarification instead of changing data.
+7. **Privacy by default** — household data stays in our infrastructure; LLM calls are a deliberate, contained exception (§15.2).
 
----
+## 9. Core User Stories (condensed)
 
-## 9. Core User Stories
-
-### 9.1 Authentication
-
-- As an adult user, I want to log in with my pre-seeded account so I can access the household workspace.
-
-### 9.2 Grocery Tracking
-
-- As an adult, I want to add grocery items so the household knows what to buy.
-- As an adult, I want to mark items as purchased (and undo) so the list stays current.
-- As an adult, I want items grouped by category so shopping is easier.
-- As an adult, I want a "recent items" section so frequently bought things are easy to re-add.
-
-### 9.3 Meal Planning
-
-- As an adult, I want to plan meals by day so the household knows what is coming up.
-- As an adult, I want to reuse previous meals so weekly planning is faster.
-
-### 9.4 School Lunch Planning
-
-- As an adult, I want to plan lunches for each kid by school day so prep is easier.
-- As an adult, I want to record food preferences, allergies, and restrictions per kid so the AI can apply them when I plan or pack lunches.
-
-### 9.5 Exercise Logging
-
-- As an adult, I want to log workouts by picking a known exercise and entering the relevant numbers (sets/reps/weight, distance, or both), so each session captures the load that was actually trained.
-- As an adult, I want each exercise tagged with a body group (upper / lower / core / cardio) and one or more muscle groups, so I can later see which areas I've been hitting.
-- As an adult, I want a single comparable "work score" computed per log entry from the inputs and my current body weight, so I can try to beat last week's score next time.
-- As an adult, I want a separate weekly view that totals work score by body group and by muscle group with a delta vs. the previous week, so I can spot under-trained areas without doing the math myself.
-- As an adult, I want my body weight stored on my profile and editable any time, so distance- and bodyweight-based scores stay accurate.
-- As an adult, I want to view my own exercise history; both adults can see each other's history (no privacy controls in MVP).
-- As an adult, I want the assistant to log a workout by referencing an exercise by name.
-
-### 9.6 Blood Pressure Logging
-
-- As an adult, I want to log a blood-pressure reading (systolic, diastolic, optional heart rate, date, optional time, notes) so I can keep a personal record over time.
-- As an adult, I want mean arterial pressure (MAP) computed for each reading so I don't have to calculate it.
-- As an adult, I want each reading labelled against standard thresholds (normal / elevated / stage 1 / stage 2 / crisis) so I can see at a glance where it sits — descriptive only, not medical advice.
-- As an adult, I want a trends view with weekly averages and a category breakdown so I can see the direction over time.
-- As an adult, I want my readings private to me — each adult sees only their own — since this is personal health data.
-
-### 9.7 Hike Logging
-
-- As an adult, I want to log a Bruce Trail hike (section, segment name, date, start/end map links and times, distance, duration, notes) so I have a record of the segments I've completed.
-- As an adult, I want average speed computed automatically from distance and duration.
-- As an adult, I want a progress view showing total distance, hike count, total time, and a per-section breakdown, so I can track how far along the trail I am.
-- As an adult, I want my hikes private to me — each adult sees only their own.
-
-### 9.8 Household Tasks
-
-- As a member of the household, I want a shared list of chores to be done around the house, so everyone sees the same to-do board rather than tracking chores separately.
-- As a member of the household, I want each task to have a name, free-text details, and an assignee (which adult), so it's clear what needs doing and who's doing it.
-- As a member of the household, I want to set how often a task recurs (one-off, or every N days/weeks/months — e.g. laundry weekly), so routine chores reappear when they're next due without re-entering them.
-- As a member of the household, I want a one-click Done action that reschedules a recurring task (or archives a one-off), so closing out a chore is effortless.
-- As a member of the household, I want overdue tasks to stand out and a history of who completed what, so nothing slips and the household can see what's been done.
-
-### 9.9 Embedded Assistant
-
-- As an adult, I want to type natural-language commands so I can update the app without navigating multiple screens.
-- As an adult, I want to ask what is planned today (meals, lunches) so I can quickly orient myself.
-- As an adult, I want the assistant to remember household preferences so future interactions are more relevant.
-- As an adult, I want to review, edit, and delete stored memories so I remain in control of what the system remembers.
-- As an adult, I want the assistant to ask for confirmation before making medium- or high-risk changes so accidental commands don't disrupt plans.
-
-### 9.10 Horoscopes
-
-> **Removed 2026-06-28.** The horoscope module was built then later removed at the household's request. The stories below are kept as historical record; the feature, its code, and its `horoscope_readings` table no longer exist.
-
-- As a member of the household, I want a horoscope section for one shared birth profile, so the household can read its outlook in one common place.
-- As a member of the household, I want readings for eight windows — today, tomorrow, this week, next week, this month, next month, this year, next year — so I can look as near or far as I feel like.
-- As a member of the household, I want each window read in three traditions (Vedic, Chinese, Western), so the readings are richer than a single newspaper-style sun-sign blurb.
-- As a member of the household, I want the readings grounded in real computed planetary positions, not invented ones, so the astrology is at least astronomically honest.
-- As a member of the household, I want a reading written only when someone asks for it (and then kept), so quiet days cost nothing.
-- As a member of the household, I want no personal details — no name, no birth date, time, or place — anywhere in the app, since only the horoscope text matters.
-
----
+- **Auth:** log in with my pre-seeded account.
+- **Grocery:** add items; mark purchased (and undo); categories; recent-items re-add.
+- **Meals:** plan by day; reuse previous meals.
+- **Lunches:** plan per kid per school day; record per-kid preferences/allergies the AI applies.
+- **Exercise:** log by picking a known exercise + the numbers for its scoring type; body/muscle-group tagging; one comparable work score per session; a weekly view with deltas; body weight on my profile; assistant logging by exercise name.
+- **BP:** log readings (systolic/diastolic/HR/date/time/notes); MAP computed; category labels (descriptive only); trends; private per user.
+- **Hikes:** log Bruce Trail segments (section, name, map links, distance, duration); speed computed; progress view; private per user.
+- **Tasks:** shared chore board; name/details/assignee; recurrence (one-off or every N days/weeks/months); one-click Done that reschedules; overdue stands out; completion history.
+- **Assistant:** natural-language commands; ask what's planned; remembers preferences; memories reviewable; confirmation before risky changes.
+- **Horoscopes:** *removed 2026-06-28* (built 2026-06-12, removed at the household's request — see §10.12).
 
 ## 10. Functional Requirements
 
 ### 10.1 Authentication and Access
 
-The application shall support:
-
-1. Login and logout for the two pre-seeded adult user accounts.
-2. Server-side session management (HTTP-only cookie).
-3. Access from phone and laptop browsers.
-
-There is no public sign-up, email verification, password reset flow, or invitation flow in MVP. Account credentials are seeded during deployment.
+Login/logout for the two pre-seeded accounts; server-side sessions (HTTP-only cookie); no sign-up, verification, reset, or invitations. Credentials seeded from `.env` at deployment.
 
 ### 10.2 Household
 
-There is a single household, created at deployment time. Both pre-seeded adults belong to it. There is no household creation flow, no invitation flow, no member removal flow, no role assignment, and no admin/member distinction in MVP.
-
-The application does not maintain a generic mutation audit log in MVP. Assistant interactions are logged separately — see Section 11.10.
+One implicit household. No household entity, creation flow, roles, or generic mutation audit log (assistant interactions are logged separately — §11.10).
 
 ### 10.3 FamilyMember (non-login)
 
-The application shall support non-login `FamilyMember` entries used for planning purposes. A FamilyMember represents a kid in the household.
-
-FamilyMember columns:
-
-1. Name.
-2. Notes (free text).
-3. School days (which weekdays they need a packed lunch).
-
-Facts about a FamilyMember used by the AI for planning — food preferences, allergies, dietary restrictions, dislikes — are stored as `Memory` records subject-tagged to the FamilyMember (see Section 11.7). This keeps "facts the AI uses for context" in a single home.
-
-FamilyMember entries cannot log in. Future phases may add other non-login entities (pets, etc.) — see Section 21.
+Name, free-text notes, school days (weekdays needing a packed lunch). Preferences/allergies/restrictions live as Memory records subject-tagged to the member — one home for facts the AI uses. FamilyMembers cannot log in.
 
 ### 10.4 Grocery Module
 
-The application shall support:
-
-1. Add, edit, and delete grocery items.
-2. Mark an item as purchased; undo (restore to unpurchased).
-3. Categorize items (e.g. produce, dairy, pantry, household).
-4. Quantity and unit per item.
-5. Free-text notes per item.
-6. Track who added and who purchased each item.
-7. "Recent items" quick-add UX surfacing frequently bought items.
-8. Assistant-created grocery items via the AI layer.
-9. **Form-level duplicate warning on add.** A case-insensitive name match against currently open items shows a warning ("Already on the open list: X") and requires a second submit to add anyway. Purchased history is not matched. The LLM-assistant path is not gated by this — the LLM already sees the open list in its prompt context and is responsible for its own decision.
-
-Scheduled / recurring grocery items (e.g., "milk every Tuesday") are not in MVP.
-
-Smarter dedup — LLM-assisted matching against canonical names and units (synonyms, plurals, "1 dozen eggs" ≈ "12 eggs"), with an `grocery.update_item` tool that folds a request into an existing open item where appropriate — is deferred to phase 2. It becomes natural once the meal/lunch catalogs (§10.5, §10.6) supply canonical ingredient names; until then, structured dedup has nothing to match against.
+Add/edit/delete items; purchase + undo; categories; quantity + free-form unit; notes; who-added/who-purchased tracking; recent-items quick-add; assistant-created items. **Form-level duplicate warning:** a case-insensitive name match against *open* items warns and requires a second submit; purchased history isn't matched; the assistant path isn't gated (the LLM sees the open list in context). Scheduled/recurring items: not built. Smarter dedup (synonyms, plurals, `1 dozen eggs` ≈ `12 eggs`, a `grocery.update_item` fold-in tool) is phase 2 — it needs canonical ingredient names from the catalogs.
 
 ### 10.5 Meal Planning Module
 
-The Meal Planning Module covers household meals — breakfast, lunch (at home), dinner, snacks. Kids' packed school lunches are handled separately in Section 10.6.
+Household meals (dinner in practice; breakfast/lunch/snack slots exist). Weekly grid; entries by date + meal type with free-text title, notes, favorite flag; reuse/duplicate; assistant-created entries.
 
-The application shall support:
-
-1. Weekly meal planning view.
-2. Meal entries by date and meal type (breakfast, lunch, dinner, snack).
-3. Free-text title and notes per meal.
-4. Reuse / duplicate previous meals.
-5. Mark a meal as a favorite (`is_favorite` flag) to filter the meal-reuse picker.
-6. Assistant-created meal plan entries.
-
-Recipe links and meal-to-grocery generation are deferred to phase 2. Also deferred: promoting meal entries from freeform titles to a household-shared **meal catalog** (mirroring the exercise catalog) with ingredients and **per-meal macronutrient values** (protein, fat, carbs, fibre). The catalog enables a weekly macro view for balancing macros across the week while planning. Macros are stored per prepared meal (one entry's worth), not per serving — there is no per-person consumption tracking; aggregation stays at the household level.
+**Recipe catalog — shipped 2026-05-31** at `/meal-plan/catalog`, deliberately leaner than the original phase-2 plan: household-shared `recipes` with name, meal type, ingredient *names only* (no amounts, no FK from plan entries — entries keep free-text titles so recipes can be edited or removed without breaking history), optional instructions/notes, and coarse nullable calories + protein as a planning aid, not a tracking ledger. The meal form offers a pick-from-catalog title fill; the assistant reads the catalog in context (suggest-from-what-we-have, missing-ingredient checks) but has no recipe write tools. Still deferred: full macro set + weekly macro view, meal-to-grocery generation, pantry inventory (§21 Phase 2).
 
 ### 10.6 School Lunch Planning Module
 
-The application shall support:
-
-1. Lunch planning per FamilyMember (kid) by school day. Current household has one kid; the UI auto-picks the single FamilyMember (hides the selector) but the data model, assistant tool, and weekly grid stay multi-kid-capable.
-2. Each lunch entry is a list of items plus free-text notes.
-3. The lunch planning UI surfaces the kid's food preferences, allergies, and restrictions for reference.
-4. Assistant-created lunch entries.
-5. Weekly lunch overview across all kids.
-
-Packed / not-packed status is captured in the schema (defaults to `planned`) but is not surfaced in the MVP UI — the household does not track packing. The column and the `POST /{entry_id}/status` route stay in place for forward compatibility.
-
-Lunch templates and an LLM-assisted weekly lunch planner are deferred to phase 2. The planner — given the kid's hard restrictions (e.g., school no-nut rule + allergies from Memory), macro targets, and recent variety — proposes the coming week's five weekday lunches with grocery-feeding ingredients. Shares the macro framework with the phase-2 meal catalog (§10.5).
+Per-kid, per-school-day planning; entry = item list (each item optionally annotated) + notes; weekly grid showing the kid's school days (non-school days appear only if they already have an entry); the UI auto-picks the single current kid while the data model stays multi-kid; assistant-created entries. The kid's restrictions surface via Memory. `packed_status` exists in the schema (default `planned`) but isn't surfaced — the household doesn't track packing. Templates and the LLM weekly lunch planner are phase 2.
 
 ### 10.7 Exercise Module
 
-The exercise module is structured as two tables: a household-wide **exercise catalog** of named, classified exercises, and per-user **exercise logs** that reference an exercise plus the numbers from one session. Each log carries a computed `work_score` so sessions are directly comparable week over week.
+Two tables: a household-shared **catalog** of named exercises and per-user **logs**.
 
-The application shall support:
-
-1. **Exercise catalog (household-shared).** A named exercise has:
-   - `body_group` — one of `upper | lower | core | cardio`.
-   - `muscle_groups` — array of tags (e.g. `chest`, `triceps`, `quads`). Free-text in MVP; a fixed vocabulary may be introduced later. The user will populate this from an existing reference list outside the app.
-   - `scoring_type` — one of `weighted | distance | bodyweight_fraction`.
-   - `bodyweight_fraction` — decimal used only when `scoring_type = bodyweight_fraction` (default `1.0`; e.g. captain's chair = `0.5`).
-
-   The catalog is **not pre-seeded** in MVP; the user adds exercises as needed.
-
-2. **Exercise log (per user).** A log entry references one catalog exercise + a date + numeric inputs appropriate to the exercise's scoring type:
-   - `weighted` → `sets`, `reps`, `weight`.
-   - `distance` → `distance_km` (covers walking, hiking, running, rowing-machine distance).
-   - `bodyweight_fraction` → `sets`, `reps`.
-
-   `duration_minutes` and `notes` are optional on any entry.
-
-3. **Work score formulas** (computed at write time and persisted on the log row, so historical scores don't drift if body weight is later updated):
-   - `weighted`: `weight × reps × sets`
-   - `distance`: `distance_km × body_weight`
-   - `bodyweight_fraction`: `body_weight × bodyweight_fraction × reps × sets`
-
-4. **User body weight.** Stored on the User profile, editable at any time. Used by the `distance` and `bodyweight_fraction` formulas at the moment of write. Not versioned per log.
-
-5. **Per-user log views.** Each adult sees their own log on `/exercise`. Both adults can view each other's logs; per-entry visibility flags are out of scope.
-
-6. **Weekly aggregation view** at a separate path (e.g. `/exercise/weekly`) showing, for the current ISO week:
-   - Total work score for the week.
-   - Subtotal per `body_group`.
-   - Subtotal per `muscle_group`.
-   - Delta vs. the previous week (absolute and %).
-
-   A per-exercise breakdown within each body group / muscle group is deferred to phase 2.
-
-7. **Assistant-created log entries.** The assistant can create one log entry per call by referencing an exercise by name (case-insensitive). Unknown names return a validation error rather than auto-creating a catalog entry.
+1. **Catalog:** `body_group` (upper|lower|core|cardio), `muscle_groups` (free-text tags), `scoring_type` (weighted|distance|bodyweight_fraction), `bodyweight_fraction` (default 1.0; e.g. captain's chair 0.5). Not pre-seeded.
+2. **Log:** one catalog exercise + date + the inputs its scoring type needs (`weighted`: sets/reps/weight; `distance`: distance_km; `bodyweight_fraction`: sets/reps); optional duration + notes.
+3. **Work score**, computed at write time and **persisted** so body-weight changes don't rewrite history: `weight×reps×sets` / `distance_km×body_weight` / `body_weight×fraction×reps×sets`.
+4. **Body weight** on the User profile, editable any time; used at write time; not versioned.
+5. Each adult sees their own log at `/exercise` (visible to the other; no privacy flags).
+6. **Weekly view** (`/exercise/weekly`): ISO-week total, per-body-group and per-muscle-group subtotals, delta vs. prior week. Per-exercise breakdown is phase 2.
+7. **Assistant logging** by exercise name (case-insensitive); unknown names are a validation error, never auto-created.
 
 ### 10.8 Dashboard
 
-The application shall provide a household dashboard showing:
-
-1. Today's meals (from the meal planner).
-2. This week's school lunches per kid, with packed status.
-3. Outstanding grocery items (count + quick-add).
-4. Recent assistant activity (last few interactions, links to affected records).
-
-An AI-generated weekly summary card is deferred to phase 2.
+Five cards: today's meals; **due household tasks** (overdue + due-today, with one-click Done — added with §10.11); this week's school lunches per kid; open grocery (count + quick-add + first items); the current user's recent assistant activity. AI-generated weekly summary card: phase 2.
 
 ### 10.9 Blood Pressure Module
 
-A per-user log of blood-pressure readings. There is no shared catalog — readings are inherently personal. In the UI, Exercise (§10.7), Blood Pressure, and Hikes (§10.10) are grouped under a single **Health** navigation menu.
-
-The application shall support:
-
-1. **Reading log (per user).** A reading has: `date`; optional `reading_time`; `systolic` and `diastolic` (mmHg, required); `heart_rate` (bpm, optional); `notes` (optional).
-2. **Mean arterial pressure (MAP).** Computed at write time and persisted as `MAP = (systolic + 2 × diastolic) / 3`. Persisted (not recomputed on read) for the same reason exercise persists `work_score`.
-3. **Category classification.** Each reading is labelled against standard thresholds (normal / elevated / stage 1 / stage 2 / hypertensive crisis) and shown as a badge. Derived on read from systolic/diastolic; not stored. **Descriptive only — not medical advice or diagnosis** (§5 Non-Goal 4).
-4. **List view** at `/bp`, newest first, showing BP, MAP, heart rate, category, and notes.
-5. **Trends view** at `/bp/trends`: latest reading, overall averages, category distribution, and a per-ISO-week breakdown of average systolic/diastolic/heart rate.
-6. **Per-user privacy.** Each adult sees and edits only their own readings. This deliberately diverges from the exercise module (§10.7.5), where both adults can view each other's logs — blood pressure is treated as more sensitive.
-7. **No assistant tool in the initial build.** Conversational logging and reads are deferred (see §21).
+Per-user reading log (`/bp`): date, optional time, systolic/diastolic (required), optional heart rate, notes. **MAP** computed at write time and persisted (`(systolic + 2×diastolic)/3`); **category** (normal → hypertensive crisis) derived on read and shown as a badge — descriptive only, never advice (§5.4). Trends at `/bp/trends`: latest, overall averages, category distribution, per-ISO-week averages. **Private per user** — deliberately stricter than exercise. No assistant tool yet (§21). In the UI, Exercise + BP + Hikes group under a **Health** nav menu.
 
 ### 10.10 Hike Log Module
 
-A per-user log of Bruce Trail hikes, walked section by section. No shared catalog. Part of the **Health** navigation menu (§10.9).
-
-The application shall support:
-
-1. **Hike log (per user).** A hike has: `date`; `section` (e.g. Toronto, Niagara); segment `name`; optional `start_location` / `end_location` (map URLs); optional `start_time` / `end_time`; `distance_km` (required); `duration_minutes` (required); `notes` (optional).
-2. **Average speed.** Computed at write time and persisted as `distance_km ÷ (duration_minutes / 60)` km/h. Persisted for stability, like `work_score` / MAP.
-3. **List view** at `/hike`, newest first, with start/end map URLs rendered as outbound links.
-4. **Progress view** at `/hike/progress`: total distance, hike count, total time, average speed, and a per-section breakdown (most distance first) — reflecting progress along the trail section by section.
-5. **Per-user privacy.** Each adult sees and edits only their own hikes.
-6. **No assistant tool in the initial build** (deferred, see §21).
+Per-user Bruce Trail log (`/hike`): date, section, segment name, optional start/end map URLs and times, distance (required), duration (required), notes. Average speed computed at write time and persisted. Progress view (`/hike/progress`): total distance/count/time, average speed, per-section breakdown. Private per user. No assistant tool yet.
 
 ### 10.11 Household Tasks Module
 
-A **household-shared** board of chores at `/tasks` — deliberately *not* per-user, which distinguishes it from the personal logs (Exercise §10.7, Blood Pressure §10.9, Hikes §10.10) and from the to-do semantics already baked into grocery / meal / lunch. Any logged-in adult can view, create, edit, complete, or delete any task. This is the Phase 4 household-tasks feature (§21) shipped ahead of schedule.
+Household-shared chore board at `/tasks` — deliberately *not* per-user. A task: name, optional details, optional sticky assignee (nullable = anyone), frequency (`once` / every N day|week|month), `next_due_date`, `active` flag (archive without delete). To-do view ordered by due date, Overdue (red) / Due today (amber) flagged, header counts. One-click **Done** appends a completion record (who/when/which due date), then archives a one-off or rolls a recurring task forward **from the completion date** (late completion doesn't pile up). History at `/tasks/history`. Dashboard card shipped (§10.8). No assistant tool yet.
 
-The application shall support:
+Design decisions: history kept (not reset-on-done); assignee sticky (no rotation); overdue stays visible (no escalation/notification); recurrence anchors to completion date.
 
-1. **Task definition.** A task has: `name`; optional free-text `details`; an optional **assignee** (a `User` — the adult responsible; nullable = anyone); a **frequency** (`frequency_unit` ∈ once / day / week / month, and `frequency_count` for "every N units", e.g. laundry = every 1 week); a `next_due_date`; and an `active` flag (uncheck to archive without deleting).
-2. **To-do view** at `/tasks`, ordered by due date so overdue tasks float to the top, each flagged **Overdue** (red) or **Due today** (amber). Shows a header count of overdue / due-today / upcoming.
-3. **One-click Done.** Completing a task appends a completion record (who + when + the due date it satisfied), then: a **one-off** task is archived (`active = false`); a **recurring** task's `next_due_date` rolls forward from the **completion date** (so a chore done a little late doesn't pile up), keeping its assignee (sticky, no rotation).
-4. **Completion history** at `/tasks/history`: an append-only log of who completed what and when, newest first.
-5. **Settable assignee and frequency**, editable any time via the task form.
-6. **No assistant tool in the initial build** (deferred, see §21) — and no dashboard card yet.
+### 10.12 Horoscope Module — removed
 
-**Design decisions** (resolving the open points the roadmap flagged): completion **history** is kept (not reset-on-done); the assignee is **sticky** across recurrences (not rotated); overdue tasks **stay visible** and float to the top (no escalation / notification). Recurrence anchors to the completion date, not the prior due date.
+Built 2026-06-12, **removed entirely 2026-06-28** at the household's request: module, templates, `scripts/build_natal_facts.py`, Skyfield/lunardate deps, the natal-facts mount; migration `0022` drops `horoscope_readings`. Design highlights, for the record: code computed all chart facts deterministically (Skyfield + DE421; Vedic/Chinese/Western), the LLM wrote prose grounded strictly in supplied facts; birth data never left the laptop (derived facts only, in a gitignored mounted file); readings were lazily generated and cached per period window. Not planned to return; full spec in git history.
 
-### 10.12 Horoscope Module
+### 10.13 Lessons Module (kids' home learning)
 
-> **Removed 2026-06-28.** This module shipped and was then removed entirely (module, templates, `scripts/build_natal_facts.py`, the Skyfield/lunardate deps, the natal-facts mount, and the `horoscope_readings` table — dropped by migration `0022`). The design below is retained for historical reference only.
+Shipped 2026-06-29 (migration 0023) at `/lessons` — parent-curated learning for a kid, built for summer holidays; **the kid never logs in**. Household-shared (either adult edits). A **Lesson** (title, optional subject/description, status planned|in progress|done, optional date window) contains: ordered **learning objectives** (`done` + optional `scheduled_date` to spread across days), **resources** (label + link/note, attached to the lesson), and **exactly one test** (title, done, optional score/notes) — checking off the test is what completes the lesson. Decisions: always a final test; light per-objective `scheduled_date`, no calendar primitive; no FamilyMember FK (single-kid household; revisit if that changes); UI-only, assistant tools deferred. Distinct from lunch planning (food) and Projects (an adult's own initiatives).
 
-A **household-shared** section at `/horoscope` for **one birth profile**: readings in three traditions (Vedic, Chinese, Western) across eight period windows. Like Household Tasks (§10.11) it is common-area — any logged-in adult sees the same pages. This is the Phase 4 horoscope feature (§21) shipped at design time.
+### 10.14 Projects Module (personal tracker)
 
-The application shall support:
+Shipped 2026-06-29 (migration 0024, PR #2) at `/projects` — per-user, private. A **Project** (name; status idea|active|on hold|done|abandoned; optional goal, target date) has a **journal** of dated entries (note + optional link — no time/effort tracking, decided out) and dated, ordered **milestones** (title, optional target date, done + done-at). Completing a milestone auto-writes a journal line. No subtasks, no recurrence (recurring things belong to Household Tasks). UI-only; assistant tooling (`project.log_progress`, milestone tools, reads) deferred. Distinct from Memory (static facts) and Tasks (shared, recurring).
 
-1. **Hybrid generation — code computes, the LLM writes.** `horoscope/astro.py` computes all chart facts deterministically: planetary longitudes via Skyfield + the bundled JPL DE421 ephemeris (pure Python — chosen over `pyswisseph`, which needs a C toolchain everywhere); the ascendant, Lahiri ayanamsa (linear approximation around J2000), nakshatra/pada, the full 120-year Vimshottari maha/antar-dasha timeline, and the Chinese sexagenary year pillar as small classical formulas. Verified against a reference natal chart to ~1 arcminute. The LLM (existing gateway client, §16.7) writes one reading per tradition **grounded strictly in the supplied facts** — natal summary plus period transits (counted as whole-sign houses from the natal ascendant for Western, from the natal moon for Vedic gochara, with the running dasha; natal vs period year pillar for Chinese) — and is instructed to invent no positions.
-2. **Birth data never enters the cloud.** `scripts/build_natal_facts.py` runs **locally**, converts birth date/time/place into derived facts only (signs, nakshatra, dasha timeline, year pillar) at `Data/natal_facts.json`, and prints a summary to verify against a trusted chart source. The gitignored file is mounted **single-file, read-only** into the app container (`compose.yml` / `compose.cloud.yml`); raw birth details appear in no UI, DB row, repo, image, or LLM prompt. If the file is missing the section degrades to a setup hint.
-3. **Eight period windows** — today, tomorrow, this week, next week, this month, next month, this year, next year — each mapping to a stable cache key (`day` ISO date, `week` `YYYY-Www`, `month` `YYYY-MM`, `year` `YYYY`), so "tomorrow" simply becomes today's cache hit when its date arrives. Transit snapshots are taken at a representative moment (the day itself / Wednesday / the 15th / July 1); day-scale facts include the moon, year-scale facts narrow to Jupiter/Saturn/Rahu/Ketu.
-4. **Lazy generate-and-cache.** No background or scheduled generation. The landing page is a grid of the eight windows with ready/unrevealed badges; a period page serves cached readings, or shows a **Reveal** button whose POST generates all three readings in one LLM call, stores them in `horoscope_readings` (unique per system + period type + key), and redirects. Days nobody looks generate nothing and cost nothing.
-5. **Provenance and posture.** Each reading records the generating model and timestamp, shown in the card footer. **Entertainment only — descriptive, not advice** (§5 Non-Goal 4 posture); the page footer says so.
-6. **No assistant tool and no dashboard card** in the initial build (deferred, see §21).
-
----
-
-## 11. Embedded AI, Memory, and Retrieval Requirements
+## 11. Embedded AI, Memory, and Retrieval
 
 ### 11.1 AI Objective
 
-The AI layer reduces friction by letting the adults interact with the app through natural language. The assistant parses commands, retrieves relevant household context, recalls explicitly stored preferences, summarizes plans on request, and safely triggers structured backend actions.
-
-The AI layer is subordinate to deterministic application logic, schema validation, and user confirmation rules. The LLM never mutates application data directly.
+The assistant parses commands, retrieves household context, recalls stored preferences, summarizes on request, and safely triggers structured actions — always subordinate to deterministic app logic, schema validation, and confirmation rules. The LLM never mutates data directly.
 
 ### 11.2 AI Capabilities
 
-The AI layer shall support:
+Natural-language parsing; intent classification; entity extraction (dates, names, items, quantities); structured JSON conforming to published schemas; clarifying questions on ambiguity; context-grounded responses (memory + recent app data pre-loaded into the prompt); on-demand summarization; safe tool execution through backend services; full interaction logging (§11.10).
 
-1. Natural language command parsing.
-2. Intent classification.
-3. Entity extraction (dates, names, items, quantities, durations, kids).
-4. Structured JSON action generation that conforms to a published schema.
-5. Clarifying questions when input is ambiguous.
-6. Retrieval-augmented responses backed by memory + recent app data.
-7. Household and user memory retrieval (semantic + keyword).
-8. On-demand summarization (e.g., "what's planned this week?").
-9. Safe tool execution through backend APIs.
-10. AssistantInteraction logging (see Section 11.10).
+### 11.3 Example Commands
 
-### 11.3 Example Supported Commands
-
-Starter set; expand during implementation as more intents prove useful:
-
-- Add milk, apples, and bread to the grocery list.
-- Plan pasta for dinner on Tuesday.
-- Pack a turkey sandwich and apple for Leo on Wednesday.
-- Log 30 minutes of cycling today.
-- What do we need to prep tonight?
-- What is planned for tomorrow?
-- Remember that Maya does not like egg salad.
+"Add milk, apples, and bread to the grocery list." · "Plan pasta for dinner on Tuesday." · "Pack a turkey sandwich and apple for Leo on Wednesday." · "Log 30 minutes of cycling today." · "What can I make for dinner with what we have?" · "What is planned for tomorrow?" · "Remember that Maya does not like egg salad."
 
 ### 11.4 LLM Role
 
-The lightweight LLM is used for:
-
-1. Understanding natural language.
-2. Mapping requests to supported app intents.
-3. Extracting entities such as dates, names, items, quantities, and durations.
-4. Producing structured JSON outputs that pass schema validation.
-5. Generating summaries and suggestions using retrieved context, only when explicitly requested by the user.
-
-The LLM shall not directly mutate application data. All mutations go through validated backend services.
+Understand language, map to intents, extract entities, produce schema-valid JSON, and generate summaries from retrieved context on request. Nothing else.
 
 ### 11.5 Tool Execution
 
-The AI layer includes a tool registry that maps validated assistant outputs to backend actions. Each tool is a typed contract: parameters, JSON schema, and the backend handler it invokes.
-
-Starter tool set (expand as needed):
-
-1. `grocery.add_item` / `grocery.add_items`
-2. `grocery.mark_purchased`
-3. `meal_plan.create_entry`
-4. `lunch_plan.create_entry`
-5. `exercise.log_activity`
-6. `memory.create`
-7. `memory.search`
-
-Every tool call must pass:
-
-1. JSON schema validation against the published tool schema.
-2. Authentication check (the call is from one of the two logged-in adults).
-3. Module-specific business rules (e.g., a `lunch_plan.create_entry` call must reference an existing FamilyMember).
-4. The clarification policy in Section 11.5a.
-5. The confirmation policy in Section 11.6.
+Current tool set (expand as flows demand — §21): `grocery.add_items`, `grocery.mark_purchased`, `meal_plan.create_entry`, `lunch_plan.create_entry`, `exercise.log_activity`, `memory.create`, `memory.search`. Every call must pass: Pydantic schema validation → authentication → module business rules (e.g. lunch entries need an existing FamilyMember) → the clarification policy (§11.5a) → the confirmation policy (§11.6).
 
 ### 11.5a Clarification Policy
 
-Before any tool is called, the assistant must decide whether the user's request is actionable, ambiguous, or invalid. This policy governs that decision and applies to every tool — `grocery.*`, `meal_plan.*`, `lunch_plan.*`, `exercise.*`, `memory.*` — not just grocery. The goal is honest UX: never claim to have done something the system did not actually do, and never interrupt the user for information the schema does not require.
+Honest UX: never claim to have done something the system didn't do; never pester for schema-optional fields.
 
-Three cases:
+1. **Optional fields missing** → don't ask; sensible silent defaults ("add milk and bread" → two name-only items).
+2. **Genuinely ambiguous** → return `tool_calls: []` + a short clarifying question. Ambiguity includes: multiple matching records in context; a required-by-schema field absent; conflict with a hard-restriction memory; an exercise name not in the catalog; self-contradicting quantities.
+3. **Server-side validation failure** → the gateway overwrites any optimistic reply (the LLM sometimes says "added" for a malformed call) with a clarification request, and logs `error_log`.
 
-1. **Schema-optional fields are missing.** The assistant must NOT ask for information that is optional in the tool's args schema. If the user says "add milk and bread," the assistant calls `grocery.add_items` with `[{name: "milk"}, {name: "bread"}]` and does not pester for quantity, unit, or category. Sensible silent defaults beat naggy prompts.
-
-2. **The user's request is genuinely ambiguous.** When the assistant cannot resolve the request without making an arbitrary choice, it must return `tool_calls: []` and a short clarifying question in `reply`. Ambiguity includes:
-   - Multiple matching records in CONTEXT (e.g., "remove the milk" when two milks are open).
-   - A required-by-schema field absent from the input (e.g., "schedule dinner Saturday" with no title).
-   - A request that would conflict with a hard restriction in memory (e.g., packing peanuts for a child whose memory shows a peanut restriction).
-   - An exercise activity name that does not match any catalog entry case-insensitively.
-   - A unit/quantity that contradicts itself or context (e.g., "log a 0-minute run").
-
-3. **A tool call fails server-side validation.** When Pydantic rejects the assistant's proposed call, the gateway MUST overwrite any optimistic reply text (the LLM will sometimes produce "items added" even when its call was malformed) and surface a clarification request instead of letting a false-success message reach the user. The interaction must be logged with `error_log` so the failure is auditable.
-
-**Phasing.** The clarification policy ships in three tiers; later tiers strengthen the earlier ones without breaking them:
-
-- **Phase 1 — Prompt-time examples.** The system prompt carries worked examples of correct and ambiguous inputs for every module (one per module minimum), so the small LLM has concrete patterns to imitate. Highest leverage, cheapest change.
-- **Phase 2 — Single self-repair retry on validation failure.** When validation fails, the gateway feeds the error back to the LLM once ("Your previous call failed validation: <error>. Either correct it or ask the user for clarification.") and accepts the second response. Capped at one retry to bound latency and cost.
-- **Phase 3 — Multi-turn clarification threads.** `AssistantInteraction` gains a `thread_id`; a new `confirmation_status = "pending_clarification"` lets the user's next message resume the same context. Enables true conversational follow-up ("which milk?" → "the 2%" → tool call fires).
-
-Phases 2 and 3 are explicitly out of MVP scope; Phase 1 is required for MVP behavior to feel honest.
+Phasing: **Phase 1 (shipped)** — worked prompt examples per module. **Phase 2** — one self-repair retry feeding the validation error back to the LLM. **Phase 3** — multi-turn clarification threads (`thread_id`, `pending_clarification` status). 2 and 3 are backlog (§21).
 
 ### 11.6 Confirmation Policy
 
-Assistant-triggered actions are classified by risk. Risk tier determines whether the user must explicitly confirm before the backend mutates data.
+- **Low — execute immediately after validation:** reads; single-entry creates; mark/unmark purchased; a single non-hard-restriction memory.
+- **Medium — confirm first:** bulk (more than 3 items or more than 3 tool calls in one request); any update to an existing entry; any single delete. *(Update/delete tools don't exist yet; the bulk rules are live in `risk.py`.)*
+- **High — confirm with a clear summary:** bulk delete; creating, deleting, or modifying a hard-restriction memory.
 
-#### Low-Risk — execute immediately after validation
+The UI presents medium/high as a confirmation card with the proposed calls and Approve / Cancel.
 
-- Read queries ("What's planned today?", "What does Maya not like?").
-- Single-entry creates (one grocery item, one meal, one lunch, one exercise log).
-- Mark / unmark purchased on a grocery item.
-- Create a single memory.
+### 11.7 Memory
 
-#### Medium-Risk — require confirmation before execution
+Explicit, inspectable, editable. All memory is user- or assistant-created on request; inferred memories (AI guessing from usage) are phase 2 with review.
 
-- Bulk creates (more than 3 items in one call, or full-week plan generation).
-- Any update to an existing entry (edit a meal, edit a lunch, edit a memory).
-- Any single-entry delete.
+- **Subject:** `household` | `user` | `family_member` (+ subject_id).
+- **Type:** `preference` | `food_preference` | `restriction` | `routine` | `planning_constraint` | `frequently_used`.
+- **Fields:** content (free text), `is_hard_restriction` (inviolable; edits/deletes follow the High tier — allergies are the canonical case), source, tags, timestamps.
+- Full CRUD + keyword search + subject/type/tag filters. Archiving/expiration: phase 2.
 
-#### High-Risk — require explicit confirmation with a clear summary of what will change
+### 11.8 Vector Retrieval — deferred
 
-- Bulk delete (more than one entry in one call).
-- Deletion or modification of a memory tagged as a hard restriction or allergy.
+pgvector was the MVP plan (embed memory content + plan notes; background generation; synchronous retrieval). **Not built:** household memory counts are small enough that the ~50 most recent memories go straight into the prompt. The `pgvector/pgvector:pg16` image keeps the door open; embeddings become a clean additive migration when scale demands (§21 Phase 3).
 
-The assistant UI presents Medium- and High-Risk actions as a confirmation card showing the parsed intent and exact records that will be affected, with an Approve / Edit / Cancel choice.
+### 11.9 Object Storage — deferred
 
-### 11.7 Memory Requirements
-
-The system supports explicit, inspectable, and editable memory. All memory in MVP is explicit — created by a user directly or by the assistant on the user's request. Inferred memories (the AI guessing preferences from usage patterns) are deferred to phase 2 with a review workflow.
-
-Memory subject (who the memory is about):
-
-1. `household` — applies to the household as a whole.
-2. `user` — applies to one of the two adults.
-3. `family_member` — applies to one kid.
-
-Memory type taxonomy (starter set; expand as needed):
-
-1. `preference` — soft preference (e.g., "we like one-pot meals on weekdays").
-2. `food_preference` — likes / dislikes (e.g., "Maya does not like egg salad").
-3. `restriction` — hard rule (allergies, dietary, religious). See `is_hard_restriction` below.
-4. `routine` — recurring household pattern (e.g., "we usually shop Sunday morning").
-5. `planning_constraint` — rule the AI must apply when planning (e.g., "no eggs on weekdays").
-6. `frequently_used` — items / meals / activities that recur often.
-
-Each memory record carries:
-
-- Subject (subject_type + subject_id).
-- Type (from the taxonomy above).
-- Content (free text — the actual memory).
-- `is_hard_restriction` (boolean) — when true, the memory must be treated as inviolable and any edit or deletion follows the High-Risk confirmation tier (Section 11.6). Allergies are the canonical case.
-- Source (who or what created it; e.g., user, assistant, deployment seed).
-- Tags (free-form labels for module association, search, etc.).
-- Timestamps.
-
-The system shall support:
-
-1. Create, view, edit, delete a memory.
-2. Search memories (keyword + semantic).
-3. Tag memories by module.
-4. Associate memories with subjects (household / user / family_member).
-5. Store the source of every memory.
-
-Archiving / expiration of outdated memories is deferred to phase 2.
-
-### 11.8 Vector Retrieval Requirements
-
-The app supports vector-based semantic retrieval for AI-assisted features. PostgreSQL with the `pgvector` extension is the MVP choice — a dedicated vector database is not used in MVP (see Section 16.5).
-
-MVP embedding surface:
-
-1. Memory records (content field).
-2. Free-text `notes` fields on meal plan and lunch plan entries.
-
-Other embedding surfaces (recipes, lunch templates, uploaded document chunks, past plan summaries) are introduced in later phases as the features that produce that content arrive.
-
-Embedding generation runs in a background worker; retrieval is synchronous on the read path.
-
-### 11.9 Object Storage
-
-Object storage is deferred from MVP. No file uploads, attachments, or images are accepted by any MVP module. When phase 2 / 3 introduces recipes and document ingestion, S3-compatible storage will be added. The MVP architecture does not preclude this — see Section 16.6.
+No uploads, attachments, or images anywhere. S3-compatible storage arrives with phase 2/3 ingestion features.
 
 ### 11.10 AssistantInteraction Logging
 
-Every assistant interaction is logged at two granularities:
+Two granularities, together the primary AI debugging surface:
 
-**Per-request (`AssistantInteraction`).** One row per assistant call, capturing the end-to-end outcome:
+- **`AssistantInteraction`** — one row per call: timestamp, user, raw input, reply (possibly gateway-overwritten), proposed tool calls, confirmation status (auto | pending_confirmation | approved | cancelled), executed calls + outcomes, affected record IDs, latency, error_log.
+- **`InteractionTrace`** — one row per pipeline-stage event (input, context, llm, validation, risk, decision, execution, persist, confirm, cancel): `stage`, `event`, monotonic `ts_ms`, free-form JSONB payload (adding fields needs no migration). Indexed on (interaction_id, ts_ms) — one ordered scan reconstructs a request.
+- **Trace viewer** at `/assistant/interactions/{id}/trace`: vertical timeline, stage pills, expandable payloads. Owner-only; another user's id 404s (not 403) to avoid leaking existence.
 
-1. Timestamp and the user who issued the command.
-2. Raw user input.
-3. Parsed intent and extracted entities.
-4. Proposed tool calls (JSON).
-5. Confirmation status (auto / pending_confirmation / approved / cancelled).
-6. Executed tool calls and their outcomes (success / validation failure / runtime error).
-7. Resulting record IDs created or modified.
-8. End-to-end latency.
+## 12. Data Model
 
-**Per-stage (`InteractionTrace`).** Many rows per interaction, one per pipeline stage event (input, context, llm, validation, risk, decision, execution, persist, confirm, cancel). Each row stores `stage`, `event`, a monotonic offset `ts_ms`, and a free-form JSONB payload. The (stage, event) pair names *which layer* made *which* decision — so a misbehaving assistant call can be reconstructed with one query keyed on `interaction_id`, instead of re-running with print statements.
+Single implicit household; no Household/HouseholdMember/AuditLog entities. Authoritative schema: `alembic/versions/` (0001–0024) and each module's `models.py`. Summary of entities and their non-obvious decisions:
 
-**Trace viewer.** Every row of the assistant history at `/assistant` links to a per-interaction trace page at `/assistant/interactions/{id}/trace`. The page renders the stage sequence as a vertical timeline with color-coded stage pills, monotonic offsets, and click-to-expand JSON payloads. Owner-only: a `GET` for another user's interaction returns `404` (not `403`) to avoid leaking existence.
-
-Together, these are the primary debugging surface for the AI layer — for understanding parse failures, tracing how user commands translate to database mutations, and iterating on prompts. Sensitive content (e.g., memory content quoted in inputs) should be reviewed before any future log export.
-
----
-
-## 12. Data Model Draft
-
-### 12.1 Core Entities
-
-The data model assumes a single implicit household. There is no `Household` or `HouseholdMember` entity in MVP. If multi-household support is ever needed it is a future migration (see Section 21).
-
-`Task`, `Reminder`, and `AuditLog` from earlier drafts are removed in MVP (reminders/tasks dropped; the AssistantInteraction log covers the AI-debugging need).
-
-#### User
-
-- id
-- name
-- email
-- password_hash
-- body_weight (nullable decimal; used by exercise scoring — see §10.7)
-- created_at
-- updated_at
-
-Two rows, seeded at deployment.
-
-#### FamilyMember
-
-- id
-- name
-- notes (text, free-form)
-- school_days (jsonb — array of weekday names)
-- created_at
-- updated_at
-
-Food preferences, allergies, restrictions, and dislikes for a FamilyMember are stored as `Memory` records subject-tagged to the member — not as columns on this table.
-
-#### GroceryItem
-
-- id
-- name
-- category (e.g., produce, dairy, pantry, household)
-- quantity
-- unit
-- status (open | purchased)
-- notes
-- added_by_user_id
-- purchased_by_user_id (nullable)
-- created_at
-- updated_at
-
-#### MealPlanEntry
-
-- id
-- date
-- meal_type (breakfast | lunch | dinner | snack)
-- title
-- notes
-- is_favorite (boolean)
-- created_by_user_id
-- created_at
-- updated_at
-
-#### LunchPlanEntry
-
-- id
-- family_member_id (FK → FamilyMember)
-- date
-- items (jsonb — array of `{name, notes?}` objects)
-- notes (lunch-level notes)
-- packed_status (planned | packed)
-- created_by_user_id
-- created_at
-- updated_at
-
-#### Exercise (catalog)
-
-- id
-- name (unique per household)
-- body_group (upper | lower | core | cardio)
-- muscle_groups (jsonb — array of strings; freeform tags in MVP)
-- scoring_type (weighted | distance | bodyweight_fraction)
-- bodyweight_fraction (decimal; only meaningful when scoring_type = bodyweight_fraction; default 1.0)
-- created_at
-- updated_at
-
-Catalog is shared across both adults. Not pre-seeded; user populates as needed.
-
-#### ExerciseLog (per-session)
-
-- id
-- user_id (FK → User)
-- exercise_id (FK → Exercise)
-- date
-- sets (nullable int)
-- reps (nullable int)
-- weight (nullable decimal — for `weighted` scoring)
-- distance_km (nullable decimal — for `distance` scoring)
-- duration_minutes (nullable int — optional on any log)
-- work_score (decimal; computed and persisted at write time using the formulas in §10.7)
-- notes
-- created_at
-- updated_at
-
-Persisting `work_score` is deliberate: if a user later updates their body weight, the historical score on prior log rows stays stable so week-over-week comparisons aren't retroactively distorted.
-
-#### BloodPressureReading (per-user)
-
-- id
-- user_id (FK → User)
-- date
-- reading_time (nullable time)
-- systolic (int — mmHg)
-- diastolic (int — mmHg)
-- heart_rate (nullable int — bpm)
-- map_value (decimal; computed and persisted at write time as (systolic + 2 × diastolic) / 3)
-- notes
-- created_at
-- updated_at
-
-Private to the owner (each adult sees only their own). MAP is persisted for the same reason as `work_score` — derived values are stored, not recomputed. The category label (normal … crisis) is derived on read from systolic/diastolic, not stored. See §10.9.
-
-#### Hike (per-user)
-
-- id
-- user_id (FK → User)
-- date
-- section (string)
-- name (string)
-- start_location (nullable text — map URL)
-- start_time (nullable time)
-- end_location (nullable text — map URL)
-- end_time (nullable time)
-- distance_km (decimal)
-- duration_minutes (int)
-- speed_kmh (decimal; computed and persisted at write time as distance_km ÷ (duration_minutes / 60))
-- notes
-- created_at
-- updated_at
-
-Private to the owner. Speed is persisted for stability. See §10.10.
-
-#### HouseholdTask (household-shared)
-
-- id
-- name (string)
-- details (nullable text)
-- assignee_id (nullable FK → User, ON DELETE SET NULL — the adult responsible; null = anyone)
-- frequency_unit (string: once | day | week | month)
-- frequency_count (int — "every N units"; ignored for `once`)
-- next_due_date (date, indexed)
-- last_completed_at (nullable timestamp — denormalized snapshot for quick display)
-- last_completed_by_id (nullable FK → User, ON DELETE SET NULL)
-- active (boolean — false archives a task without deleting it; one-off tasks set this false on completion)
-- created_at
-- updated_at
-
-Household-shared (no `user_id` scope) — any adult can read/write. This is the one post-MVP module that is *not* per-user, by design. See §10.11.
-
-#### HouseholdTaskCompletion (household-shared)
-
-- id
-- task_id (FK → HouseholdTask, ON DELETE CASCADE, indexed)
-- completed_at (timestamp)
-- completed_by_id (nullable FK → User, ON DELETE SET NULL)
-- due_on (nullable date — the due date this completion satisfied; preserved even after the task's `next_due_date` rolls forward)
-
-An append-only completion log (the dated-entries pattern, like the personal logs) backing the history view. See §10.11.
-
-#### HoroscopeReading (household-shared) — removed 2026-06-28 (table dropped by migration 0022)
-
-- id
-- system (string: vedic | chinese | western)
-- period_type (string: day | week | month | year, indexed)
-- period_key (string, indexed — `2026-06-12` / `2026-W24` / `2026-06` / `2026`)
-- content (text — the reading)
-- model (nullable string — generating LLM, for provenance)
-- generated_at (timestamp)
-
-Unique on (system, period_type, period_key). A lazy cache, not a log: rows are written on first reveal and never updated. Deliberately contains no birth data and no user scope — the natal facts live outside the DB entirely (mounted file, see §10.12). See §10.12.
-
-#### Memory
-
-- id
-- subject_type (household | user | family_member)
-- subject_id (nullable when subject_type = household)
-- memory_type (preference | food_preference | restriction | routine | planning_constraint | frequently_used)
-- content (text)
-- is_hard_restriction (boolean)
-- source (e.g., user | assistant | deployment_seed)
-- tags (jsonb — array of strings)
-- created_by_user_id (nullable; null when seeded)
-- created_at
-- updated_at
-
-Memories with `is_hard_restriction = true` follow the High-Risk confirmation tier for any edit or delete (Section 11.6).
-
-#### EmbeddingRecord
-
-- id
-- source_type (memory | meal_plan_note | lunch_plan_note)
-- source_id
-- embedding (pgvector `vector` type)
-- metadata (jsonb)
-- created_at
-- updated_at
-
-Embeddings are generated in a background worker after the source record is written or updated. The retrieval path reads from this table.
-
-#### AssistantInteraction
-
-- id
-- user_id
-- created_at
-- input_text
-- reply (text — user-facing reply, possibly overwritten by gateway on validation failure)
-- parsed_intent (jsonb)
-- parsed_entities (jsonb)
-- proposed_tool_calls (jsonb)
-- confirmation_status (auto | pending_confirmation | approved | cancelled)
-- executed_tool_calls (jsonb — array with per-call outcomes)
-- affected_record_ids (jsonb)
-- latency_ms (integer)
-- error_log (text, nullable)
-
-#### InteractionTrace
-
-Per-stage observability for one `AssistantInteraction`. One row per stage event inside `process_command` / `confirm_pending` / `cancel_pending`.
-
-- id
-- interaction_id (FK → assistant_interactions.id, ON DELETE CASCADE)
-- created_at
-- ts_ms (integer — monotonic offset in milliseconds from request start)
-- stage (string — input | context | llm | validation | risk | decision | execution | persist | confirm | cancel)
-- event (string — e.g., received, built, call_started, call_succeeded, call_failed, completed, classified, auto, validation_error, pending_confirmation, interaction_saved, approved, cancelled)
-- payload (jsonb — free-form per-event detail; adding fields does not require a migration)
-
-Indexed on (interaction_id, ts_ms) so reconstructing a single request's lifecycle is one ordered scan.
-
----
+- **User** ×2, seeded from `.env`; carries `body_weight` for exercise scoring.
+- **FamilyMember** — name, notes, school_days. Preferences/allergies live in Memory, not columns.
+- **GroceryItem** — name, category, quantity, unit, status open|purchased, notes, added_by/purchased_by.
+- **Recipe** (§10.5) — name (unique), meal_type, ingredients (JSONB list of names), optional instructions/notes, coarse nullable calories/protein_g. No FK from plan entries.
+- **MealPlanEntry** — date, meal_type, free-text title, notes, is_favorite, created_by.
+- **LunchPlanEntry** — family_member FK, date, items (JSONB `{name, notes?}` list), notes, packed_status (unsurfaced), created_by.
+- **Exercise** (catalog) + **ExerciseLog** — per §10.7; `work_score` persisted at write time so later body-weight edits don't distort history.
+- **BloodPressureReading** — per §10.9; `map_value` persisted, category derived on read.
+- **Hike** — per §10.10; `speed_kmh` persisted.
+- **HouseholdTask** + **HouseholdTaskCompletion** — per §10.11; completion log is append-only; task denormalizes last_completed for display; assignee FKs `ON DELETE SET NULL`.
+- **Lesson / LearningObjective / LessonResource / LessonTest** — per §10.13.
+- **Project / ProjectMilestone / ProjectEntry** — per §10.14.
+- **Memory** — per §11.7; `subject_type`/`subject_id` is polymorphic (no FK — orphan cleanup deliberately punted, see §21 notes).
+- **AssistantInteraction / InteractionTrace** — per §11.10.
+- ~~EmbeddingRecord~~ — never built (§11.8). ~~HoroscopeReading~~ — dropped by migration 0022 (§10.12).
 
 ## 13. Permissions Model
 
-There are no roles in MVP. Both pre-seeded adult users have identical capabilities across all modules (groceries, meal plan, lunch plan, exercise log, memory, and assistant). The only access check at the API layer is "is the request from an authenticated user."
-
-Role-based access control is a future-phase concern (see Section 21) and is intentionally not designed-in for MVP.
-
----
+No roles. Both adults have identical capabilities; the only API-layer check is "authenticated user". Per-user privacy where it exists (exercise log, BP, hikes, projects, assistant history) is ownership scoping, not roles. RBAC is a phase-5 concern, deliberately not designed in.
 
 ## 14. User Experience Requirements
 
-### 14.1 Phone Experience
-
-The phone interface supports quick actions:
-
-1. Add grocery item.
-2. Mark grocery item purchased.
-3. Use assistant command input.
-4. View today's plan (meals + this week's lunches).
-5. Log exercise.
-6. Check / mark a school lunch as packed.
-
-Design pattern:
-
-1. Bottom navigation.
-2. Large touch targets.
-3. Simple daily view.
-4. Persistent or easily accessible assistant input.
-
-### 14.2 Laptop Experience
-
-The laptop interface supports planning workflows:
-
-1. Weekly meal planning grid.
-2. Grocery list management with category filtering.
-3. Lunch planning by FamilyMember across a week.
-4. Dashboard overview.
-5. Bulk editing.
-6. Memory review and management (list, search, edit, delete).
-
-Design pattern:
-
-1. Sidebar navigation.
-2. Multi-column layouts.
-3. Calendar-style planning views for meals and lunches (visual grid; not a calendar module).
-4. Tables and filters where useful.
-
-### 14.3 Assistant Interaction UX
-
-The assistant is accessible through a universal input area, visible on both phone and laptop layouts.
-
-The assistant UI shall support:
-
-1. Typed commands.
-2. Suggested actions (when the parsed intent has alternatives).
-3. Clarifying questions (when input is ambiguous).
-4. Confirmation cards for Medium- and High-Risk actions (Section 11.6) — showing parsed intent + records that will be affected + Approve / Edit / Cancel.
-5. Execution feedback (success, validation error, runtime error).
-6. Links to affected app records after execution.
-
-Voice input is deferred to a later phase.
-
----
+**Phone:** quick actions — add/purchase grocery, assistant input, today's plan, log exercise. Large touch targets, simple daily views. **Laptop:** planning workflows — weekly meal/lunch grids, list management, memory review. **Assistant UX:** typed commands; clarifying questions; confirmation cards for medium/high risk; execution feedback with links to affected records. Voice input deferred.
 
 ## 15. Non-Functional Requirements
 
 ### 15.1 Security
 
-The system shall provide:
-
-1. HTTPS-only access in production.
-2. Secure password hashing (Argon2id or bcrypt with sensible parameters).
-3. Secure session management (HTTP-only, Secure, SameSite cookies; server-side session store).
-4. Input validation on every API and tool boundary.
-5. Protection against common web vulnerabilities (CSRF on state-changing endpoints, output encoding, parameterized queries).
-6. Secure handling of assistant interaction logs and memory data (no third-party log shipping in MVP).
+HTTPS-only in production; Argon2id password hashing; server-side sessions (HTTP-only, Secure, SameSite cookies); validation at every API and tool boundary; CSRF on all state-changing endpoints; parameterized queries; no third-party log shipping.
 
 ### 15.2 Privacy
 
-The system shall:
-
-1. Treat household data as private by default. Public exposure is not a goal.
-2. Let the adults inspect, edit, and delete any stored AI memory.
-3. Never send household data to third-party LLM providers by default. The MVP uses a self-hosted LLM (Section 16.8). If a third-party LLM is ever used, it is an explicit opt-in.
-4. Support future data export and deletion workflows (designed-in but not built in MVP).
+Household data is private by default; memories are inspectable/editable/deletable. **LLM posture (revised 2026-06-28):** the original PRD required a self-hosted LLM with no third-party calls. The home-GPU/Ollama stack was retired and the app is now OpenRouter-only — an explicit, deliberate opt-in: prompts (including household context and memories) leave the network to the chosen provider, mitigated by picking models/providers with no-retention policies. Data export/deletion workflows remain designed-in but unbuilt.
 
 ### 15.3 Performance
 
-The system should:
-
-1. Load common phone screens quickly (target: under 2s on a typical home Wi-Fi).
-2. Support fast grocery list interactions (perceived sub-second add/check-off).
-3. Return common assistant command responses with low latency (target: under 3s end-to-end for a simple add/log command).
-4. Use background processing for embedding generation and indexing.
-5. Degrade gracefully when the AI service is unavailable — the rest of the app stays usable.
+Common screens fast on phone Wi-Fi (<2 s); sub-second-feeling grocery interactions; simple assistant commands target <3 s end-to-end; the app degrades gracefully when the LLM is unavailable — everything except the assistant keeps working.
 
 ### 15.4 Reliability
 
-The system should:
-
-1. Run automated database backups on a schedule appropriate to the deployment (at least daily for MVP).
-2. Avoid data loss during deployments (migrations run forward-compatible; downtime is acceptable for MVP).
-3. Log application errors with enough context to debug.
-4. Monitor service health (the LLM runtime, the app, the database).
-5. Keep core app functions (grocery list, meal plan, lunch plan, exercise log) usable even if the AI service is temporarily unavailable.
+Automated daily DB backups with rotation and off-box copies (see `OPERATIONS.md`); forward-only migrations with a pre-migrate dump in the deploy script; structured error logging; health checks per container; core modules stay usable during AI outages.
 
 ### 15.5 Accessibility
 
-The system should:
-
-1. Use readable typography.
-2. Provide sufficient contrast.
-3. Support keyboard navigation where practical.
-4. Use large mobile tap targets.
-5. Avoid workflows that require precise gestures only.
-
----
+Readable typography, sufficient contrast, keyboard navigation where practical, large tap targets, no precise-gesture-only workflows.
 
 ## 16. Technical Architecture
 
-### 16.1 High-Level Architecture
+### 16.1 High-Level
 
-```text
-Browser (phone + laptop)
-        |
-        v
-+---------------------------------+
-| FastAPI app                     |
-|   - Auth + session              |
-|   - Module routers              |
-|     (grocery, meal_plan,        |
-|      lunch_plan, exercise,      |
-|      memory, assistant)         |
-|   - HTML rendering              |
-|     (Jinja2 + HTMX)             |
-|   - AI Gateway (in-process)     |
-+--------+----------+-------------+
-         |          |
-         v          v
-   Postgres     Ollama (sidecar
-   + pgvector   container)
-                  |
-                  v
-              served models
-              (instruct + embedding)
-
-   ^
-   |
-Background worker (embedding generation)
-```
-
-The AI Gateway is in-process within the FastAPI app in MVP. Its responsibilities are isolated behind a clean Python module boundary (`ai_gateway/`) so it can be split into a sidecar service later if needed.
-
-This logical architecture is deployment-agnostic. The same Docker Compose stack runs on either a home machine or a rented cloud VM (see Section 17). Deployment topology is selected at deploy time via env vars and compose overrides; application code is identical between targets.
+One FastAPI app (auth, module routers, HTML rendering, in-process AI Gateway) → Postgres (+pgvector image, unused vector features) — with LLM calls going out to OpenRouter over HTTPS. See `ARCHITECTURE.md` for the code-level map. The gateway is isolated behind a module boundary so it could become a sidecar service later.
 
 ### 16.2 Frontend
 
-The frontend is server-rendered HTML with progressive interactivity. No SPA, no JS bundler complexity beyond what Tailwind requires.
-
-Stack:
-
-1. **Jinja2** templates for HTML rendering.
-2. **HTMX** for partial-update interactions (replace fragments without full page reloads).
-3. **Alpine.js** for small bits of local UI state (dropdowns, modal toggles).
-4. **Tailwind CSS** for styling.
-5. Mobile-first responsive layout. Phone layout uses bottom navigation; laptop layout uses sidebar navigation.
+Server-rendered Jinja2 + HTMX (lightly used) + Alpine.js + Tailwind via CDN. No SPA, no bundler. Mobile-first responsive.
 
 ### 16.3 Backend
 
-Stack:
+FastAPI (Python 3.11+), SQLAlchemy 2.x, Alembic, Pydantic v2 (tool schemas + settings), session cookie auth. One package per feature module. Background workers: none needed yet.
 
-1. **FastAPI** (Python 3.11+).
-2. **SQLAlchemy 2.x** (or SQLModel) for ORM.
-3. **Alembic** for database migrations.
-4. **Pydantic v2** for request validation and AI tool schemas (shared models).
-5. Session-based auth via secure HTTP-only cookies; sessions stored server-side (database or Redis).
-6. Background tasks via FastAPI `BackgroundTasks` for simple cases; an ARQ or RQ worker if a real queue is needed (e.g., for embedding generation).
+### 16.4–16.6 Data stores
 
-Project structure: each feature module is a Python package (`grocery/`, `meal_plan/`, `lunch_plan/`, `exercise/`, `memory/`, `assistant/`, `ai_gateway/`) with its own router, models, services, and (where applicable) AI tool definitions.
-
-### 16.4 Database
-
-- **PostgreSQL 16+**.
-- **pgvector** extension for embedding storage and similarity search.
-- A single database holds app data and embeddings.
-
-### 16.5 Vector Database
-
-pgvector inside the primary Postgres database for MVP. A dedicated vector database is not used in MVP. It would only become worthwhile if retrieval scale or performance ever required it — unlikely at single-household scale.
-
-### 16.6 Object Storage
-
-Object storage is deferred. When phase 2 or 3 introduces it (recipes, document ingestion, attachments), the implementation will be S3-compatible — concretely either:
-
-1. Cloudflare R2 (cheap, no egress fees).
-2. AWS S3.
-3. Self-hosted MinIO if running fully on rented metal.
+PostgreSQL 16 (pgvector image); a single database. Dedicated vector DB: not warranted at household scale. Object storage: deferred (would be S3-compatible — R2/S3/MinIO).
 
 ### 16.7 AI Gateway
 
-> **Superseded 2026-06-28.** The app is now OpenRouter-only (cloud, OpenAI-compatible API) via `OpenRouterClient`; the local Ollama runtime, the home-GPU box, and `compose.yml`/`compose.gpu.yml` were retired. References to Ollama, GPU/VRAM, embedding generation (not yet wired), and local model serving in §16–§17 describe the original design, kept for historical reference. The `LLMClient` Protocol, gateway flow, and offline mock are unchanged.
-
-The AI Gateway is a Python module (`ai_gateway/`) inside the FastAPI app. Its responsibilities:
-
-1. Prompt template loading and rendering.
-2. LLM calls via Ollama's OpenAI-compatible API (or the offline mock in `llm_mock.py` when `USE_MOCK_LLM=true`).
-3. Embedding generation via Ollama's embedding endpoint (e.g., `nomic-embed-text`).
-4. Retrieval orchestration over Memory + meal/lunch notes (pgvector similarity + optional keyword fallback).
-5. Tool schema validation (Pydantic).
-6. Tool execution dispatch into the relevant module's service layer.
-7. Confirmation policy enforcement (Section 11.6).
-8. AssistantInteraction logging (Section 11.10).
-9. Per-stage tracing (`tracing.py`): every pipeline stage (input, context, llm, validation, risk, decision, execution, persist, confirm, cancel) emits one or more rows into `interaction_traces` keyed on the parent interaction id. See Section 11.10.
-
-The Gateway exposes a single internal entry point (`ai_gateway.process_command(user, input_text) → AssistantInteraction`) consumed by the assistant router.
+In-process module (`ai_gateway/`): prompt building with pre-fetched context; LLM calls through the `LLMClient` Protocol — `OpenRouterClient` (OpenAI-compatible `/chat/completions`, JSON response format) or the offline `MockLLMClient` when `USE_MOCK_LLM=true`; Pydantic tool validation; dispatch into module service layers; confirmation policy (§11.6); interaction logging + per-stage tracing (§11.10). Entry point `process_command(user, input_text)` consumed by the assistant router.
 
 ### 16.8 Model Runtime
 
-**Ollama** running in its own container alongside the FastAPI app. Communication over Ollama's HTTP API (OpenAI-compatible).
+**OpenRouter** (cloud, per-token) — sole runtime since 2026-06-28; the model is `OPENROUTER_MODEL` in `.env`, chosen for JSON-output reliability and a no-retention provider policy. The original design ran Ollama in a sidecar container on a home GPU box (with a planned local embedding model); it was retired along with `compose.yml`/`compose.gpu.yml` — history in git. The offline mock (`llm_mock.py`) survives unchanged: keyword-driven scenarios plus `force_mode` failure hooks, each paired with the defense layer it exercises.
 
-For MVP, two models are served:
+## 17. Deployment
 
-1. An **instruct model** for command parsing and summarization. Evaluation candidates: Llama 3.2 3B Instruct, Phi-3.5 mini (3.8B), Qwen 2.5 3B Instruct. Choose during build based on JSON-output reliability against the actual tool schemas. Quantized (Q4_K_M is a sensible default).
-2. An **embedding model** for memory + notes embeddings. Candidates: `nomic-embed-text`, `mxbai-embed-large`.
+**Live topology (since 2026-06): a single cloud VPS (Hetzner)** running `compose.cloud.yml` — app + Postgres + Caddy (Let's Encrypt against the public domain), chat via OpenRouter. Config via `.env`; healthchecks + `restart: unless-stopped`; deploy/rollback/backup scripts in `scripts/` (see `OPERATIONS.md`).
 
-Larger models, hybrid local/cloud routing, or task-specific model fine-tuning are deferred to later phases. Structured JSON output is enforced via either Ollama's JSON mode or a library-side constrained-decoding pass (Instructor/Outlines) — to be decided during build.
+The PRD originally specced two topologies — home GPU box first (Tailscale + internal CA + local Ollama), cloud later — kept portable via env-only differences. That migration happened and the home topology was retired 2026-06-28; the portability discipline that made it a config swap (named volumes, no hardcoded hostnames, `APP_BASE_URL`, Caddy in front in all cases) still stands. §§17.1–17.9 detail from the two-topology era is in git history.
 
-**Offline mock.** For UI development on no-GPU machines and for end-to-end tests that exercise specific failure paths without Ollama running, the same `LLMClient` Protocol is implemented by `ai_gateway/llm_mock.py`. Setting `USE_MOCK_LLM=true` in `.env` swaps in `MockLLMClient`, which routes input by keyword to canned responses and supports a `force_mode` hook (`blank_name`, `unknown_tool`, `bad_args_shape`, `hallucinated_fk`, `hard_restriction`, `bulk_grocery`, `crash`, `prompt_injection_echo`). Each failure mode is paired with the defense layer it's meant to exercise.
+Still-relevant evolution options: managed Postgres, dedicated object storage when phases land. Kubernetes is explicitly not on this roadmap.
 
----
+### 17.10 Shared edge: multi-tenant Caddy (live since 2026-07-12)
 
-## 17. Deployment Requirements
+The cloud VM hosts more than this app, and the Caddy service in `compose.cloud.yml` is the shared edge for all of it. This repo owns the edge; every other site on the VM is a tenant. (The old monolithic Caddyfile was migrated on 2026-07-12; a backup sits at `/root/family-assistant/Caddyfile.bak.2026-07-12`, and the step-by-step migration record is in git history — `git log -- CADDY_ROBUSTNESS_RUNBOOK.md`.)
 
-The application is designed to run on **either a home machine or a rented cloud VM**, using the same Docker Compose stack. The intended path is to start at home (Topology B) and optionally move to cloud (Topology A) once the app is stable and daily-use reliability matters more than iteration speed. Both topologies must be reachable from the codebase with only env-var and compose-override changes — no application code differences.
+**Topology:**
 
-### 17.1 Container Stack (identical in both topologies)
+1. **`caddy_net` is load-bearing infrastructure.** An external Docker network created once (`docker network create caddy_net`), owned by no compose project — never remove it. Containerized tenants join it and pin a container name (`<app>-app`, e.g. `options-app`); Caddy reaches them only through it.
+2. **One site file per tenant.** The main Caddyfile ends with `import sites/*.caddy`; tenant site blocks live in `/root/family-assistant/sites/` on the VM. Each tenant app's own repo is the source of truth for its site block (e.g. options-helper's `caddy/options.Caddyfile`), so the `.caddy` files are deliberately not committed here — only `sites/README.md` is tracked, to keep the directory present for the compose bind mount. The main Caddyfile changes only for cross-cutting concerns.
+3. **Static tenants need no containers.** `/root/static/<app>/` on the host is mounted read-only into Caddy at `/srv/static`; the site block is just `root * /srv/static/<app>` + `file_server` (+ `basic_auth` where wanted). Content updates need no reload — only site-file changes do. Live static tenants: `books.` (directory `browse`) and `notes.` (basic-auth-gated HTML built from private LyX sources; that pipeline is documented in the notes repo's own README — `/data/Notes` locally, rsynced to `/root/static/notes/`).
 
-1. **FastAPI app** container — auth, modules, AI Gateway, HTML rendering.
-2. **Ollama** container — serves the instruct model + embedding model.
-3. **PostgreSQL 16** container with the `pgvector` extension enabled. (Cloud alternative: managed Postgres if the provider offers it with pgvector support.)
-4. **Caddy** reverse proxy — provides HTTPS in both topologies (`tls internal` at home, Let's Encrypt in cloud).
+**Adding a tenant:** containerized — join `caddy_net` and pin the container name in the app's compose file; static — drop content under `/root/static/<app>/`. Either way, add `/root/family-assistant/sites/<app>.caddy` (domain, `tls {$CADDY_TLS}`, then proxy or file_server), then validate + reload. DuckDNS resolves any subdomain automatically, so there is no DNS step.
 
-Configuration is via `.env` files; secrets are passed as environment variables (no committed secrets). Each container has a health check; Compose restarts on failure. Container stdout is collected by the Docker logging driver; application errors are emitted as structured JSON.
+**Operational notes:**
 
-### 17.2 Topology B: Home (initial target)
-
-- Dedicated home box with a GPU. Not the user's daily-driver laptop. Always-on.
-- UPS for graceful shutdowns through power blips.
-- Remote access via **Tailscale** so the app is reachable from phones outside the home network without port-forwarding or DDNS. Works through CGNAT.
-- Caddy issues internal-CA certs for HTTPS on the Tailscale hostname.
-- Larger instruct model feasible (7–8B class), driven by env var. Better JSON tool-calling reliability than the 3B-class fallback.
-- Backups: `pg_dump` to an off-machine destination — external drive, NAS, or a cheap cloud bucket. Daily minimum.
-- Acceptable downtime: brief, occasional. The app is allowed to be down for OS updates, reboots, or hardware maintenance. The AI Gateway treats LLM unreachability as a normal error (Section 15.4).
-
-### 17.3 Topology A: Cloud (future migration target)
-
-- Single rented cloud VM (CPU or GPU depending on budget at time of migration).
-- Caddy issues real Let's Encrypt certs against a real domain.
-- Smaller instruct model if CPU-only (3B class with aggressive quantization), or the same 7–8B model if a GPU VM is rented.
-- Backups: `pg_dump` to off-VM storage (S3-compatible bucket).
-- Alternative: managed Postgres with pgvector support if the provider offers it — operationally simpler.
-
-### 17.4 What Differs Between Topologies
-
-Everything that differs between home and cloud is captured in env vars or compose overrides. Application code is identical.
-
-| Concern | Home | Cloud | Mechanism |
-|---|---|---|---|
-| GPU device | Reserved | Maybe | Compose override (`compose.gpu.yml` / `compose.cpu.yml`) |
-| Instruct model | 7–8B class | 3B class (CPU) or 7–8B (GPU) | `OLLAMA_MODEL` env var |
-| Hostname | Tailscale name | Real domain | `APP_HOSTNAME` env var, used by Caddy |
-| TLS issuer | Caddy internal CA | Let's Encrypt | Same Caddyfile, env-driven |
-| Backup destination | External drive / NAS | S3-compatible bucket | `BACKUP_DEST` env var |
-| Remote access | Tailscale | Public internet | Operational, no code |
-
-### 17.5 Portability Discipline
-
-To keep both topologies reachable as a config swap:
-
-1. All persistence uses **named Docker volumes**; no host-path bind mounts.
-2. Internal service URLs use Docker network names (e.g., `http://ollama:11434`), not `localhost`.
-3. No hostnames or absolute URLs hardcoded in application code or templates; relative URLs throughout. Where an absolute URL is required, it is read from `APP_BASE_URL`.
-4. Caddy fronts the app in both topologies so cookie `Secure` flag behavior is identical.
-5. The AI Gateway is tested against the smallest model it might ever run, to surface JSON-reliability regressions before they hit a CPU-only cloud deployment.
-
-### 17.6 Migration Runbook (Home → Cloud)
-
-When the user chooses to move from Topology B to Topology A:
-
-1. Provision the cloud VM and install Docker.
-2. `pg_dump` from the home database; copy to the cloud VM; restore into the cloud Postgres volume.
-3. Build or pull the application image on the cloud VM.
-4. `docker compose up` with the cloud env file.
-5. Point DNS at the cloud VM's IP and wait for Caddy to acquire a Let's Encrypt cert.
-6. Smoke-test each module and one end-to-end assistant command.
-7. Keep the home stack stopped but intact for ~one week as a rollback path.
-
-### 17.7 Optional Additions (only if needed)
-
-- **Redis** container for session store and/or queue work — only if `BackgroundTasks` becomes inadequate for embedding generation.
-
-### 17.8 Operational Ergonomics
-
-The stack has a handful of sharp edges that surface during everyday operation:
-
-- The `COMPOSE_FILE` / GPU-overlay trap — running `docker compose up -d --build` without `compose.gpu.yml` merged silently drops GPU passthrough, sending an 8B model onto CPU and turning every assistant response into a 30–70 second wait.
-- The cold-start warm-up dance — the first request after a rebuild always pays a 20–40 s model-load cost.
-- Diagnostic command sprawl — `docker compose ps`, `ollama ps`, `ollama list`, `nvidia-smi`, `docker compose logs --tail=N <service>` all answer different "is it healthy?" questions, and remembering which one to reach for first is operational friction.
-
-These are documented in `OPERATIONS.md`, but the cognitive load of remembering the right command at the right moment is real and has already caused incidents.
-
-The project ships a single shell helper sourced from `~/.bashrc` on the desktop, providing:
-
-1. `export COMPOSE_FILE=compose.yml:compose.gpu.yml` so plain `docker compose up -d --build` always includes the GPU overlay.
-2. Short aliases for the highest-frequency operations: status check, log tails, model status, model warm-up, restart, full rebuild.
-3. A single `family doctor` (or equivalent) command that runs the diagnostic chain — `docker compose ps` + `ollama ps` + `nvidia-smi` memory summary + last N app log lines — so "is it healthy?" is one keystroke.
-
-The helper is a convenience layer; `OPERATIONS.md` remains the source of truth for what each underlying command does.
-
-### 17.9 Future Deployment Evolutions
-
-1. Managed container service (Fly.io, Hetzner with managed Postgres) in place of a self-managed VM.
-2. Managed Postgres with managed pgvector.
-3. Dedicated vector database — only if retrieval scale requires it.
-4. Dedicated object storage when phase 2 / 3 lands.
-5. Horizontal scaling — out of scope for personal use.
-
-Kubernetes is explicitly not on this roadmap.
-
----
+- After any `sites/` change, always validate before reloading:
+  ```bash
+  docker exec family-assistant-caddy-1 caddy validate --config /etc/caddy/Caddyfile
+  docker exec family-assistant-caddy-1 caddy reload  --config /etc/caddy/Caddyfile
+  ```
+- The main Caddyfile is a single-file bind mount: editors/sed that replace the file (new inode) leave the container reading the old copy. If a reload doesn't take, recreate Caddy (`docker compose -f compose.cloud.yml up -d --force-recreate caddy`). Files inside `sites/` don't have this problem — the whole directory is mounted.
+- Bare `docker compose` breaks in `/root/family-assistant`: the global `COMPOSE_FILE` in `/root/.bashrc` points at the options repo. Always pass `-f compose.cloud.yml` there.
+- Recreating the Caddy container is safe for all tenants — networks and mounts are declared in compose, nothing is runtime-only.
+- Optional later cleanup: extract Caddy + `sites/` into a standalone `edge/` stack so family-assistant becomes an ordinary tenant. Ownership nicety only; robustness doesn't depend on it.
 
 ## 18. Success Metrics
 
-This is a personal project, so "success" is mostly about lived experience and AI-layer quality, not product analytics.
+**Lived utility (subjective):** both adults open the app weekly unprompted; the in-app grocery list is the actual shopping list; meal and lunch planning happen in-app before the week starts.
 
-### Lived utility (subjective)
+**AI quality (measurable from the interaction log):** command success rate; parse-failure rate; confirmation acceptance rate; median/p95 latency; memory CRUD counts over time.
 
-1. Both adults open the app a few times a week without prompting.
-2. The grocery list in the app is the actual list we shop from, not a fallback to notes / texts / paper.
-3. Weekly meal planning happens in the app, not on paper.
-4. Kids' school lunches get planned in the app before the school week starts.
-
-### AI layer quality (measurable from the AssistantInteraction log)
-
-1. Command success rate — share of inputs that parse to a valid tool call and execute without validation error.
-2. Command parse-failure rate — share for which the LLM cannot produce valid structured output.
-3. Confirmation acceptance rate — share of Medium/High-Risk proposals approved without edits.
-4. Median and p95 end-to-end command latency.
-5. Memory creation, edit, and delete counts over time (does memory grow and stay useful, or stagnate?).
-
-### Operational
-
-1. AI service uptime (Ollama up, model loaded, responding).
-2. Database backup verification (most recent successful backup, restore tested at least once).
-
----
+**Operational:** LLM provider reachable; most recent successful backup, restore rehearsed at least once.
 
 ## 19. Risks and Mitigations
 
-### Risk: Scope Creep
+- **Scope creep** → §5 is binding; §21 is where extra ideas go.
+- **LLM reliability** → JSON response format + Pydantic validation on every call + confirmation tiers + full logging; invalid output asks for clarification instead of guessing.
+- **LLM dependency & cost** → cloud per-token pricing on a cheap model; the manual UI is fully usable without the assistant; provider/model swappable via `.env` (model snapshots get retired — a 404 means pick a listed one).
+- **Privacy** → see §15.2; memories inspectable/deletable; logs stay inside the deployment.
+- **Ops complexity for a solo builder** → one compose file, one database, scripted deploy/backup/rollback, no Redis/queue/object storage until a real need.
+- **Mobile friction kills adoption** → mobile-first quick actions; assistant input as fast capture.
+- **Weekend-only progress** → module-by-module, each shippable alone.
 
-The MVP could grow too broad and stall.
+## 20. Open Questions — resolved
 
-Mitigation:
-
-- Keep MVP focused on groceries, meals, kids' lunches, exercise, memory, and the assistant.
-- Defer recipes, document ingestion, meal-to-grocery generation, lunch templates, and PWA to phase 2+.
-- Section 5 (Non-Goals) is binding.
-
-### Risk: LLM Reliability
-
-The local LLM may parse commands incorrectly or produce invalid JSON.
-
-Mitigation:
-
-- Require structured JSON output via JSON mode or constrained decoding (Instructor / Outlines).
-- Validate every tool call against its Pydantic schema before execution.
-- Require confirmation for Medium/High-Risk actions.
-- Log every interaction (raw input, parsed intent, executed call, outcome) to the AssistantInteraction log.
-- Hard-fail gracefully — invalid output asks for clarification instead of guessing.
-
-### Risk: LLM Latency
-
-A small self-hosted instruct model may be slow enough to feel sluggish, especially without a GPU.
-
-Mitigation:
-
-- Choose models that produce JSON cleanly (Qwen 2.5, Phi 3.5, Llama 3.2 — evaluate during build).
-- Use aggressive quantization (Q4_K_M or similar).
-- Run on a GPU-equipped VM if budget allows; otherwise accept higher latency and use light models.
-- Keep the manual UI fast — the app must be fully usable without the assistant.
-
-### Risk: Privacy
-
-Household data, kids' food restrictions, and assistant logs are sensitive.
-
-Mitigation:
-
-- All inference happens on self-hosted infrastructure. No third-party LLM calls by default.
-- Memory is inspectable, editable, and deletable from the UI.
-- HTTPS-only in production; secrets out of the repo.
-- The AssistantInteraction log stays inside the deployment (no external log shipping in MVP).
-
-### Risk: Infrastructure Complexity
-
-Running a web app + Postgres + an LLM runtime + a reverse proxy on one VM is real ops work for a solo builder.
-
-Mitigation:
-
-- Use Docker Compose; one `docker-compose.yml` describes the whole world.
-- Postgres + pgvector (no separate vector DB).
-- Ollama as the LLM runtime (low operator burden).
-- Defer object storage and Redis until a real need exists.
-- AI Gateway in-process (one app), with a clean module boundary so it can be extracted later.
-
-### Risk: Poor Mobile Experience
-
-A server-rendered HTMX app on phones can feel less smooth than a React-y SPA. Daily-use friction kills personal-project adoption.
-
-Mitigation:
-
-- Design mobile-first quick actions (add grocery, mark purchased, log exercise, assistant input).
-- Use HTMX `hx-boost` and partial swaps to avoid full-page reloads on common actions.
-- Reserve laptop layouts for bulk planning workflows.
-- Keep the assistant input persistent on phone — fast capture is the killer feature.
-
-### Risk: Weekend-only progress
-
-Personal projects with no deadline are easy to abandon mid-build.
-
-Mitigation:
-
-- Build module-by-module, each shippable on its own (auth → grocery → meal plan → ... → assistant).
-- Don't build the AI layer until at least 2 deterministic modules are working — gives the assistant something useful to talk to.
-- The MVP scope (Section 7) is the boundary. Anything beyond goes into the roadmap, not the build.
-
----
-
-## 20. Open Questions
-
-Most architectural and scope questions are resolved earlier in this PRD. What remains is build-time:
-
-1. **Specific instruct model.** Llama 3.2 3B vs Phi-3.5 mini vs Qwen 2.5 3B Instruct — evaluate during build for JSON-output reliability against the actual tool schemas. Quantization (Q4_K_M as a starting default).
-2. **Specific embedding model.** `nomic-embed-text` vs `mxbai-embed-large` — evaluate retrieval quality on actual memory content.
-3. **JSON output enforcement.** Ollama's native JSON mode vs a library-side approach (Instructor, Outlines) — start with the simpler path and tighten if the LLM drifts off-schema.
-4. **GPU vs CPU VM.** Profile latency for the chosen instruct model on CPU before committing to a GPU instance. Decide based on actual command latency vs cost.
-5. **Cloud provider.** Pick at deployment time — Hetzner, Fly.io, Linode, others. The Docker Compose deployment is provider-agnostic.
-6. **Auth library.** Roll a minimal session-cookie auth, or adopt `fastapi-users` — decide based on how much auth surface grows during build (probably minimal).
-
----
+All build-time questions have answers now: model = whatever `OPENROUTER_MODEL` picks (JSON-reliable, currently-listed; originally an Ollama model bake-off); embedding model = moot (embeddings deferred); JSON enforcement = provider JSON mode + Pydantic; GPU vs CPU = moot (cloud API); provider = Hetzner; auth = hand-rolled minimal session cookies (no `fastapi-users`).
 
 ## 21. Backlog and Future Roadmap
 
-Two tiers. **Near-term backlog** is the unphased queue — work picked up as needs surface, not slotted into a phase yet. **Future roadmap phases** are the strategic, multi-phase plan. When a backlog item ships, delete its bullet here and update the relevant PRD section in-place so the spec describes shipped reality.
+**Near-term backlog** (unphased; when an item ships, delete it here and update its PRD section in-place):
 
-### Near-term backlog
+- **Expand assistant tool coverage as needs surface** — update/delete/duplicate variants when a real flow demands them, not to complete the matrix.
+- **Assistant read support for exercise history** — an `exercise.search`-style tool + prompt-builder pre-fetch, so "how much did I run this week?" works.
+- **Clarification Phase 2** — one self-repair retry on validation failure (§11.5a).
+- **Clarification Phase 3** — multi-turn threads (`thread_id`, `pending_clarification`).
+- **Deterministic eval set** — `tests/eval/` of (input, expected_tool_calls) pairs scored 0–1; catches prompt regressions on model changes.
+- **Output guardrails as a named pipeline layer** — consolidate the scattered blank-field/FK/confirm checks into one `output_guardrails(...) → ALLOW | BLOCK | ESCALATE | FALLBACK` step.
+- **Assistant tools + dashboard cards for BP, hikes, tasks, lessons, projects** — these modules shipped UI-only by design; add write tools (`bp.log_reading`, `hike.log_hike`, `task.add`/`task.complete`, `project.log_progress`, ...), read support, and cards (latest BP, trail progress) when a flow demands them. (The tasks dashboard card already shipped — §10.8.)
+- **`USER_NAME` cosmetic** — pending cleanup from the cloud migration.
 
-- **Expand assistant tool coverage as needs surface.** Starter tools cover the common write paths (grocery add / mark purchased, meal/lunch/exercise create, memory create/search). Add update/delete/duplicate variants when an actual user flow demands them, not as a "complete the matrix" exercise — §11.5 explicitly frames the starter set as something to expand during build.
-- **Add assistant read support for exercise history.** Today the assistant can write exercise entries but can't answer "how much did I run this week?". This is a real gap if you want conversational reads on exercise. Needs an `exercise.search`-style tool plus extending the command-aware prompt builder to pre-fetch exercise data for exercise-flavored commands.
-- **Clarification Policy Phase 2 — self-repair retry on validation failure.** Per §11.5a. When Pydantic rejects a tool call, feed the validation error back to the LLM once ("Your previous call failed validation: <error>. Either correct it or ask the user.") and accept the second response. Capped at one retry to bound latency and cost. Today the gateway is one-shot — invalid calls bounce with a generic "I couldn't act on that" reply, which wastes the LLM's ability to recover from its own shape errors.
-- **Clarification Policy Phase 3 — multi-turn clarification threads.** Per §11.5a. `assistant_interactions` gains `thread_id`; a new `confirmation_status = "pending_clarification"` lets the user's next message resume the same context ("which milk?" → "the 2%" → tool fires). Needs a migration and a small router change to thread messages through `process_command`. Real conversational follow-up — today every input is independent.
-- **Deterministic eval set for the assistant.** A `tests/eval/` folder of `(input, expected_tool_calls)` pairs run through `MockLLMClient(force_mode=...)` or against the real LLM, with a 0–1 score. Catches prompt regressions on model upgrades. Building block already in place: `MockLLMClient` and the per-stage trace surface make pipeline-level assertions cheap.
-- **Output guardrails as a named pipeline layer.** Today blank-field, FK, and confirm checks are scattered across `tools.py`, `services.py`, and `gateway.py`. Pulling them into one `output_guardrails(...) → ALLOW | BLOCK | ESCALATE | FALLBACK` step would mostly be reorganization — but it sets up a clean home for future cross-tool semantic checks (e.g., "no tool_call references a family_member_id outside the household").
-- **Assistant + dashboard surfaces for blood pressure, hikes, and household tasks.** The BP (§10.9), hike (§10.10), and household-tasks (§10.11) modules shipped UI-only: CRUD + their respective views, but no assistant tools and no dashboard cards (deliberate — same posture as the exercise read-support gap above). Add write tools (`bp.log_reading` / `hike.log_hike` / `task.add` + `task.complete`), read support, and dashboard cards (latest BP reading, Bruce Trail progress, what's due today) when an actual flow demands them.
+**Deferred decisions:** pgvector image stays although unused (free phase-3 option). Memory `subject_id` orphans (polymorphic, no FK) — revisit only if orphans surface in the UI.
 
-### Deferred decisions / notes
+**Phase 1 — MVP:** ✅ shipped (see §7).
 
-- **`pgvector` image vs. plain Postgres.** Compose uses `pgvector/pgvector:pg16` but nothing in code touches vector columns or functions (embeddings deferred per scope §11.8). Leaving the image as-is costs nothing and keeps phase-2 embeddings a clean additive migration. No action unless you want to slim the image.
-- **`subject_id` orphan cleanup for memories.** `Memory.subject_type` / `subject_id` is a polymorphic reference (no FK), so memories can be orphaned if a user or family member is deleted. Low real-world impact in a two-adult + few-kids household. Revisit only if orphans actually show up in the UI.
+**Phase 2 — Better Planning:** the *lean* recipe catalog shipped (§10.5); still open: full macros + weekly macro view; pantry inventory / "what's in stock" hints; plannability gate (cross-check a picked meal's ingredients against open + recently-purchased at plan time, one-click add-missing); meal-to-grocery generation; LLM weekly lunch planner (restrictions + macro targets + variety → M–F proposal feeding grocery); a guided **weekly planning workflow** bundling meals + lunches + grocery with a printable one-page summary and post-shopping reconcile; LLM grocery dedup via `grocery.update_item` (needs catalog canonical names); lunch templates; AI weekly summary card; PWA; memory archiving; inferred memories with review.
 
-### Phase 1: MVP
+**Phase 3 — AI and Retrieval Expansion:** object storage; recipe/document ingestion; semantic search (the deferred embeddings, §11.8); recommendations from history + preferences; model upgrades / hybrid routing; voice input.
 
-1. Login for two pre-seeded adult accounts; simple server-side session.
-2. Shared grocery list with categories and recent-items quick-add.
-3. Weekly meal planner with favorites and meal reuse.
-4. School lunch planner using FamilyMember entries.
-5. Personal exercise logging.
-6. Embedded assistant with LLM-backed natural-language command parsing (Ollama + small instruct model).
-7. Household / user / FamilyMember memory with full CRUD UI.
-8. Vector retrieval via pgvector over memory + meal/lunch notes.
-9. AssistantInteraction log.
-10. Dockerized deployment on a single rented cloud VM.
+**Phase 4 — Broader Household Operations:** household tasks ✅ (§10.11), projects tracker ✅ (§10.14), kids' lessons ✅ (§10.13), horoscopes ❌ built-then-removed (§10.12). Still open: reminders/time-based notifications (re-evaluate — the household has lived without them); one-way calendar export of planned meals/lunches; budget-adjacent planning; pet care; elder care.
 
-### Phase 2: Better Planning
-
-1. Meal catalog (mirroring the exercise catalog): household-shared, named meals with ingredients and per-meal macronutrient values (protein, fat, carbs, fibre). A `category` field distinguishes `meal` (cooked household meals) from `school_lunch` (packed kid lunches) — single table, separate filters in the catalog UI and assistant tooling. Meal-plan and lunch-plan entries reference catalog rows by id. Existing freeform titles either stay as-is or are promoted into the catalog on demand. **Explicit non-goal**: catalog rows carry ingredients and macros only, never cooking method or steps — the household either knows the method or googles it.
-2. Weekly macro view (`/meal-plan/weekly`) — total macros for the week plus a delta vs the prior week, used during planning. Household-level only; no per-person consumption tracking.
-3. Pantry inventory and a "what's in stock" hint surfaced on the meal-plan page during planning.
-4. Meal plannability gate. When a catalog meal is picked for planning, cross-check its ingredients against open grocery items and recently-purchased history (the pantry-inventory work in item 3). Surface missing ingredients inline at plan time; offer a one-click "add missing items to grocery" action; allow the user to override and plan anyway. Distinct from item 3's passive hint — this is an active check at plan time.
-5. Meal-to-grocery generation from planned meals (becomes feasible once catalog meals carry ingredients).
-6. LLM-assisted weekly lunch planner: given the kid's hard restrictions (school no-nut rule, allergies from Memory), macro targets, and recent variety, proposes M–F lunches with grocery-feeding ingredients. Shares the macro framework with item 1.
-7. Weekly planning workflow. A guided "plan the week" pass that bundles meal-plan, lunch-plan, and grocery into one flow:
-   (a) pick meals + lunches for the coming week (catalog-driven, plannability gate from item 4 enforced);
-   (b) missing ingredients aggregate into a single shopping list (item 5 fed back into grocery);
-   (c) render a one-page HTML summary route of the week's plan + shopping list (designed for screenshot or browser print-to-pdf — no PDF lib, no share-link auth model in scope);
-   (d) after shopping, mark items that weren't purchased — meals and lunches whose ingredients are now incomplete surface as "needs revision" with inline editing of the affected plan entries.
-   Depends on items 1, 4, 5.
-8. LLM-assisted grocery dedup: a `grocery.update_item` tool plus a prompt rule that matches user requests against canonical ingredient names from the catalogs and folds same-thing-different-wording adds into the existing open row (synonyms, plurals, `1 dozen eggs` ≈ `12 eggs`). Naturally feasible once items 1 + 6 land — canonical names are the prerequisite.
-9. Lunch templates.
-10. AI-generated weekly summary card on the dashboard.
-11. PWA installation and offline-friendly grocery list.
-12. Memory archiving / expiration workflows.
-13. Inferred memories with user review (the AI proposes, the user approves).
-
-### Phase 3: AI and Retrieval Expansion
-
-1. Object storage (S3-compatible) — Cloudflare R2 or AWS S3.
-2. Uploaded recipe and document ingestion (OCR / structured extraction).
-3. Semantic search over household notes and uploaded documents.
-4. Stronger recommendation system (meals, lunches based on history + preferences).
-5. Hybrid local/cloud LLM routing or model upgrades for harder tasks.
-6. Optional voice input.
-
-### Phase 4: Broader Household Operations
-
-1. **Household tasks (shared, recurring chores).** ✅ **Shipped ahead of schedule** — see §10.11 for the as-built spec and §9.8 for the user stories. Built as a household-shared board at `/tasks` with name, details, sticky assignee, settable frequency (once / every N days/weeks/months), a one-click Done that reschedules recurring tasks (or archives one-offs), overdue surfacing, and a completion-history view. The roadmap's open design points were resolved as: completion **history** kept; assignee **sticky** (no rotation); overdue tasks **stay visible** (no escalation). Still deferred: assistant tools + a dashboard card (see Near-term backlog).
-2. **Personal projects tracker (per-user).** A space for each adult to track their own projects — learning projects, side projects, or any personal initiative — kept separate from shared household operations. Per-user and private. **Direction: a journal spine plus dated milestones** — reusing the app's container + dated-entries + roll-up pattern (Exercise / BP / Hikes). Three nested pieces:
-   - **Project** — `name`; `status` (idea | active | on hold | done | abandoned); optional `goal`; optional `target_date`.
-   - **ProjectEntry** (the journal) — `date`; `note`; optional `link`. **No time/effort tracking** (decided out).
-   - **Milestone** — a per-project breakdown item: `title`; optional `target_date`; `done` (+ `done_date` auto-set on completion); an `order`. **Replaces the earlier "next actions" idea — and reverses the previous "no due dates" decision** (2026-06-29): dated milestones are now the primary done / not-done tracker, so a project's plan is a barebones list of dated checkpoints rather than an undated "what's next" list.
-
-   Design decisions locked: (a) completing a milestone **auto-writes a journal line**, linking the breakdown to the timeline; (b) milestones carry optional due dates but **no subtasks, no recurrence** (anything recurring still belongs to Household Tasks, item 1), and completed milestones collapse out of view but stay countable for a progress roll-up; (c) a `last_touched` value (= latest entry / milestone-completion date) drives a **"stale project" signal** (an active project untouched for N weeks) — sharing a nudge mechanism with Household Tasks recurrence and the deferred reminders; the surfacing UI may land later.
-
-   **v1 is UI-only** (mirroring how Hikes / BP shipped without assistant tools). Deferred to a later pass: assistant tooling mirroring `exercise.log_activity` — `project.log_progress` (add a journal entry by project name), a milestone add/complete tool, and reads ("what have I done on X lately / what's next on X"). Boundaries: distinct from **Memory** (static facts/preferences) and **Household Tasks** (shared, recurring, dated). Open point: whether `done` / `abandoned` projects stay fully browsable (a record of what you've tried) or just drop out of the active view — currently leaning **browsable but collapsed**.
-3. **Kids' lessons plan (per-FamilyMember, parent-driven).** A space for the adults to plan and check off home learning for a kid — built for **summer holidays, to keep the kid occupied** with structured activities. **The kid never logs in or interacts**: parents populate it and tick items off as the kid completes them, consistent with the app's "kids are non-login `FamilyMember` entries for planning" model (§8). Household-shared (either adult can add or check off), and tied to a `FamilyMember` — the UI auto-picks the single current kid (hiding the selector) while the data model stays multi-kid-capable, mirroring lunch planning (§10.6). Nested structure:
-   - **Lesson** (the major unit) — `title`; optional `subject` (e.g. Math, Reading); optional `description` / goal; `status` (planned | in progress | done); optional date window for the summer.
-   - **Learning objective** (under a lesson) — `title`; `done` (+ `done_date`); optional `scheduled_date` so objectives can be spread day-to-day across the holidays; an `order`.
-   - **Resource** — `label` + `link` / note, attached to a lesson or an objective (worksheets, videos, books).
-   - **Test** — **every lesson ends with exactly one test** (`title`, `done`, optional `score` / `notes`). Checking off the test is what flips the lesson to **done**; a lesson can't be complete without its test.
-
-   Decisions locked (2026-06-29): (a) **always a final test** per lesson (not optional); (b) day-to-day scheduling stays a light optional `scheduled_date` per objective — **no calendar primitive is introduced** (the PRD still has none; calendar integration remains deferred, item 7); (c) **v1 is UI-only**, assistant tooling deferred to a later pass. Boundaries: distinct from **Lunch planning** (food, per school day) and from **Projects** (item 2, an adult's *own* initiatives) — this is a parent-curated learning plan *for a kid*. Reuses the same container + nested-items + check-off + roll-up pattern as Projects and the household logs.
-4. **Horoscopes (household-shared, single profile).** ❌ **Built then removed** (built 2026-06-12; removed entirely 2026-06-28). Was `/horoscope` with eight period windows × three systems (Vedic, Chinese, Western), hybrid Skyfield-facts → LLM-prose generation, birth data kept out of the cloud, lazy generate-and-cache. The module, its dependencies, mount, and nav were deleted; migration 0022 drops the `horoscope_readings` table. Kept here only as a record of the decision — not planned to return.
-5. Reminders and time-based notifications (re-evaluate now that the household has lived without them).
-6. Calendar integration (one-way export of planned meals/lunches to an external calendar).
-7. Budget-adjacent household planning.
-8. Pet care tracking.
-9. Elder care routines.
-
-### Phase 5: Beyond One Household / Beyond Adult Users
-
-1. Multi-household support (e.g., grandparents' household, requires the migration described in Section 12).
-2. Teen login accounts.
-3. Child-friendly views.
-4. Read-only / guest roles.
-5. Age-appropriate permissions.
-
----
-
-## 22. Appendix: Example Assistant Flow
-
-### Example 1: Grocery Command (Low-Risk)
-
-User input:
-
-```text
-Add bananas, yogurt, and oat milk to the grocery list.
-```
-
-Assistant parsed output:
-
-```json
-{
-  "intent": "grocery.add_items",
-  "items": [
-    {"name": "bananas"},
-    {"name": "yogurt"},
-    {"name": "oat milk"}
-  ],
-  "needs_confirmation": false
-}
-```
-
-Backend behavior:
-
-1. Validate the user is authenticated.
-2. Validate the payload against the `grocery.add_items` Pydantic schema.
-3. Create the grocery items (3 items, under the Medium-Risk bulk threshold).
-4. Write an AssistantInteraction record (input, intent, executed calls, affected IDs, latency).
-5. Return success feedback with links to the new items.
-
-### Example 2: Memory Command (Low-Risk)
-
-User input:
-
-```text
-Remember that Maya does not like egg salad in lunches.
-```
-
-Assistant parsed output:
-
-```json
-{
-  "intent": "memory.create",
-  "subject_type": "family_member",
-  "subject_name": "Maya",
-  "memory_type": "food_preference",
-  "content": "Maya does not like egg salad in lunches.",
-  "is_hard_restriction": false,
-  "tags": ["school_lunch"],
-  "needs_confirmation": false
-}
-```
-
-Backend behavior:
-
-1. Resolve "Maya" to a `FamilyMember` row (lookup by name).
-2. Validate the payload against the `memory.create` schema.
-3. Insert the Memory record with `subject_type = family_member`, `subject_id = Maya.id`, `is_hard_restriction = false`.
-4. Enqueue background embedding generation for the new memory.
-5. Write an AssistantInteraction record.
-6. Return confirmation feedback.
-
-### Example 3: Multi-Step Planning Command (Medium-Risk)
-
-User input:
-
-```text
-Plan lunches for Maya next week using sandwiches and fruit.
-```
-
-Assistant behavior:
-
-1. Retrieves Maya's food preferences, allergies, and restrictions from Memory (semantic + subject filter).
-2. Asks a clarifying question if needed — e.g., *"Maya doesn't like egg salad. What kinds of sandwiches should I plan — turkey, cheese, peanut butter?"*
-3. After the user answers, generates a proposed plan: 5 `LunchPlanEntry` rows for Monday–Friday, each with a sandwich item and a fruit item, varying within the user's stated options.
-4. Presents the plan as a confirmation card (Medium-Risk per Section 11.6: bulk create + full-week plan generation). The card shows each day, items, and notes, with Approve / Edit / Cancel.
-5. On Approve, creates the 5 entries via `lunch_plan.create_entry` calls. On Edit, the user can adjust individual entries before approving. On Cancel, no records are created.
-6. Every step — proposed plan, clarifying turns, final approval, executed calls — is captured in the AssistantInteraction record.
+**Phase 5 — Beyond One Household:** multi-household; teen logins; child-friendly views; guest/read-only roles.

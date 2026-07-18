@@ -96,7 +96,7 @@ volumes:
 
 networks:
   # Shared edge network for tenant apps behind this Caddy (see
-  # CADDY_ROBUSTNESS_RUNBOOK.md). Created once with `docker network create
+  # PRD_AND_ROADMAP.md §17.10). Created once with `docker network create
   # caddy_net`; owned by no compose project — never remove it.
   caddy_net:
     external: true

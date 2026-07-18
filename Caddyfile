@@ -19,6 +19,6 @@
     }
 }
 
-# Tenant site blocks, one file per app (see CADDY_ROBUSTNESS_RUNBOOK.md).
+# Tenant site blocks, one file per app (see PRD_AND_ROADMAP.md §17.10).
 # Tenant-owned: each app's repo is the source of truth for its .caddy file.
 import sites/*.caddy

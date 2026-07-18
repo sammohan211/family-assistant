@@ -1,296 +1,95 @@
 # User Guide
 
-How to use the Family Assistant app once it's running. For installing the stack see `SETUP.md`; for keeping it running (logs, backups) see `OPERATIONS.md`.
+Using the app once it's running (install: `SETUP.md`; ops: `OPERATIONS.md`).
 
-> **Note:** The app now runs in the cloud with chat via OpenRouter, so there's no model-loading cold start. The "Starting up" / VRAM / `OLLAMA_*` notes just below describe the **retired** home-GPU setup and no longer apply.
-
-The app has nine pages, reachable from the top nav: **Dashboard, Assistant, Grocery, Meal plan, Lunch plan, Exercise, Family, Memory** (plus Login).
-
----
-
-## Starting up
-
-If the desktop has been off, here's the timeline from power-on to fully responsive:
-
-| Stage | What's happening | Time |
-|---|---|---|
-| Linux + Docker boot | systemd starts `docker.service` | ~30 s |
-| Containers come up | `restart: unless-stopped` revives every service | ~20 s |
-| Postgres / app / Caddy ready | login + dashboard pages load instantly | ~1 min total |
-| Ollama daemon ready | accepts API calls, but the model is **not yet in VRAM** | ~5 s |
-| **First assistant message** | model loads into VRAM, then inference | **20–40 s** |
-| Every subsequent message | model is hot | ~2–5 s |
-
-**The protocol: press power, wait ~1 minute, then use the app.** The login and dashboard pages will be instant. The very first assistant message after a cold boot takes 20–40 seconds — that's the model loading into the GPU. After that, the assistant is fast.
-
-If you don't want to feel that cold-start hit:
-
-1. **Send a throwaway "hi" right after boot.** By the time you have something real to ask, the model is already warm. Zero setup.
-2. **Warm from the shell** on the desktop:
-   ```bash
-   docker compose exec -T ollama ollama run "$OLLAMA_MODEL" "hi" </dev/null
-   ```
-   Could be a `~/bin/warm-family` alias.
-3. **Keep the model loaded forever.** Add `OLLAMA_KEEP_ALIVE=-1` to `.env` and pass it through to the `ollama` service in `compose.yml`. Default is 5 minutes idle before unload; `-1` pins the model in VRAM until the host reboots. One cold start per power cycle, then it's hot for as long as the desktop is on.
-
-The HTTP client between the app and Ollama has a 180-second read budget, so even a cold start finishes successfully — it just takes a beat.
-
----
+Top nav: **Dashboard, Assistant, Grocery, Meal plan, Lunch plan, Tasks, Lessons, Projects, Health** (Exercise / Hikes / BP), **Family, Memory**.
 
 ## Logging in
 
-The app supports exactly two login users — set both `USER1_*` and `USER2_*` in `.env`. Email + password on the login page; checked against the Argon2id hash in `.env`. Sessions last 30 days; the **Log out** link in the top nav ends them.
-
-If you forget the password: it's not recoverable — generate a new hash (see `OPERATIONS.md` → Users for the `argon2` one-liner), replace `USERn_PASSWORD_HASH` in `.env`, `docker compose restart app`, log in with the new password.
-
----
+Exactly two login users, both set via `USER1_*` / `USER2_*` in `.env`. Email + password; sessions last 30 days; **Log out** is in the nav. A forgotten password isn't recoverable — generate a new hash (`OPERATIONS.md` → Users) and `docker compose up -d app`.
 
 ## Dashboard
 
-`/dashboard` — the landing page after login (`/` redirects here when authenticated). Four cards on a single screen:
+`/dashboard` — the landing page after login. Five cards: **today's meals**, **tasks due** (overdue and due-today household tasks, with a one-click Done), **school lunches this week** per kid, **grocery** (quick-add + first 5 open items), and **your recent assistant activity** (last 5 prompts, per user).
 
-- **Today's meals** — every meal-plan entry for today, with its type (breakfast/lunch/dinner/snack) as a chip. Empty state: "Nothing planned for today."
-- **School lunches this week** — one line per kid showing `N planned` for the current week (Monday–Sunday). Empty state per kid: "No lunches this week."
-- **Grocery** — a quick-add input (name only) plus the first 5 open items. The header link `N open` jumps to the full grocery page.
-- **Recent assistant activity** — the last 5 assistant prompts across both users, each with its time and status (`completed`, `pending_confirmation`, etc.).
-
-**Grocery quick-add behaviour:** the input creates an open item with just a name — no quantity, unit, or category. If the name already matches an open item (case-insensitive), the quick-add **silently does nothing** rather than creating a duplicate; switch to the full grocery page if you want to override that or set extra fields. The full form's duplicate warning gives you a "submit again to add anyway" option; the quick-add doesn't.
-
----
+The grocery quick-add creates an open item with just a name; if the name already matches an open item (case-insensitive) it silently does nothing — use the full grocery page to override or set extra fields.
 
 ## Assistant
 
-`/assistant` — type a request in plain English. The LLM picks one of three paths:
+`/assistant` — type a request in plain English. The LLM picks one of three paths: answer from context (read-only questions — the prompt pre-loads relevant data, including the grocery list, this week's plans, and the recipe catalog), act immediately (low-risk), or propose actions for your approval (medium/high risk).
 
-1. **Answer from context** — for read-only questions like `"what's on the grocery list?"` or `"what's for dinner today?"`. No tool call; the LLM has the relevant data in its prompt and replies with text only.
-2. **Act immediately** — for low-risk actions (a single add, one meal/lunch plan, logging exercise, creating a non-allergy memory).
-3. **Propose actions and wait for you to approve** — for medium- and high-risk actions (see below).
+**The seven tools:** `grocery.add_items`, `grocery.mark_purchased`, `meal_plan.create_entry`, `lunch_plan.create_entry`, `exercise.log_activity`, `memory.create`, `memory.search`. No update/delete/rename — use the module pages for that.
 
-**What it can do** (the seven tools):
+**Confirmation is required for:** more than 3 tool calls in one request; more than 3 grocery items added or marked purchased in one call; creating a hard-restriction memory (allergies). Everything else runs immediately.
 
-- `grocery.add_items` — add items to the grocery list.
-- `grocery.mark_purchased` — mark items as purchased.
-- `meal_plan.create_entry` — schedule a meal on a date.
-- `lunch_plan.create_entry` — plan a school lunch for one family member on a date.
-- `exercise.log_activity` — log one session against a catalog exercise (referenced by name; unknown name → validation error, add it to the catalog first).
-- `memory.create` — save a household / user / family-member preference or restriction.
-- `memory.search` — look up existing memories.
+After a request you see the reply, a **Did:** list of executed tools with affected record IDs (`⚠` marks a per-tool failure), and a status badge (`auto` / `pending confirmation` / `approved` / `cancelled`). Confirmation-required requests show the proposed calls with **Approve / Cancel**. Each history row links to a per-stage **trace** page — the debugging view of exactly what the pipeline did.
 
-It does **not** update, delete, or rename — use the module pages for that. Reads happen through context, not tools (the prompt builder pre-loads the relevant data per request).
-
-**When it asks to confirm** (medium or high risk):
-
-- More than 3 tool calls in one request.
-- Adding or marking-purchased more than 3 grocery items in one call.
-- Creating a memory with **is_hard_restriction** set (allergies, must-never-do rules) — high risk.
-
-Everything else runs immediately. After running you see:
-
-- A grey **reply** panel with the LLM's text.
-- A **Did:** list of each tool that ran, e.g. `grocery.add_items  ✓ grocery_items #14, #15`. Per-tool failures show `⚠ <outcome> — <error>`.
-- A **status badge** on the response: `auto`, `pending confirmation`, `approved`, `cancelled`.
-
-For confirmation-required requests, an amber panel appears with the header **"Confirm before doing this:"**, the proposed tool calls listed with their args (or `invalid: <error>` for ones the validator rejected), and **Approve / Cancel** buttons. Approve runs them; Cancel discards.
-
-**Examples that work well:**
+Examples that work well:
 
 ```
-Add milk, bread, and eggs to the grocery list.            → 3 adds, runs immediately
-Plan tacos for dinner this Friday.                        → one create, runs immediately
-What's on the grocery list?                               → reply only, no tool call
-Pack a sandwich and an apple for Maya's lunch on Monday.  → one lunch entry, runs immediately
-Remember Alex is allergic to peanuts.                     → hard-restriction memory, asks to confirm
-Add eggs, milk, bread, butter, cheese to grocery.         → >3 items, asks to confirm
-I ran 5k this morning.                                    → one exercise log, runs immediately
+Add milk, bread, and eggs to the grocery list.        → runs immediately
+What can I make for dinner with what we have?         → answers from the recipe catalog + open list
+Pack a sandwich and an apple for Maya's lunch Monday. → one lunch entry
+Remember Alex is allergic to peanuts.                 → asks to confirm (hard restriction)
+I ran 5k this morning.                                → one exercise log
 ```
 
-**A note on dates.** When a date matters (meal plan, lunch plan, exercise log), prefer absolute `YYYY-MM-DD` (`"plan tacos for dinner on 2026-05-27"`) over weekday names. The local model (llama3.1:8b) sees today's date in context but isn't reliable at resolving "Wednesday" or "this Friday" to the right day — it sometimes lands several days off. The action still runs; it just runs on the wrong date. Check the affected page after asking, or use absolute dates to skip the issue.
+**Dates:** prefer absolute `YYYY-MM-DD` over "this Friday" when the date matters — weekday resolution depends on the model and can land on the wrong day; the action runs, just on the wrong date.
 
-**History.** Below the latest interaction the page lists your recent prompts with their tool names and status — useful for "what just happened?" or auditing past assistant actions.
-
-**If something goes wrong:**
-
-- "**Sorry, I couldn't reach the assistant right now.**" — Ollama is down or unreachable. Check `docker compose logs ollama` and `OPERATIONS.md` → Common issues.
-- "**I couldn't act on that — the assistant produced an invalid action. Please rephrase.**" — the LLM emitted JSON that didn't match any tool's schema. A rewording usually fixes it.
-- A `⚠` next to a specific tool in the Did: list — that tool failed (e.g. unknown exercise name, unknown FamilyMember id). The reply text or the inline error usually explains why.
-
----
+**If something goes wrong:** "couldn't reach the assistant" → OpenRouter problem (`OPERATIONS.md` → LLM); "produced an invalid action, please rephrase" → the LLM's JSON failed validation, a rewording usually fixes it; `⚠` on one tool → that tool failed (e.g. unknown exercise name) and the inline error says why.
 
 ## Grocery
 
-`/grocery` — household shopping list. Shared across both users.
+`/grocery` — the shared shopping list. Items have a name plus optional quantity (decimals fine), free-form unit, category, and notes. Per-item actions: **Purchase / Restore / Clone / Edit / Delete**. A **Recent items** section offers quick re-add of things you've bought before.
 
-**Add an item:** "New item" button → name (required), optional quantity, unit, category, notes. Quantity accepts decimals (`2`, `1.5`, `0.25`) up to 3 fractional digits, or blank. Unit is free-form text (`lb`, `cartons`, `dozen` — anything); it's displayed next to the quantity but isn't normalised or used for math.
-
-**Per-item actions** on the list:
-- **Purchase** — moves the item to the purchased section (history kept).
-- **Restore** — un-purchase, back to open.
-- **Clone** — duplicate (handy for recurring buys: clone last week's "milk").
-- **Edit / Delete** — straightforward.
-
-The dashboard's quick-add box creates an item with only a name — open the grocery page if you need quantity or category.
-
-**Duplicate warning on add.** If you try to add an item whose name (case-insensitive) already matches an *open* item, the form shows a yellow warning ("Already on the open list: Eggs (1 dozen)") and won't create the row until you submit a second time. Edit the name to dodge the warning, or submit again to add anyway. The check is intentionally simple: only open items count (purchased history doesn't), and only exact-string-after-lowercasing matches (so `"eggs"`, `"Eggs"`, and `"EGGS"` are treated as the same, but `"egg"` and `"eggs"` aren't). The assistant path isn't gated by this — the LLM sees the open list in context and is responsible for its own choice.
-
-**The list is still a scratchpad, not stock tracking.** Beyond the literal-name dedup above, nothing tries to merge `"eggs"` with `"egg (large)"` or `"1 dozen eggs"` with `"12 eggs"`. Unit strings are never compared. Smarter dedup (synonyms, plurals, dozens-vs-counts) is phase 2 and depends on the meal/lunch catalog work.
-
----
+**Duplicate warning:** adding a name that case-insensitively matches an *open* item shows a warning and requires a second submit. Only exact-after-lowercasing matches count (`egg` ≠ `eggs`), purchased history isn't checked, and the assistant path isn't gated (the LLM sees the open list and makes its own call). The list is a scratchpad, not stock tracking — smarter dedup is phase 2.
 
 ## Meal plan
 
-`/meal-plan` — household dinners, planned a week at a time. Shared across both users.
+`/meal-plan` — household dinners on a 7-day grid (breakfast/lunch/snack slots exist but go unused here), walked with Previous/Next week. Entries have a free-text title, date, meal type, optional notes, and a favorite flag. Actions: **Edit** (Delete at the bottom of the edit page), **Reuse** (duplicate to the same day, or to a picked date from the favorites list). Below the grid: **Favorite meals** and **Recent meals** panels for fast reuse.
 
-**Rhythm:** typically Saturday after grocery shopping — pick dinners for the coming week. In practice you'll only use the **dinner** slot; breakfast/lunch/snack slots exist but aren't used in this household. Per-person school lunches go on the **Lunch plan** page, not here.
+**Catalog** (`/meal-plan/catalog`, second tab): a household-shared recipe list — name, meal type, ingredient *names* (no amounts), optional instructions/notes, and rough calories + protein as a planning aid. The meal form's "Pick from catalog" fills the title, and the assistant uses the catalog to answer "what can I make?" and "is the grocery list enough for next week?".
 
-The page is a **7-day grid** — each day has a slot for every meal type. Use **Previous week / Next week** to walk back and forward. Today's dinner is also surfaced on the dashboard.
-
-**Add an entry:** **Add meal** button (top right) or the inline **Add** link in a specific day/slot — opens a form for title, date, meal type, optional notes, and an optional **Mark as favorite** checkbox. Title is free text — no recipes or ingredients, just a name (`"Tacos"`, `"leftovers"`, `"out — birthday dinner"` all work).
-
-**Per-entry actions:**
-- **Edit** — opens the form. **Delete** lives at the bottom of the edit page.
-- **Reuse** — duplicates the entry. From within the grid, it copies to the same day; from the favourites list (below), a date picker lets you pick where it lands.
-
-**Below the grid, two helper panels:**
-- **Favorite meals** — every entry you've marked favourite, any date (up to 12). The fast path for "what should we eat this week?" — pick a date and click **Reuse**.
-- **Recent meals** — the last 12 entries (any week) by most-recently-updated, as a memory jog.
-
-**Not connected to grocery.** Planning "Tacos Friday" does not add tortillas/cheese to the grocery list — that step is manual. The meal plan tracks *what you're eating*; the grocery list tracks *what you're buying*; you reconcile them by hand.
-
-The assistant can add entries — `"plan tacos for dinner this Friday"` works.
-
-Phase 2 idea: surface recently purchased grocery items on this page as a "what's in stock" hint while planning.
-
----
+Planning a meal does **not** add its ingredients to the grocery list — ask the assistant to check what's missing, or reconcile by hand.
 
 ## Lunch plan
 
-`/lunch-plan` — what to pack for school lunch. Weekly view, one kid (the FamilyMember you added). Shared across both users.
+`/lunch-plan` — packed school lunches, one week at a time, on the kid's school days (set on the Family page). Days outside `school_days` are hidden unless they already have an entry (field-trip day). An entry is a date plus items (one per line; `name: note` adds an inline note) and optional notes. With one kid, the member field auto-picks. The assistant can add entries: "pack a turkey sandwich and an apple on Monday".
 
-The page is a **5-day grid** (the kid's school days for the week), with **Previous week / Next week** buttons. Use it to plan the coming week's lunches after Saturday's grocery run.
+## Tasks
 
-**Add an entry:** **Add lunch** button (top right) or the inline **Add** link in a specific day slot — opens a form for date, items, optional notes. Items are one per line; add an optional inline note with `name: note` (e.g. `Turkey sandwich: no mayo`). The family-member field auto-picks the single kid you have — no selector to fight with.
+`/tasks` — the shared chore board. A task has a name, optional details, an optional assignee (either adult; blank = anyone), and a frequency (one-off, or every N days/weeks/months) with a next-due date. The list orders by due date — **Overdue** (red) and **Due today** (amber) float to the top, with header counts. **Done** in one click: a one-off archives; a recurring task rolls its due date forward *from the completion date* (doing a chore late doesn't pile it up), keeping its assignee. `/tasks/history` is the append-only who-did-what log. Due tasks also surface on the dashboard.
 
-**Per-entry actions:**
-- **Edit** — opens the form. **Delete** lives at the bottom of the edit page.
+## Lessons
 
-A day that isn't in the kid's `school_days` (see Family page) is hidden from the grid by default — but if you've already added an entry for that day (e.g. field-trip day), it stays visible.
+`/lessons` — parent-curated home learning for the kid (the kid never logs in). A **lesson** (title, optional subject/description, date window) contains ordered **objectives** (check off as done, optionally scheduled to a date), attached **resources** (label + link), and **exactly one test** — checking off the test is what completes the lesson.
 
-The lunch plan is for *packed school lunches only*. Household meals (dinner etc.) go on the Meal plan page.
+## Projects
 
-The assistant can add entries — `"pack a turkey sandwich and an apple on Monday"` works. It picks the only kid automatically.
+`/projects` — per-user personal project tracker (each adult sees their own). A **project** (name, status: idea/active/on hold/done/abandoned, optional goal and target date) has dated **milestones** (ordered, check-off; completing one auto-writes a journal line) and a dated **journal** of entries (note + optional link).
 
-Phase 2 ideas:
-- LLM-assisted weekly planner: given the kid's hard restrictions (school no-nut rule, allergies in Memory), macro targets, and recent variety, propose M–F lunches and add their ingredients to grocery.
-- Lunch templates (reusable lunches you can stamp onto a day).
+## Health
 
----
+Grouped under one nav menu:
 
-## Exercise
-
-Three pages, reachable from the tab bar at the top of any exercise screen:
-
-- **Log** (`/exercise`) — your workout history.
-- **Catalog** (`/exercise/catalog`) — household-shared list of named exercises (Bench press, Run, etc.) with their classification.
-- **Weekly** (`/exercise/weekly`) — aggregated work-score totals for the current ISO week with a delta vs. the previous week.
-
-Every page has a **Body weight** indicator at the top (collapsed by default — click to expand and edit). This value is per-user and feeds into score formulas for distance and bodyweight-fraction exercises. Set it once; update when it changes.
-
-### Catalog (household-shared)
-
-The catalog is where you define each exercise once. Logs reference catalog entries by name. Catalog is empty by default — populate as you go.
-
-Each exercise has:
-
-- **Name** (unique across the household).
-- **Body group** — one of `upper`, `lower`, `core`, `cardio`. Used by the weekly view.
-- **Muscle groups** — comma-separated tags (e.g. `chest, triceps, shoulders`). Used by the weekly view; free-form for now.
-- **Scoring type** — picks the formula used to compute a session's work score:
-  - `weighted` → `weight × reps × sets` (e.g. bench press, squat).
-  - `distance` → `distance_km × your body weight` (e.g. run, hike, rowing machine, walk).
-  - `bodyweight_fraction` → `body_weight × fraction × reps × sets` (e.g. captain's chair, dips, pull-ups).
-- **Bodyweight fraction** — decimal (default `1.000`). Only matters when scoring type is `bodyweight_fraction`. Examples: pull-ups = `1.0`, captain's chair = `0.5`.
-
-Add a few exercises before you start logging — the log form needs at least one to pick from.
-
-### Log
-
-The log form shows only the inputs the picked exercise's scoring type needs:
-
-- Pick `Bench press (weighted)` → form asks for **sets, reps, weight**.
-- Pick `Run (distance)` → form asks for **distance (km)**.
-- Pick `Captain's chair (bodyweight_fraction)` → form asks for **sets, reps**.
-
-**Duration** (minutes) and **notes** are optional on any log.
-
-On save, the app computes the work score from the formula and **persists it on the row** — so if you later update your body weight, old scores don't change. Each session stays comparable to the day it was logged.
-
-If you try to log a `distance` or `bodyweight_fraction` exercise without setting your body weight first, you'll get a clear error: set it via the indicator at the top.
-
-The log list shows your sessions newest-first with the score on each row. Edit and Delete are per-entry.
-
-### Weekly view
-
-`/exercise/weekly` is the answer to "did I beat last week?":
-
-- **Total work score** for the current ISO week (Monday–Sunday).
-- **Delta vs. prior week** — absolute and percent, green if you improved, red if not.
-- **By body group** — bar chart of how much score came from `upper`, `lower`, `core`, `cardio`. Quick way to spot under-trained areas.
-- **By muscle group** — same idea, sorted descending. Uses the tags you put on each catalog exercise.
-
-Use the **Prev / Next / This week** buttons to walk other weeks.
-
-Per-exercise breakdown within a body group ("which exercise drove most of upper-body this week?") is not in MVP — it's on the phase 2 list.
-
----
+- **Exercise** (`/exercise`) — per-user log + household-shared catalog + weekly view. Catalog entries define each exercise once: body group (upper/lower/core/cardio), muscle-group tags, and a scoring type — `weighted` (`weight × reps × sets`), `distance` (`distance_km × body weight`), or `bodyweight_fraction` (`body weight × fraction × reps × sets`). The log form shows only the inputs the picked exercise needs; the work score is computed at save time and **persisted**, so later body-weight changes don't rewrite history. Body weight is per-user, set via the indicator at the top (required before logging distance/bodyweight exercises). `/exercise/weekly` totals the ISO week's score with a delta vs. last week and breakdowns by body group and muscle group. The assistant can log sessions by exercise name (unknown names error rather than auto-create).
+- **Hikes** (`/hike`) — per-user, private Bruce Trail log: date, section, segment name, optional map links and times, distance, duration, notes; average speed computed and persisted. `/hike/progress` rolls up total distance / count / time and a per-section breakdown.
+- **BP** (`/bp`) — per-user, private blood-pressure log: date, optional time, systolic/diastolic, optional heart rate, notes. MAP is computed and persisted; each reading gets a category badge (normal → crisis, descriptive only, not medical advice). `/bp/trends` shows averages, category distribution, and weekly breakdowns.
 
 ## Family
 
-`/family` — non-login household members. Kids only in MVP (pets and other members are deferred). Shared across both login users.
-
-**Add a member:** name, optional notes, school-day checkboxes (Mon–Sun). The school-day selection feeds the **Lunch plan** grid (which days appear for the kid) and the dashboard's "lunches this week" totals.
-
-**Per-entry actions:** **Edit** opens the form; **Delete** lives at the bottom of the edit page.
-
-**Allergies, food preferences, and restrictions don't go here — they go in Memory.** The Family page is just the *person*; Memory holds what's *true about them* ("Maya is allergic to peanuts"). When creating such memories, you pick the FamilyMember as the subject.
-
-**First-time setup order:** add the kid here, set school days, then capture allergies/preferences on the Memory page. After that, Lunch plan and the dashboard counts start working.
-
-There is no assistant tool for family members — adding, editing, and deleting are form-only.
-
----
+`/family` — non-login household members (kids). Name, notes, and school-day checkboxes — the school days drive the lunch-plan grid and dashboard counts. **Allergies and preferences don't go here — they go in Memory**, subject-tagged to the member. Setup order: add the kid, set school days, then capture restrictions in Memory.
 
 ## Memory
 
-`/memory` — durable preferences, restrictions, and routines the assistant should remember across conversations. Shared across both users.
+`/memory` — durable facts the assistant should apply across conversations. Each memory has a **subject** (`household`, `user`, or `family_member`), a **type** (`preference`, `food_preference`, `restriction`, `routine`, `planning_constraint`, `frequently_used`), free-text content, and optional tags (list-page filter only — not sent to the LLM).
 
-**Subjects:**
-- `household` — applies to everyone.
-- `user` — pick one of the two login users.
-- `family_member` — pick a kid added on the Family page.
+**`is_hard_restriction`** — check for allergies and must-never-do rules. Creating, editing, or deleting one requires explicit confirmation everywhere (form checkbox, dedicated confirm page, assistant approval flow). The list pins hard restrictions on top; filters by subject, type, text, tag.
 
-**Types** — pick whichever best fits:
-- `preference` — soft "likes" ("prefers oat milk").
-- `food_preference` — food-specific likes/dislikes ("doesn't eat mushrooms").
-- `restriction` — must-avoid that isn't life-threatening ("vegetarian"). Use `is_hard_restriction` (below) for life-threatening rules instead.
-- `routine` — recurring patterns ("swim practice Tuesdays").
-- `planning_constraint` — scheduling rules ("no dentist before 9am").
-- `frequently_used` — items, dishes, or activities used often.
-
-The line between `food_preference` and `restriction` is fuzzy — "doesn't like mushrooms" is a preference; "vegetarian" is a restriction. Pick whichever the assistant should treat more seriously.
-
-**Content** is the actual memory text. **Tags** are comma-separated and optional — they filter the memory list page only (they're *not* sent to the LLM as context).
-
-**`is_hard_restriction`** — check this for allergies and any "must never do" rule. The form requires a second confirmation checkbox before saving. **Editing or deleting** a hard-restriction memory also requires confirmation, since accidentally clearing an allergy is high-risk. Creating one via the assistant always triggers a confirmation flow before anything runs.
-
-**Browse + filter.** The list page shows memories newest-first with hard restrictions pinned at the top. Filters: subject, type, free-text search, tag. **Edit / Delete** are per-row.
-
-**The LLM sees up to the 50 most recent memories on every assistant request**, regardless of subject — that's how it remembers "Alex is allergic to peanuts" across sessions. The assistant has `memory.create` and `memory.search` tools (see the **Assistant** section); other CRUD goes through this page.
-
----
+The LLM sees up to the 50 most recent memories on every assistant request — that's how "Alex is allergic to peanuts" persists across sessions.
 
 ## Tips
 
-- **The assistant is the fast path for *adding*** ("add X to grocery", "plan tacos Friday"). For editing, deleting, viewing — or anything else — use the module pages; the assistant has no update / delete / rename tools.
-- **The dashboard is the morning glance** — meals today, lunches this week, what's on the grocery list, recent assistant activity. If nothing surprises you, you're set.
-- **Hard restrictions and allergies belong in Memory**, not just in your head. The LLM knows general facts ("peanuts are nuts") but the household-specific ones ("Alex has a peanut allergy") only come from what's stored on the Memory page.
-- **Exercise**: each user sees their own log; the catalog is shared; body weight is per user. Grocery, meals, lunches, family, and memory are shared across both users.
+- The assistant is the fast path for **adding and asking**; the module pages are for everything else.
+- Shared: grocery, meals + catalog, lunches, tasks, lessons, family, memory, exercise catalog. Per-user: exercise log, hikes, BP, projects, assistant history.
+- Household-specific facts only reach the assistant if they're in Memory.
