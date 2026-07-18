@@ -2,11 +2,13 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import Cookie, Depends, FastAPI, Request, status
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session as DbSession
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -37,6 +39,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Family Assistant", lifespan=lifespan, dependencies=[Depends(require_csrf)])
+
+# PWA assets (manifest + icons); mounts bypass app dependencies, so these stay public.
+app.mount(
+    "/static",
+    StaticFiles(directory=Path(__file__).resolve().parent / "static"),
+    name="static",
+)
 
 
 @app.exception_handler(StarletteHTTPException)
