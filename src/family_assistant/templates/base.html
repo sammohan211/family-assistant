@@ -73,6 +73,20 @@
         </div>
         <a href="/family" class="text-gray-600 hover:text-gray-900">Family</a>
         <a href="/memory" class="text-gray-600 hover:text-gray-900">Memory</a>
+        <div class="relative" x-data="{sites: false}" @mouseleave="sites = false">
+          <button type="button" @click="sites = !sites" @mouseenter="sites = true"
+                  class="text-gray-600 hover:text-gray-900 inline-flex items-center gap-1"
+                  :aria-expanded="sites">
+            Sites
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div x-show="sites" x-cloak @click="sites = false"
+               class="absolute left-0 mt-2 w-40 rounded-md border border-gray-200 bg-white shadow-lg py-1 z-10">
+            <a href="https://options.auro-family.duckdns.org" target="_blank" rel="noopener" class="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">Options</a>
+            <a href="https://books.auro-family.duckdns.org" target="_blank" rel="noopener" class="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">Books</a>
+            <a href="https://notes.auro-family.duckdns.org" target="_blank" rel="noopener" class="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">Notes</a>
+          </div>
+        </div>
         <form method="post" action="/auth/logout">
           {{ csrf_input() }}
           <button type="submit" class="text-gray-600 hover:text-gray-900">Log out</button>
@@ -104,6 +118,10 @@
         <a href="/bp" class="px-3 py-3 rounded-md text-gray-700 hover:bg-gray-100">BP</a>
         <a href="/family" class="px-3 py-3 rounded-md text-gray-700 hover:bg-gray-100">Family</a>
         <a href="/memory" class="px-3 py-3 rounded-md text-gray-700 hover:bg-gray-100">Memory</a>
+        <p class="px-3 pt-3 pb-1 text-xs uppercase tracking-wide text-gray-400">Sites</p>
+        <a href="https://options.auro-family.duckdns.org" target="_blank" rel="noopener" class="px-3 py-3 rounded-md text-gray-700 hover:bg-gray-100">Options</a>
+        <a href="https://books.auro-family.duckdns.org" target="_blank" rel="noopener" class="px-3 py-3 rounded-md text-gray-700 hover:bg-gray-100">Books</a>
+        <a href="https://notes.auro-family.duckdns.org" target="_blank" rel="noopener" class="px-3 py-3 rounded-md text-gray-700 hover:bg-gray-100">Notes</a>
         <form method="post" action="/auth/logout" class="px-1 py-1">
           {{ csrf_input() }}
           <button type="submit" class="w-full text-left px-2 py-3 rounded-md text-gray-700 hover:bg-gray-100">Log out</button>
