@@ -44,6 +44,11 @@ async def require_csrf(
         session = db.get(UserSession, session_token)
         if session is not None and session.csrf_token:
             request.state.csrf_token = session.csrf_token
+        if session is not None:
+            # Stashed for templates (see templating.py::is_glucose_owner) so
+            # base.html can hide owner-restricted nav entries without every
+            # route threading `user` into its TemplateResponse context.
+            request.state.user_email = session.user.email
 
     if request.method in _SAFE_METHODS or request.url.path in _CSRF_EXEMPT_PATHS:
         return

@@ -35,7 +35,7 @@ A modular household operating system that helps the household **plan, remember, 
 1. Multi-household / multi-tenant support.
 2. Child or teen logins, or child-facing interfaces.
 3. Native mobile apps.
-4. Medical records, diagnosis, or clinical advice (the BP module §10.9 is personal self-tracking with descriptive labels only).
+4. Medical records, diagnosis, or clinical advice (the BP module §10.9 and the Blood Sugar module §10.15 are personal self-tracking with descriptive labels only).
 5. Automatic purchasing / commerce integration; budgeting / financial management.
 6. Autonomous AI agents (chains acting without per-step confirmation).
 7. Document intelligence pipeline (OCR, PDF extraction).
@@ -70,6 +70,7 @@ Login (two pre-seeded users) · shared grocery list · weekly meal planner · sc
 - **Lunches:** plan per kid per school day; record per-kid preferences/allergies the AI applies.
 - **Exercise:** log by picking a known exercise + the numbers for its scoring type; body/muscle-group tagging; one comparable work score per session; a weekly view with deltas; body weight on my profile; assistant logging by exercise name.
 - **BP:** log readings (systolic/diastolic/HR/date/time/notes); MAP computed; category labels (descriptive only); trends; private per user.
+- **Blood Sugar:** log glucose readings (value/context/date/time/notes); context-aware category labels (descriptive only); trends with charting; single-user only — unlike BP/Hikes' per-user ownership scoping, this module is not reachable at all by the other adult (§10.15).
 - **Hikes:** log Bruce Trail segments (section, name, map links, distance, duration); speed computed; progress view; private per user.
 - **Tasks:** shared chore board; name/details/assignee; recurrence (one-off or every N days/weeks/months); one-click Done that reschedules; overdue stands out; completion history.
 - **Assistant:** natural-language commands; ask what's planned; remembers preferences; memories reviewable; confirmation before risky changes.
@@ -121,7 +122,7 @@ Five cards: today's meals; **due household tasks** (overdue + due-today, with on
 
 ### 10.9 Blood Pressure Module
 
-Per-user reading log (`/bp`): date, optional time, systolic/diastolic (required), optional heart rate, notes. **MAP** computed at write time and persisted (`(systolic + 2×diastolic)/3`); **category** (normal → hypertensive crisis) derived on read and shown as a badge — descriptive only, never advice (§5.4). Trends at `/bp/trends`: latest, overall averages, category distribution, per-ISO-week averages. **Private per user** — deliberately stricter than exercise. No assistant tool yet (§21). In the UI, Exercise + BP + Hikes group under a **Health** nav menu.
+Per-user reading log (`/bp`): date, optional time, systolic/diastolic (required), optional heart rate, notes. **MAP** computed at write time and persisted (`(systolic + 2×diastolic)/3`); **category** (normal → hypertensive crisis) derived on read and shown as a badge — descriptive only, never advice (§5.4). Trends at `/bp/trends`: latest, overall averages, category distribution, per-ISO-week averages. **Private per user** — deliberately stricter than exercise. No assistant tool yet (§21). In the UI, Exercise + BP + Hikes group under a **Health** nav menu, joined by Blood Sugar (§10.15) — though that entry is visible only to its designated owner, not to both adults.
 
 ### 10.10 Hike Log Module
 
@@ -144,6 +145,31 @@ Shipped 2026-06-29 (migration 0023) at `/lessons` — parent-curated learning fo
 ### 10.14 Projects Module (personal tracker)
 
 Shipped 2026-06-29 (migration 0024, PR #2) at `/projects` — per-user, private. A **Project** (name; status idea|active|on hold|done|abandoned; optional goal, target date) has a **journal** of dated entries (note + optional link — no time/effort tracking, decided out) and dated, ordered **milestones** (title, optional target date, done + done-at). Completing a milestone auto-writes a journal line. No subtasks, no recurrence (recurring things belong to Household Tasks). UI-only; assistant tooling (`project.log_progress`, milestone tools, reads) deferred. Distinct from Memory (static facts) and Tasks (shared, recurring).
+
+### 10.15 Blood Sugar Module
+
+Shipped 2026-09-20 (migration `0025`). Per-user glucose reading log at `/glucose`, mirroring the BP module's shape (§10.9): date, **optional time** (kept optional, matching BP — friction reduction matters more than precision, and the context tag already carries most of the "when in the day" signal), reading value in **mg/dL only** (required — no mmol/L support; US convention, matches the owner's glucometer), a reading-context tag, optional free-text notes (per-reading, same as BP — this is what the chart tooltip surfaces, e.g. what was eaten).
+
+**Context tags — three, each with UI helper subtext so picking one is unambiguous:**
+- `fasting` — "No food or drink (except water) for 8+ hours, typically first thing in the morning"
+- `after_meal` — "About 2 hours after starting a meal"
+- `random` — "Any other time — spot-check, bedtime, etc."
+
+**Category label — context-aware, unlike BP's single fixed scale** (fasting and post-meal have genuinely different normal ranges, so one scale would mislead): derived on read, shown as a badge, descriptive only, never advice, same posture as BP (§5.4).
+- `fasting`: normal <100, elevated 100–125, high 126+
+- `after_meal` and `random`: normal <140, elevated 140–199, high 200+ (random borrows the after-meal scale — the standard ADA reference for an unqualified "random glucose" reading)
+
+**Medication/insulin dose: explicitly out of scope** — reading + context + notes only, consistent with the medical-records non-goal (§5.4); anything ad hoc can go in the notes field.
+
+**In-app charting at `/glucose/trends`** (Chart.js + the date-fns adapter, via CDN — the app's first charting library, fits the existing CDN-only frontend, no bundler): a scatter chart of readings over time (x = date/time, y = mg/dL), one series per context tag (fasting/after_meal/random, distinct colors), tooltip on each point showing its note text. Chosen over exporting to an external tool (Sheets/Excel) specifically because this module's privacy motivation (owner-only) would be undercut by round-tripping the data through a third-party spreadsheet. Alongside the chart: latest reading, overall average, category distribution, per-context averages, per-ISO-week averages — parallel to `/bp/trends`.
+
+**Restricted to a single specific user — not just private-per-user like BP/Hikes, but invisible and unreachable to the other adult entirely.** This is the app's first whole-module single-user restriction, a deliberate, narrow departure from §13's "no roles, both adults identical" permissions model. **Owner is hardcoded to `settings.user1_email`** (no dedicated setting — avoids unneeded config surface for a single fixed owner). Implementation, built fresh (no prior precedent for whole-module restriction — see §13):
+
+- `glucose/router.py::require_owner` compares the authenticated user's email against `settings.user1_email`; the non-owner gets a **404, not 403**, on every route — reusing the existence-hiding pattern already used for the assistant trace viewer (§11.10).
+- The nav entry (desktop dropdown + mobile list in `base.html`) is hidden for the non-owner via a new Jinja context global, `templating.py::is_glucose_owner`, gated on `request.state.user_email` — which `auth/dependencies.py::require_csrf` (already a global per-request dependency) now stashes for every logged-in request, alongside its existing `csrf_token` stash. UX-only; the router dependency is the real gate.
+- No prefill of "today" on the date field (matching BP, which has none either), so the server/household timezone mismatch flagged during design never becomes a bug in practice — if a "today" quick-fill is ever added, it must be set client-side (`new Date()` in the browser), never server-rendered.
+
+Data model: `GlucoseReading` — per-user (`user_id` FK, `ondelete="CASCADE"`), same shape as `BloodPressureReading` (§12) plus a `context` column. No assistant tool, consistent with how BP/Hikes shipped UI-only (§21).
 
 ## 11. Embedded AI, Memory, and Retrieval
 
@@ -212,7 +238,7 @@ Two granularities, together the primary AI debugging surface:
 
 ## 12. Data Model
 
-Single implicit household; no Household/HouseholdMember/AuditLog entities. Authoritative schema: `alembic/versions/` (0001–0024) and each module's `models.py`. Summary of entities and their non-obvious decisions:
+Single implicit household; no Household/HouseholdMember/AuditLog entities. Authoritative schema: `alembic/versions/` (0001–0025) and each module's `models.py`. Summary of entities and their non-obvious decisions:
 
 - **User** ×2, seeded from `.env`; carries `body_weight` for exercise scoring.
 - **FamilyMember** — name, notes, school_days. Preferences/allergies live in Memory, not columns.
@@ -222,6 +248,7 @@ Single implicit household; no Household/HouseholdMember/AuditLog entities. Autho
 - **LunchPlanEntry** — family_member FK, date, items (JSONB `{name, notes?}` list), notes, packed_status (unsurfaced), created_by.
 - **Exercise** (catalog) + **ExerciseLog** — per §10.7; `work_score` persisted at write time so later body-weight edits don't distort history.
 - **BloodPressureReading** — per §10.9; `map_value` persisted, category derived on read.
+- **GlucoseReading** — per §10.15; per-user like BloodPressureReading, but reachable only by one designated owner (route-level check + hidden nav entry) — the app's first whole-module single-user restriction rather than ownership scoping.
 - **Hike** — per §10.10; `speed_kmh` persisted.
 - **HouseholdTask** + **HouseholdTaskCompletion** — per §10.11; completion log is append-only; task denormalizes last_completed for display; assignee FKs `ON DELETE SET NULL`.
 - **Lesson / LearningObjective / LessonResource / LessonTest** — per §10.13.
@@ -232,7 +259,9 @@ Single implicit household; no Household/HouseholdMember/AuditLog entities. Autho
 
 ## 13. Permissions Model
 
-No roles. Both adults have identical capabilities; the only API-layer check is "authenticated user". Per-user privacy where it exists (exercise log, BP, hikes, projects, assistant history) is ownership scoping, not roles. RBAC is a phase-5 concern, deliberately not designed in.
+No roles. Both adults have identical capabilities; the only API-layer check is "authenticated user". Per-user privacy where it exists (exercise log, BP, hikes, projects, assistant history) is ownership scoping, not roles — any authenticated adult can reach the routes, each just sees their own rows. RBAC is a phase-5 concern, deliberately not designed in.
+
+**Exception: the Blood Sugar module (§10.15) is restricted to one specific named user**, not just ownership-scoped — the other adult can't reach it at all (404, not 403). This is a narrow, deliberate one-off carve-out for a personal-health module, not a reintroduction of roles/RBAC.
 
 ## 14. User Experience Requirements
 
@@ -350,7 +379,7 @@ All build-time questions have answers now: model = whatever `OPENROUTER_MODEL` p
 - **Clarification Phase 3** — multi-turn threads (`thread_id`, `pending_clarification`).
 - **Deterministic eval set** — `tests/eval/` of (input, expected_tool_calls) pairs scored 0–1; catches prompt regressions on model changes.
 - **Output guardrails as a named pipeline layer** — consolidate the scattered blank-field/FK/confirm checks into one `output_guardrails(...) → ALLOW | BLOCK | ESCALATE | FALLBACK` step.
-- **Assistant tools + dashboard cards for BP, hikes, tasks, lessons, projects** — these modules shipped UI-only by design; add write tools (`bp.log_reading`, `hike.log_hike`, `task.add`/`task.complete`, `project.log_progress`, ...), read support, and cards (latest BP, trail progress) when a flow demands them. (The tasks dashboard card already shipped — §10.8.)
+- **Assistant tools + dashboard cards for BP, hikes, glucose, tasks, lessons, projects** — these modules shipped UI-only by design; add write tools (`bp.log_reading`, `hike.log_hike`, `task.add`/`task.complete`, `project.log_progress`, ...), read support, and cards (latest BP, trail progress) when a flow demands them. (The tasks dashboard card already shipped — §10.8.) Blood Sugar (§10.15) is deliberately excluded from this list for now — its whole point is owner-only privacy, so an assistant tool there needs its own explicit decision, not a default "expand coverage" pass.
 - **`USER_NAME` cosmetic** — pending cleanup from the cloud migration.
 
 **Deferred decisions:** pgvector image stays although unused (free phase-3 option). Memory `subject_id` orphans (polymorphic, no FK) — revisit only if orphans surface in the UI.

@@ -70,6 +70,9 @@
               <a href="/exercise" class="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">Exercise</a>
               <a href="/hike" class="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">Hikes</a>
               <a href="/bp" class="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">BP</a>
+              {% if is_glucose_owner() %}
+              <a href="/glucose" class="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">Blood Sugar</a>
+              {% endif %}
             </div>
           </div>
         </div>
@@ -120,6 +123,9 @@
         <a href="/exercise" class="px-3 py-3 rounded-md text-gray-700 hover:bg-gray-100">Exercise</a>
         <a href="/hike" class="px-3 py-3 rounded-md text-gray-700 hover:bg-gray-100">Hikes</a>
         <a href="/bp" class="px-3 py-3 rounded-md text-gray-700 hover:bg-gray-100">BP</a>
+        {% if is_glucose_owner() %}
+        <a href="/glucose" class="px-3 py-3 rounded-md text-gray-700 hover:bg-gray-100">Blood Sugar</a>
+        {% endif %}
         <a href="/family" class="px-3 py-3 rounded-md text-gray-700 hover:bg-gray-100">Family</a>
         <a href="/memory" class="px-3 py-3 rounded-md text-gray-700 hover:bg-gray-100">Memory</a>
         <p class="px-3 pt-3 pb-1 text-xs uppercase tracking-wide text-gray-400">Sites</p>

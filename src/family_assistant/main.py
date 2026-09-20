@@ -21,6 +21,7 @@ from family_assistant.dashboard import router as dashboard_router
 from family_assistant.db import get_session, get_sessionmaker
 from family_assistant.exercise import router as exercise_router
 from family_assistant.family_member import router as family_member_router
+from family_assistant.glucose import router as glucose_router
 from family_assistant.grocery import router as grocery_router
 from family_assistant.hike import router as hike_router
 from family_assistant.household_task import router as household_task_router
@@ -75,6 +76,7 @@ app.include_router(projects_router)
 app.include_router(exercise_router)
 app.include_router(hike_router)
 app.include_router(bp_router)
+app.include_router(glucose_router)
 app.include_router(memory_router)
 app.include_router(assistant_router)
 app.include_router(dashboard_router)
