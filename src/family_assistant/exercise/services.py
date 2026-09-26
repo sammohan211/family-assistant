@@ -5,8 +5,9 @@ Exposes:
   - Per-user log CRUD on ``ExerciseLog``, computing and persisting
     ``work_score`` on every create/update via :mod:`exercise.scoring`.
   - ``set_body_weight`` for the per-user body weight on the User profile.
-  - ``weekly_summary`` aggregating one ISO week of logs with per-body-group
-    and per-muscle-group totals plus delta vs. the previous week.
+  - ``weekly_summary`` aggregating one ISO week of logs with per-region and
+    per-muscle totals (primary muscles in full, secondary at half) plus delta
+    vs. the previous week.
 """
 
 from dataclasses import dataclass
@@ -19,10 +20,14 @@ from sqlalchemy.orm import selectinload
 
 from family_assistant.auth.models import User
 from family_assistant.exercise.models import Exercise, ExerciseLog
-from family_assistant.exercise.scoring import (
-    BODY_GROUPS,
-    SCORING_TYPES,
-    compute_work_score,
+from family_assistant.exercise.scoring import SCORING_TYPES, compute_work_score
+from family_assistant.exercise.taxonomy import (
+    LOCATIONS,
+    MODALITIES,
+    MUSCLES,
+    PRIMARY_CREDIT,
+    REGIONS,
+    SECONDARY_CREDIT,
 )
 
 # ---------------------------------------------------------------------------
@@ -46,47 +51,75 @@ def get_exercise_by_name(db: DbSession, name: str) -> Exercise | None:
     return db.scalars(statement).first()
 
 
-def _normalize_tags(tags: list[str]) -> list[str]:
-    seen: list[str] = []
-    for raw in tags:
-        cleaned = raw.strip().lower()
-        if cleaned and cleaned not in seen:
-            seen.append(cleaned)
-    return seen
+def _normalize_muscles(muscles: list[str] | tuple[str, ...]) -> list[str]:
+    """Dedupe, keep vocabulary order, and reject anything outside MUSCLES."""
+    cleaned = {m.strip().lower() for m in muscles if m.strip()}
+    unknown = sorted(cleaned - set(MUSCLES))
+    if unknown:
+        raise ValueError(f"Unknown muscle(s): {', '.join(unknown)}")
+    return [m for m in MUSCLES if m in cleaned]
 
 
-def _validate_catalog_fields(
+def _validated_catalog_fields(
     *,
-    body_group: str,
+    region: str,
+    modality: str,
+    location: str,
+    primary_muscles: list[str] | tuple[str, ...],
+    secondary_muscles: list[str] | tuple[str, ...],
     scoring_type: str,
     bodyweight_fraction: Decimal,
-) -> None:
-    if body_group not in BODY_GROUPS:
-        raise ValueError(f"Unknown body_group: {body_group!r}")
+) -> tuple[list[str], list[str]]:
+    """Validate catalog fields; return the normalized (primary, secondary) muscles."""
+    if region not in REGIONS:
+        raise ValueError(f"Unknown region: {region!r}")
+    if modality not in MODALITIES:
+        raise ValueError(f"Unknown modality: {modality!r}")
+    if location not in LOCATIONS:
+        raise ValueError(f"Unknown location: {location!r}")
     if scoring_type not in SCORING_TYPES:
         raise ValueError(f"Unknown scoring_type: {scoring_type!r}")
     if bodyweight_fraction < 0:
         raise ValueError("bodyweight_fraction must be >= 0")
+    primary = _normalize_muscles(primary_muscles)
+    secondary = _normalize_muscles(secondary_muscles)
+    if not primary:
+        raise ValueError("Pick at least one primary muscle")
+    overlap = set(primary) & set(secondary)
+    if overlap:
+        both = ", ".join(sorted(overlap))
+        raise ValueError(f"A muscle can't be both primary and secondary: {both}")
+    return primary, secondary
 
 
 def create_exercise(
     db: DbSession,
     *,
     name: str,
-    body_group: str,
-    muscle_groups: list[str],
+    region: str,
+    primary_muscles: list[str] | tuple[str, ...],
+    secondary_muscles: list[str] | tuple[str, ...] = (),
+    modality: str = "strength",
+    location: str = "both",
     scoring_type: str,
     bodyweight_fraction: Decimal = Decimal("1.000"),
 ) -> Exercise:
-    _validate_catalog_fields(
-        body_group=body_group,
+    primary, secondary = _validated_catalog_fields(
+        region=region,
+        modality=modality,
+        location=location,
+        primary_muscles=primary_muscles,
+        secondary_muscles=secondary_muscles,
         scoring_type=scoring_type,
         bodyweight_fraction=bodyweight_fraction,
     )
     exercise = Exercise(
         name=name.strip(),
-        body_group=body_group,
-        muscle_groups=_normalize_tags(muscle_groups),
+        region=region,
+        modality=modality,
+        location=location,
+        primary_muscles=primary,
+        secondary_muscles=secondary,
         scoring_type=scoring_type,
         bodyweight_fraction=bodyweight_fraction,
     )
@@ -101,13 +134,20 @@ def update_exercise(
     *,
     exercise_id: int,
     name: str,
-    body_group: str,
-    muscle_groups: list[str],
+    region: str,
+    primary_muscles: list[str] | tuple[str, ...],
+    secondary_muscles: list[str] | tuple[str, ...],
+    modality: str,
+    location: str,
     scoring_type: str,
     bodyweight_fraction: Decimal,
 ) -> Exercise | None:
-    _validate_catalog_fields(
-        body_group=body_group,
+    primary, secondary = _validated_catalog_fields(
+        region=region,
+        modality=modality,
+        location=location,
+        primary_muscles=primary_muscles,
+        secondary_muscles=secondary_muscles,
         scoring_type=scoring_type,
         bodyweight_fraction=bodyweight_fraction,
     )
@@ -115,8 +155,11 @@ def update_exercise(
     if exercise is None:
         return None
     exercise.name = name.strip()
-    exercise.body_group = body_group
-    exercise.muscle_groups = _normalize_tags(muscle_groups)
+    exercise.region = region
+    exercise.modality = modality
+    exercise.location = location
+    exercise.primary_muscles = primary
+    exercise.secondary_muscles = secondary
     exercise.scoring_type = scoring_type
     exercise.bodyweight_fraction = bodyweight_fraction
     db.commit()
@@ -196,20 +239,22 @@ def get_log(db: DbSession, log_id: int) -> ExerciseLog | None:
 def _score_for(
     *,
     exercise: Exercise,
-    user: User,
+    body_weight: Decimal | None,
     sets: int | None,
     reps: int | None,
     weight: Decimal | None,
     distance_km: Decimal | None,
+    duration_minutes: int | None,
 ) -> Decimal:
     return compute_work_score(
         exercise.scoring_type,
-        body_weight=user.body_weight,
+        body_weight=body_weight,
         bodyweight_fraction=exercise.bodyweight_fraction,
         sets=sets,
         reps=reps,
         weight=weight,
         distance_km=distance_km,
+        duration_minutes=duration_minutes,
     )
 
 
@@ -228,11 +273,12 @@ def create_log(
 ) -> ExerciseLog:
     work_score = _score_for(
         exercise=exercise,
-        user=user,
+        body_weight=user.body_weight,
         sets=sets,
         reps=reps,
         weight=weight,
         distance_km=distance_km,
+        duration_minutes=duration_minutes,
     )
     log = ExerciseLog(
         user_id=user.id,
@@ -244,6 +290,7 @@ def create_log(
         distance_km=distance_km,
         duration_minutes=duration_minutes,
         work_score=work_score,
+        body_weight_used=user.body_weight,
         notes=notes.strip() if notes else None,
     )
     db.add(log)
@@ -269,6 +316,18 @@ def update_log(
     log = db.get(ExerciseLog, log_id)
     if log is None:
         return None
+    # Re-score with the weight the log was first scored with, so editing an old
+    # entry doesn't silently apply today's body weight (PRD §10.16).
+    body_weight = log.body_weight_used if log.body_weight_used is not None else user.body_weight
+    work_score = _score_for(
+        exercise=exercise,
+        body_weight=body_weight,
+        sets=sets,
+        reps=reps,
+        weight=weight,
+        distance_km=distance_km,
+        duration_minutes=duration_minutes,
+    )
     log.exercise_id = exercise.id
     log.date = entry_date
     log.sets = sets
@@ -277,14 +336,8 @@ def update_log(
     log.distance_km = distance_km
     log.duration_minutes = duration_minutes
     log.notes = notes.strip() if notes else None
-    log.work_score = _score_for(
-        exercise=exercise,
-        user=user,
-        sets=sets,
-        reps=reps,
-        weight=weight,
-        distance_km=distance_km,
-    )
+    log.work_score = work_score
+    log.body_weight_used = body_weight
     db.commit()
     db.refresh(log)
     return log
@@ -323,8 +376,8 @@ class WeeklySummary:
     prior_total: Decimal
     delta: Decimal
     delta_pct: Decimal | None  # None when prior_total == 0
-    by_body_group: list[WeeklyGroupTotal]
-    by_muscle_group: list[WeeklyGroupTotal]
+    by_region: list[WeeklyGroupTotal]
+    by_muscle: list[WeeklyGroupTotal]
 
 
 def _logs_in_range(
@@ -346,20 +399,23 @@ def _total(logs: list[ExerciseLog]) -> Decimal:
     return sum((log.work_score for log in logs), Decimal("0"))
 
 
-def _group_by_body_group(logs: list[ExerciseLog]) -> list[WeeklyGroupTotal]:
-    totals: dict[str, Decimal] = {bg: Decimal("0") for bg in BODY_GROUPS}
+def _group_by_region(logs: list[ExerciseLog]) -> list[WeeklyGroupTotal]:
+    totals: dict[str, Decimal] = {region: Decimal("0") for region in REGIONS}
     for log in logs:
-        totals[log.exercise.body_group] = (
-            totals.get(log.exercise.body_group, Decimal("0")) + log.work_score
-        )
-    return [WeeklyGroupTotal(label=bg, score=totals.get(bg, Decimal("0"))) for bg in BODY_GROUPS]
+        totals[log.exercise.region] = totals.get(log.exercise.region, Decimal("0")) + log.work_score
+    return [WeeklyGroupTotal(label=region, score=totals[region]) for region in REGIONS]
 
 
-def _group_by_muscle_group(logs: list[ExerciseLog]) -> list[WeeklyGroupTotal]:
+def _group_by_muscle(logs: list[ExerciseLog]) -> list[WeeklyGroupTotal]:
+    """Primary muscles get the full score, secondary muscles half."""
     totals: dict[str, Decimal] = {}
     for log in logs:
-        for tag in log.exercise.muscle_groups or []:
-            totals[tag] = totals.get(tag, Decimal("0")) + log.work_score
+        for muscles, credit in (
+            (log.exercise.primary_muscles, PRIMARY_CREDIT),
+            (log.exercise.secondary_muscles, SECONDARY_CREDIT),
+        ):
+            for muscle in muscles or []:
+                totals[muscle] = totals.get(muscle, Decimal("0")) + log.work_score * credit
     return [
         WeeklyGroupTotal(label=label, score=score)
         for label, score in sorted(totals.items(), key=lambda kv: kv[1], reverse=True)
@@ -386,6 +442,6 @@ def weekly_summary(db: DbSession, *, user: User, reference: date) -> WeeklySumma
         prior_total=prior_total,
         delta=delta,
         delta_pct=delta_pct,
-        by_body_group=_group_by_body_group(this_week),
-        by_muscle_group=_group_by_muscle_group(this_week),
+        by_region=_group_by_region(this_week),
+        by_muscle=_group_by_muscle(this_week),
     )

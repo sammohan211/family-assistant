@@ -362,7 +362,8 @@ TOOLS: dict[str, ToolSpec] = {
                 "unknown names return a validation error. "
                 "Provide the inputs the exercise's scoring_type expects: "
                 "weighted -> sets/reps/weight; distance -> distance_km; "
-                "bodyweight_fraction -> sets/reps. duration_minutes is optional on any log."
+                "bodyweight_fraction -> sets/reps; timed (cardio) -> duration_minutes, "
+                "with distance_km optional. duration_minutes is optional on other types."
             ),
         ),
         ToolSpec(

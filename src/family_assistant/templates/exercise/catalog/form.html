@@ -21,10 +21,47 @@
   {% endif %}
 
   {% set name_val = form_data.name if 'name' in form_data else (item.name if item else '') %}
-  {% set body_group_val = form_data.body_group if 'body_group' in form_data else (item.body_group if item else 'upper') %}
-  {% set muscle_groups_val = form_data.muscle_groups if 'muscle_groups' in form_data else (', '.join(item.muscle_groups) if item else '') %}
+  {% set region_val = form_data.region if 'region' in form_data else (item.region if item else 'upper') %}
+  {% set modality_val = form_data.modality if 'modality' in form_data else (item.modality if item else 'strength') %}
+  {% set location_val = form_data.location if 'location' in form_data else (item.location if item else 'both') %}
+  {% set primary_val = form_data.primary_muscles if 'primary_muscles' in form_data else (item.primary_muscles if item else []) %}
+  {% set secondary_val = form_data.secondary_muscles if 'secondary_muscles' in form_data else (item.secondary_muscles if item else []) %}
   {% set scoring_type_val = form_data.scoring_type if 'scoring_type' in form_data else (item.scoring_type if item else 'weighted') %}
   {% set fraction_val = form_data.bodyweight_fraction if 'bodyweight_fraction' in form_data else ("%g"|format(item.bodyweight_fraction) if item else '1.000') %}
+
+  {% macro select_field(field, label, options, current) -%}
+  <div>
+    <label for="{{ field }}" class="block text-sm font-medium text-gray-700">{{ label }}</label>
+    <select id="{{ field }}" name="{{ field }}"
+            class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-accent focus:ring-accent">
+      {% for opt in options %}
+      <option value="{{ opt }}" {% if current == opt %}selected{% endif %}>{{ opt }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {%- endmacro %}
+
+  {% macro muscle_checkboxes(field, label, help, selected) -%}
+  <fieldset>
+    <legend class="block text-sm font-medium text-gray-700">{{ label }}</legend>
+    <p class="text-xs text-gray-500 mb-2">{{ help }}</p>
+    <div class="grid gap-3 sm:grid-cols-2">
+      {% for group, muscles in muscle_groups.items() %}
+      <div>
+        <p class="text-xs font-medium uppercase tracking-wide text-gray-500">{{ group }}</p>
+        {% for m in muscles %}
+        <label class="flex items-center gap-2 py-0.5 text-sm text-gray-700">
+          <input type="checkbox" name="{{ field }}" value="{{ m }}"
+                 {% if m in selected %}checked{% endif %}
+                 class="rounded border-gray-300 text-accent focus:ring-accent">
+          {{ muscle_label(m) }}
+        </label>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+  </fieldset>
+  {%- endmacro %}
 
   <form method="post"
         action="/exercise/catalog{% if item %}/{{ item.id }}{% endif %}"
@@ -38,36 +75,26 @@
              class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-accent focus:ring-accent">
     </div>
 
-    <div class="grid gap-4 sm:grid-cols-2">
-      <div>
-        <label for="body_group" class="block text-sm font-medium text-gray-700">Body group</label>
-        <select id="body_group" name="body_group"
-                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-accent focus:ring-accent">
-          {% for bg in body_groups %}
-          <option value="{{ bg }}" {% if body_group_val == bg %}selected{% endif %}>{{ bg }}</option>
-          {% endfor %}
-        </select>
-      </div>
-
-      <div>
-        <label for="scoring_type" class="block text-sm font-medium text-gray-700">Scoring type</label>
-        <select id="scoring_type" name="scoring_type"
-                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-accent focus:ring-accent">
-          <option value="weighted" {% if scoring_type_val == 'weighted' %}selected{% endif %}>weighted (weight × reps × sets)</option>
-          <option value="distance" {% if scoring_type_val == 'distance' %}selected{% endif %}>distance (km × body weight)</option>
-          <option value="bodyweight_fraction" {% if scoring_type_val == 'bodyweight_fraction' %}selected{% endif %}>bodyweight_fraction (body weight × fraction × reps × sets)</option>
-        </select>
-      </div>
+    <div class="grid gap-4 sm:grid-cols-3">
+      {{ select_field("region", "Region", regions, region_val) }}
+      {{ select_field("modality", "Type", modalities, modality_val) }}
+      {{ select_field("location", "Where", locations, location_val) }}
     </div>
 
     <div>
-      <label for="muscle_groups" class="block text-sm font-medium text-gray-700">Muscle groups</label>
-      <input id="muscle_groups" name="muscle_groups" type="text"
-             placeholder="comma, separated, tags"
-             value="{{ muscle_groups_val }}"
-             class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-accent focus:ring-accent">
-      <p class="mt-1 text-xs text-gray-500">e.g. chest, triceps, shoulders</p>
+      <label for="scoring_type" class="block text-sm font-medium text-gray-700">Scoring type</label>
+      <select id="scoring_type" name="scoring_type"
+              class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-accent focus:ring-accent">
+        <option value="weighted" {% if scoring_type_val == 'weighted' %}selected{% endif %}>weighted (weight × reps × sets)</option>
+        <option value="bodyweight_fraction" {% if scoring_type_val == 'bodyweight_fraction' %}selected{% endif %}>bodyweight_fraction (body weight × fraction × reps × sets)</option>
+        <option value="timed" {% if scoring_type_val == 'timed' %}selected{% endif %}>timed (minutes)</option>
+        <option value="distance" {% if scoring_type_val == 'distance' %}selected{% endif %}>distance (km × body weight)</option>
+      </select>
+      <p class="mt-1 text-xs text-gray-500">Cardio is usually <code>timed</code>. A score is only compared with earlier logs of the same exercise.</p>
     </div>
+
+    {{ muscle_checkboxes("primary_muscles", "Primary muscles", "The main muscles worked. At least one. For cardio, the muscles it keeps from going stale.", primary_val) }}
+    {{ muscle_checkboxes("secondary_muscles", "Secondary muscles", "Helpers that get some work (counted at half). Optional.", secondary_val) }}
 
     <div>
       <label for="bodyweight_fraction" class="block text-sm font-medium text-gray-700">

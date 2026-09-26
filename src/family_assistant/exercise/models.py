@@ -2,7 +2,11 @@
 
 Two tables: a household-shared catalog of named exercises and a per-user
 log of sessions. Each log row carries a persisted ``work_score`` so prior
-comparisons don't drift when a user updates their body weight.
+comparisons don't drift when a user updates their body weight, plus the
+``body_weight_used`` for that score so an edit re-scores with the same weight.
+
+Catalog muscles, region, modality and location use the fixed vocabulary in
+:mod:`exercise.taxonomy` (PRD §10.16).
 """
 
 from datetime import date, datetime
@@ -21,8 +25,11 @@ class Exercise(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120), unique=True)
-    body_group: Mapped[str] = mapped_column(String(16))
-    muscle_groups: Mapped[list[str]] = mapped_column(JSONB(), default=list, server_default="[]")
+    region: Mapped[str] = mapped_column(String(16))
+    modality: Mapped[str] = mapped_column(String(16))
+    location: Mapped[str] = mapped_column(String(8))
+    primary_muscles: Mapped[list[str]] = mapped_column(JSONB(), default=list, server_default="[]")
+    secondary_muscles: Mapped[list[str]] = mapped_column(JSONB(), default=list, server_default="[]")
     scoring_type: Mapped[str] = mapped_column(String(24))
     bodyweight_fraction: Mapped[Decimal] = mapped_column(
         Numeric(4, 3), default=Decimal("1.000"), server_default="1.000"
@@ -48,6 +55,7 @@ class ExerciseLog(Base):
     distance_km: Mapped[Decimal | None] = mapped_column(Numeric(7, 3), nullable=True)
     duration_minutes: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     work_score: Mapped[Decimal] = mapped_column(Numeric(12, 3), server_default="0")
+    body_weight_used: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
