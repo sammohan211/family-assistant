@@ -12,7 +12,17 @@ Catalog muscles, region, modality and location use the fixed vocabulary in
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import (
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -64,3 +74,23 @@ class ExerciseLog(Base):
 
     user: Mapped[User] = relationship()
     exercise: Mapped[Exercise] = relationship()
+
+
+class TrainingWeekSummary(Base):
+    """Stored snapshot of one user's completed ISO week (PRD §10.16 step 2).
+
+    Built lazily by :mod:`exercise.summary` the first time a completed week is
+    requested; deleted whenever a log in that week (or any catalog entry) changes,
+    so it is rebuilt on next use. ``data`` carries its own ``version``.
+    """
+
+    __tablename__ = "training_week_summaries"
+    __table_args__ = (
+        UniqueConstraint("user_id", "week_start", name="uq_training_week_summaries_user_week"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    week_start: Mapped[date] = mapped_column(Date())
+    data: Mapped[dict] = mapped_column(JSONB())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -30,7 +30,6 @@ from family_assistant.exercise.services import (
     list_exercises,
     set_body_weight,
     update_log,
-    weekly_summary,
 )
 
 # ---------------------------------------------------------------------------
@@ -392,141 +391,6 @@ def test_update_log_rescores_with_original_body_weight(
     assert updated is not None
     assert updated.body_weight_used == Decimal("180")
     assert updated.work_score == Decimal("2160")  # 180 x 0.5 x 12 x 2
-
-
-# ---------------------------------------------------------------------------
-# Weekly aggregation
-# ---------------------------------------------------------------------------
-
-
-def test_weekly_summary_groups_by_region_and_muscle(db_session: Session, seeded_user: User) -> None:
-    set_body_weight(db_session, user=seeded_user, body_weight=Decimal("80"))
-    bench = create_exercise(
-        db_session,
-        name="Bench press",
-        region="upper",
-        primary_muscles=["chest"],
-        secondary_muscles=["triceps"],
-        scoring_type="weighted",
-    )
-    squat = create_exercise(
-        db_session,
-        name="Squat",
-        region="lower",
-        primary_muscles=["quads"],
-        scoring_type="weighted",
-    )
-    create_log(
-        db_session,
-        user=seeded_user,
-        exercise=bench,
-        entry_date=date(2026, 5, 18),  # a Monday
-        sets=3,
-        reps=10,
-        weight=Decimal("60"),
-        distance_km=None,
-        duration_minutes=None,
-        notes=None,
-    )
-    create_log(
-        db_session,
-        user=seeded_user,
-        exercise=squat,
-        entry_date=date(2026, 5, 20),
-        sets=3,
-        reps=10,
-        weight=Decimal("80"),
-        distance_km=None,
-        duration_minutes=None,
-        notes=None,
-    )
-
-    summary = weekly_summary(db_session, user=seeded_user, reference=date(2026, 5, 22))
-    assert summary.week_start == date(2026, 5, 18)
-    assert summary.total == Decimal("1800") + Decimal("2400")
-    region_scores = {row.label: row.score for row in summary.by_region}
-    assert region_scores["upper"] == Decimal("1800")
-    assert region_scores["lower"] == Decimal("2400")
-    assert region_scores["core"] == Decimal("0")
-    muscle_scores = {row.label: row.score for row in summary.by_muscle}
-    assert muscle_scores["chest"] == Decimal("1800")
-    assert muscle_scores["triceps"] == Decimal("900")  # secondary: half credit
-    assert muscle_scores["quads"] == Decimal("2400")
-
-
-def test_weekly_summary_computes_delta_vs_prior_week(
-    db_session: Session, seeded_user: User
-) -> None:
-    set_body_weight(db_session, user=seeded_user, body_weight=Decimal("80"))
-    ex = create_exercise(
-        db_session,
-        name="Run",
-        region="full",
-        modality="cardio",
-        primary_muscles=["quads"],
-        scoring_type="distance",
-    )
-    # Prior week (Mon May 11): 4 km -> 320
-    create_log(
-        db_session,
-        user=seeded_user,
-        exercise=ex,
-        entry_date=date(2026, 5, 11),
-        sets=None,
-        reps=None,
-        weight=None,
-        distance_km=Decimal("4"),
-        duration_minutes=None,
-        notes=None,
-    )
-    # This week (Mon May 18): 5 km -> 400
-    create_log(
-        db_session,
-        user=seeded_user,
-        exercise=ex,
-        entry_date=date(2026, 5, 18),
-        sets=None,
-        reps=None,
-        weight=None,
-        distance_km=Decimal("5"),
-        duration_minutes=None,
-        notes=None,
-    )
-    summary = weekly_summary(db_session, user=seeded_user, reference=date(2026, 5, 18))
-    assert summary.total == Decimal("400")
-    assert summary.prior_total == Decimal("320")
-    assert summary.delta == Decimal("80")
-    assert summary.delta_pct is not None
-    assert summary.delta_pct == (Decimal("80") / Decimal("320")) * Decimal("100")
-
-
-def test_weekly_summary_delta_pct_none_when_no_prior(
-    db_session: Session, seeded_user: User
-) -> None:
-    set_body_weight(db_session, user=seeded_user, body_weight=Decimal("80"))
-    ex = create_exercise(
-        db_session,
-        name="Run",
-        region="full",
-        modality="cardio",
-        primary_muscles=["quads"],
-        scoring_type="distance",
-    )
-    create_log(
-        db_session,
-        user=seeded_user,
-        exercise=ex,
-        entry_date=date(2026, 5, 18),
-        sets=None,
-        reps=None,
-        weight=None,
-        distance_km=Decimal("5"),
-        duration_minutes=None,
-        notes=None,
-    )
-    summary = weekly_summary(db_session, user=seeded_user, reference=date(2026, 5, 18))
-    assert summary.prior_total == Decimal("0")
-    assert summary.delta_pct is None
 
 
 # ---------------------------------------------------------------------------
@@ -1043,22 +907,30 @@ def test_weekly_view_empty_state(authenticated_client: TestClient) -> None:
     response = authenticated_client.get("/exercise/weekly")
     assert response.status_code == 200
     assert b"No sessions logged this week" in response.content
-    assert b"Total work score" in response.content
+    assert b"Strength sets" in response.content
+    assert b"never trained" in response.content
 
 
-def test_weekly_view_renders_breakdowns(
+def test_weekly_view_renders_sets_minutes_and_recency(
     authenticated_client: TestClient, db_session: Session, seeded_user: User
 ) -> None:
-    set_body_weight(db_session, user=seeded_user, body_weight=Decimal("80"))
     bench = create_exercise(
         db_session,
         name="Bench press",
         region="upper",
-        primary_muscles=["chest", "triceps"],
+        primary_muscles=["chest"],
+        secondary_muscles=["triceps"],
         scoring_type="weighted",
     )
+    hike = create_exercise(
+        db_session,
+        name="Hiking",
+        region="full",
+        modality="cardio",
+        primary_muscles=["quads"],
+        scoring_type="timed",
+    )
     today = date.today()
-    # Snap to Monday so the entry is definitely in the current ISO week.
     monday = today - timedelta(days=today.weekday())
     create_log(
         db_session,
@@ -1072,42 +944,36 @@ def test_weekly_view_renders_breakdowns(
         duration_minutes=None,
         notes=None,
     )
-    response = authenticated_client.get("/exercise/weekly")
-    assert response.status_code == 200
-    assert b"By region" in response.content
-    assert b"By muscle" in response.content
-    assert b"Chest" in response.content
-    assert b"Triceps" in response.content
-
-
-def test_weekly_view_accepts_week_param(
-    authenticated_client: TestClient, db_session: Session, seeded_user: User
-) -> None:
-    set_body_weight(db_session, user=seeded_user, body_weight=Decimal("80"))
-    ex = create_exercise(
-        db_session,
-        name="Run",
-        region="full",
-        modality="cardio",
-        primary_muscles=["quads"],
-        scoring_type="distance",
-    )
     create_log(
         db_session,
         user=seeded_user,
-        exercise=ex,
-        entry_date=date(2026, 5, 11),  # a Monday
+        exercise=hike,
+        entry_date=monday,
         sets=None,
         reps=None,
         weight=None,
-        distance_km=Decimal("5"),
-        duration_minutes=None,
+        distance_km=None,
+        duration_minutes=95,
         notes=None,
     )
+    response = authenticated_client.get("/exercise/weekly")
+    assert response.status_code == 200
+    body = response.text
+    assert "Week in progress" in body
+    assert "Balance" in body
+    assert "Push 4.5 : pull 0 sets" in body  # chest 3 + triceps 1.5
+    assert "Cardio minutes" in body
+    assert 'tabular-nums">95</p>' in body
+    assert "Bench press" in body  # progress row
+    assert "first time" in body
+
+
+def test_weekly_view_accepts_week_param(authenticated_client: TestClient) -> None:
     response = authenticated_client.get("/exercise/weekly?week=2026-05-13")
     assert response.status_code == 200
     # Page header snaps to Monday of that week.
     assert b"May 11, 2026" in response.content
+    assert b"Complete week" in response.content
 
 
 def test_weekly_view_bad_week_param_falls_back_to_today(
@@ -1120,46 +986,32 @@ def test_weekly_view_bad_week_param_falls_back_to_today(
 def test_weekly_view_shows_delta_vs_prior(
     authenticated_client: TestClient, db_session: Session, seeded_user: User
 ) -> None:
-    set_body_weight(db_session, user=seeded_user, body_weight=Decimal("80"))
     ex = create_exercise(
         db_session,
         name="Run",
         region="full",
         modality="cardio",
         primary_muscles=["quads"],
-        scoring_type="distance",
+        scoring_type="timed",
     )
     today = date.today()
     monday = today - timedelta(days=today.weekday())
-    create_log(
-        db_session,
-        user=seeded_user,
-        exercise=ex,
-        entry_date=monday - timedelta(days=7),
-        sets=None,
-        reps=None,
-        weight=None,
-        distance_km=Decimal("4"),  # prior 320
-        duration_minutes=None,
-        notes=None,
-    )
-    create_log(
-        db_session,
-        user=seeded_user,
-        exercise=ex,
-        entry_date=monday,
-        sets=None,
-        reps=None,
-        weight=None,
-        distance_km=Decimal("5"),  # this 400
-        duration_minutes=None,
-        notes=None,
-    )
+    for entry_date, minutes in [(monday - timedelta(days=7), 30), (monday, 50)]:
+        create_log(
+            db_session,
+            user=seeded_user,
+            exercise=ex,
+            entry_date=entry_date,
+            sets=None,
+            reps=None,
+            weight=None,
+            distance_km=None,
+            duration_minutes=minutes,
+            notes=None,
+        )
     response = authenticated_client.get("/exercise/weekly")
     assert response.status_code == 200
-    body = response.content
-    assert b"+80" in body
-    assert b"+25.0%" in body
+    assert b"+20 vs. last week" in response.content
 
 
 # ---------------------------------------------------------------------------
