@@ -32,9 +32,8 @@ from family_assistant.exercise.services import (
     set_body_weight,
     update_exercise,
     update_log,
-    week_start,
-    weekly_summary,
 )
+from family_assistant.exercise.summary import get_week_summary, week_start
 from family_assistant.exercise.taxonomy import (
     LOCATIONS,
     MODALITIES,
@@ -274,6 +273,10 @@ def _parse_week_param(raw: str | None) -> date:
     return week_start(parsed)
 
 
+# Days without training a muscle before the weekly view highlights it.
+STALE_AFTER_DAYS = 7
+
+
 @router.get("/weekly", response_class=HTMLResponse)
 def weekly_view(
     request: Request,
@@ -281,20 +284,23 @@ def weekly_view(
     user: Annotated[User, Depends(require_user)],
     week: Annotated[str | None, Query()] = None,
 ) -> Response:
-    reference = _parse_week_param(week)
-    summary = weekly_summary(db, user=user, reference=reference)
-    prev_week = (summary.week_start - timedelta(days=7)).isoformat()
-    next_week = (summary.week_start + timedelta(days=7)).isoformat()
+    start = _parse_week_param(week)
+    summary = get_week_summary(db, user=user, start=start)
+    prior = get_week_summary(db, user=user, start=start - timedelta(days=7))
     return templates.TemplateResponse(
         request,
         "exercise/weekly.html",
         {
             "summary": summary,
+            "prior": prior,
+            "week_start": start,
             "user": user,
-            "muscle_label": muscle_label,
-            "prev_week": prev_week,
-            "next_week": next_week,
+            "prev_week": (start - timedelta(days=7)).isoformat(),
+            "next_week": (start + timedelta(days=7)).isoformat(),
             "today_week_start": week_start(date.today()),
+            "muscle_groups": MUSCLE_GROUPS,
+            "muscle_label": muscle_label,
+            "stale_after_days": STALE_AFTER_DAYS,
         },
     )
 

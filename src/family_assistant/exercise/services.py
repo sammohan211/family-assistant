@@ -5,13 +5,11 @@ Exposes:
   - Per-user log CRUD on ``ExerciseLog``, computing and persisting
     ``work_score`` on every create/update via :mod:`exercise.scoring`.
   - ``set_body_weight`` for the per-user body weight on the User profile.
-  - ``weekly_summary`` aggregating one ISO week of logs with per-region and
-    per-muscle totals (primary muscles in full, secondary at half) plus delta
-    vs. the previous week.
+  - Invalidation of stored weekly summaries (:mod:`exercise.summary`) whenever
+    a log or catalog entry changes.
 """
 
-from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -21,14 +19,8 @@ from sqlalchemy.orm import selectinload
 from family_assistant.auth.models import User
 from family_assistant.exercise.models import Exercise, ExerciseLog
 from family_assistant.exercise.scoring import SCORING_TYPES, compute_work_score
-from family_assistant.exercise.taxonomy import (
-    LOCATIONS,
-    MODALITIES,
-    MUSCLES,
-    PRIMARY_CREDIT,
-    REGIONS,
-    SECONDARY_CREDIT,
-)
+from family_assistant.exercise.summary import invalidate_all, invalidate_weeks
+from family_assistant.exercise.taxonomy import LOCATIONS, MODALITIES, MUSCLES, REGIONS
 
 # ---------------------------------------------------------------------------
 # Catalog (household-shared)
@@ -162,6 +154,7 @@ def update_exercise(
     exercise.secondary_muscles = secondary
     exercise.scoring_type = scoring_type
     exercise.bodyweight_fraction = bodyweight_fraction
+    invalidate_all(db)
     db.commit()
     db.refresh(exercise)
     return exercise
@@ -172,6 +165,7 @@ def delete_exercise(db: DbSession, exercise_id: int) -> bool:
     if exercise is None:
         return False
     db.delete(exercise)
+    invalidate_all(db)
     db.commit()
     return True
 
@@ -294,6 +288,7 @@ def create_log(
         notes=notes.strip() if notes else None,
     )
     db.add(log)
+    invalidate_weeks(db, user_id=user.id, dates=[entry_date])
     db.commit()
     db.refresh(log)
     return log
@@ -328,6 +323,7 @@ def update_log(
         distance_km=distance_km,
         duration_minutes=duration_minutes,
     )
+    invalidate_weeks(db, user_id=log.user_id, dates=[log.date, entry_date])
     log.exercise_id = exercise.id
     log.date = entry_date
     log.sets = sets
@@ -347,101 +343,7 @@ def delete_log(db: DbSession, log_id: int) -> bool:
     log = db.get(ExerciseLog, log_id)
     if log is None:
         return False
+    invalidate_weeks(db, user_id=log.user_id, dates=[log.date])
     db.delete(log)
     db.commit()
     return True
-
-
-# ---------------------------------------------------------------------------
-# Weekly aggregation
-# ---------------------------------------------------------------------------
-
-
-def week_start(reference: date) -> date:
-    """Monday of the ISO week containing ``reference``."""
-    return reference - timedelta(days=reference.weekday())
-
-
-@dataclass
-class WeeklyGroupTotal:
-    label: str
-    score: Decimal
-
-
-@dataclass
-class WeeklySummary:
-    user_id: int
-    week_start: date
-    total: Decimal
-    prior_total: Decimal
-    delta: Decimal
-    delta_pct: Decimal | None  # None when prior_total == 0
-    by_region: list[WeeklyGroupTotal]
-    by_muscle: list[WeeklyGroupTotal]
-
-
-def _logs_in_range(
-    db: DbSession, *, user: User, start: date, end_exclusive: date
-) -> list[ExerciseLog]:
-    statement = (
-        select(ExerciseLog)
-        .where(
-            ExerciseLog.user_id == user.id,
-            ExerciseLog.date >= start,
-            ExerciseLog.date < end_exclusive,
-        )
-        .options(selectinload(ExerciseLog.exercise))
-    )
-    return list(db.scalars(statement).all())
-
-
-def _total(logs: list[ExerciseLog]) -> Decimal:
-    return sum((log.work_score for log in logs), Decimal("0"))
-
-
-def _group_by_region(logs: list[ExerciseLog]) -> list[WeeklyGroupTotal]:
-    totals: dict[str, Decimal] = {region: Decimal("0") for region in REGIONS}
-    for log in logs:
-        totals[log.exercise.region] = totals.get(log.exercise.region, Decimal("0")) + log.work_score
-    return [WeeklyGroupTotal(label=region, score=totals[region]) for region in REGIONS]
-
-
-def _group_by_muscle(logs: list[ExerciseLog]) -> list[WeeklyGroupTotal]:
-    """Primary muscles get the full score, secondary muscles half."""
-    totals: dict[str, Decimal] = {}
-    for log in logs:
-        for muscles, credit in (
-            (log.exercise.primary_muscles, PRIMARY_CREDIT),
-            (log.exercise.secondary_muscles, SECONDARY_CREDIT),
-        ):
-            for muscle in muscles or []:
-                totals[muscle] = totals.get(muscle, Decimal("0")) + log.work_score * credit
-    return [
-        WeeklyGroupTotal(label=label, score=score)
-        for label, score in sorted(totals.items(), key=lambda kv: kv[1], reverse=True)
-    ]
-
-
-def weekly_summary(db: DbSession, *, user: User, reference: date) -> WeeklySummary:
-    start = week_start(reference)
-    end = start + timedelta(days=7)
-    prior_start = start - timedelta(days=7)
-
-    this_week = _logs_in_range(db, user=user, start=start, end_exclusive=end)
-    last_week = _logs_in_range(db, user=user, start=prior_start, end_exclusive=start)
-
-    total = _total(this_week)
-    prior_total = _total(last_week)
-    delta = total - prior_total
-    delta_pct: Decimal | None = None if prior_total == 0 else (delta / prior_total) * Decimal("100")
-
-    return WeeklySummary(
-        user_id=user.id,
-        week_start=start,
-        total=total,
-        prior_total=prior_total,
-        delta=delta,
-        delta_pct=delta_pct,
-        by_region=_group_by_region(this_week),
-        by_muscle=_group_by_muscle(this_week),
-    )

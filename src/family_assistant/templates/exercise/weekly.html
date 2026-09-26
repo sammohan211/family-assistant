@@ -2,12 +2,28 @@
 
 {% block title %}Weekly summary · Family Assistant{% endblock %}
 
-{% macro score_bar(label, score, max_score) -%}
-{% set pct = (score / max_score * 100) if max_score and max_score > 0 else 0 %}
+{% macro fmt(n) -%}{{ "%g"|format(n) }}{%- endmacro %}
+
+{% macro delta(current, previous) -%}
+{% if previous %}
+  {% set d = current - previous %}
+  <span class="text-xs font-medium {% if d >= 0 %}text-green-700{% else %}text-red-700{% endif %}">
+    {{ "+" if d >= 0 else "" }}{{ fmt(d) }} vs. last week
+  </span>
+{% elif current %}
+  <span class="text-xs text-gray-500">none last week</span>
+{% endif %}
+{%- endmacro %}
+
+{% macro bar(label, value, max_value, note="", warn=false) -%}
+{% set pct = (value / max_value * 100) if max_value and max_value > 0 else 0 %}
 <div class="space-y-1">
-  <div class="flex items-baseline justify-between text-sm">
+  <div class="flex items-baseline justify-between gap-3 text-sm">
     <span class="font-medium text-gray-700">{{ label }}</span>
-    <span class="tabular-nums text-gray-600">{{ "%g"|format(score) }}</span>
+    <span class="tabular-nums text-gray-600">
+      {{ fmt(value) }}
+      {% if note %}<span class="ml-2 text-xs {% if warn %}text-red-700 font-medium{% else %}text-gray-500{% endif %}">{{ note }}</span>{% endif %}
+    </span>
   </div>
   <div class="h-2 rounded-full bg-gray-100 overflow-hidden">
     <div class="h-full bg-accent" style="width: {{ pct }}%"></div>
@@ -20,14 +36,14 @@
   {% set active = "weekly" %}
   {% include "exercise/_header.html" with context %}
 
-  <div class="flex items-center justify-between gap-3 mb-6">
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
     <h1 class="font-serif text-3xl tracking-tight">
-      Week of {{ summary.week_start.strftime('%b %-d, %Y') }}
+      Week of {{ week_start.strftime('%b %-d, %Y') }}
     </h1>
     <div class="flex items-center gap-1 text-sm">
       <a href="/exercise/weekly?week={{ prev_week }}"
          class="px-3 py-2 rounded-md border border-gray-300 hover:bg-gray-50">&larr; Prev</a>
-      {% if summary.week_start != today_week_start %}
+      {% if week_start != today_week_start %}
       <a href="/exercise/weekly"
          class="px-3 py-2 rounded-md border border-gray-300 hover:bg-gray-50">This week</a>
       {% endif %}
@@ -35,63 +51,114 @@
          class="px-3 py-2 rounded-md border border-gray-300 hover:bg-gray-50">Next &rarr;</a>
     </div>
   </div>
+  <p class="text-sm text-gray-500 mb-6">
+    {% if summary.complete %}Complete week.{% else %}Week in progress, as of {{ summary.as_of }}.{% endif %}
+    Sets count primary muscles in full and secondary muscles at half; cardio counts minutes.
+  </p>
 
-  {# Total card #}
-  <div class="rounded-lg border border-gray-200 bg-white p-6 mb-6">
-    <p class="text-sm text-gray-500">Total work score</p>
-    <div class="flex items-baseline gap-3 mt-1">
-      <span class="text-4xl font-semibold tabular-nums">{{ "%g"|format(summary.total) }}</span>
-      {% if summary.prior_total > 0 %}
-        {% set positive = summary.delta >= 0 %}
-        <span class="text-sm font-medium {% if positive %}text-green-700{% else %}text-red-700{% endif %}">
-          {{ "+" if positive else "" }}{{ "%g"|format(summary.delta) }}
-          ({{ "+" if positive else "" }}{{ "%.1f"|format(summary.delta_pct) }}%)
-        </span>
-        <span class="text-xs text-gray-500">vs. {{ "%g"|format(summary.prior_total) }} prior</span>
-      {% elif summary.total > 0 %}
-        <span class="text-sm text-gray-500">no prior week to compare</span>
-      {% endif %}
+  <div class="grid gap-4 sm:grid-cols-3 mb-6">
+    <div class="rounded-lg border border-gray-200 bg-white p-4">
+      <p class="text-sm text-gray-500">Active days</p>
+      <p class="text-3xl font-semibold tabular-nums">{{ summary.active_days }}</p>
+      <p class="text-xs text-gray-500">{{ summary.sessions }} session{{ "" if summary.sessions == 1 else "s" }}</p>
+    </div>
+    <div class="rounded-lg border border-gray-200 bg-white p-4">
+      <p class="text-sm text-gray-500">Strength sets</p>
+      <p class="text-3xl font-semibold tabular-nums">{{ summary.strength_sets_total }}</p>
+      {{ delta(summary.strength_sets_total, prior.strength_sets_total) }}
+    </div>
+    <div class="rounded-lg border border-gray-200 bg-white p-4">
+      <p class="text-sm text-gray-500">Cardio minutes</p>
+      <p class="text-3xl font-semibold tabular-nums">{{ summary.cardio_minutes.total }}</p>
+      {{ delta(summary.cardio_minutes.total, prior.cardio_minutes.total) }}
     </div>
   </div>
 
-  {% if summary.total == 0 %}
-  <div class="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center">
+  {% if summary.sessions == 0 %}
+  <div class="rounded-lg border border-dashed border-gray-300 bg-white p-6 mb-6 text-center">
     <p class="text-sm text-gray-600">No sessions logged this week.</p>
     <p class="mt-1 text-xs text-gray-500">
       <a href="/exercise/new" class="text-accent hover:underline">Log a session</a>
       to start the week.
     </p>
   </div>
-  {% else %}
-    {# Region breakdown #}
-    {% set max_body = summary.by_region|map(attribute='score')|max %}
-    <section class="rounded-lg border border-gray-200 bg-white p-6 mb-6 space-y-3">
-      <h2 class="font-serif text-xl">By region</h2>
-      <div class="space-y-3">
-        {% for row in summary.by_region %}
-          {{ score_bar(row.label, row.score, max_body) }}
-        {% endfor %}
-      </div>
-    </section>
+  {% endif %}
 
-    {# Muscle breakdown #}
-    {% if summary.by_muscle %}
-    {% set max_muscle = summary.by_muscle|map(attribute='score')|max %}
-    <section class="rounded-lg border border-gray-200 bg-white p-6 space-y-3">
-      <h2 class="font-serif text-xl">By muscle</h2>
-      <p class="text-xs text-gray-500">Primary muscles get the full score, secondary muscles half.</p>
-      <div class="space-y-3">
-        {% for row in summary.by_muscle %}
-          {{ score_bar(muscle_label(row.label), row.score, max_muscle) }}
-        {% endfor %}
-      </div>
-    </section>
-    {% else %}
-    <section class="rounded-lg border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-600">
-      No muscles set on this week's exercises. Pick them in the
-      <a href="/exercise/catalog" class="text-accent hover:underline">catalog</a> to see breakdowns.
-    </section>
+  {% set groups = summary.group_sets %}
+  {% set max_group = groups.values()|max %}
+  <section class="rounded-lg border border-gray-200 bg-white p-6 mb-6 space-y-3">
+    <h2 class="font-serif text-xl">Balance</h2>
+    {% for group, value in groups.items() %}
+      {{ bar(group, value, max_group) }}
+    {% endfor %}
+    {% set push = groups["Upper push"] %}{% set pull = groups["Upper pull"] %}
+    {% if push or pull %}
+    <p class="text-xs text-gray-500">
+      Push {{ fmt(push) }} : pull {{ fmt(pull) }} sets.
+    </p>
     {% endif %}
+  </section>
+
+  {% set max_sets = summary.strength_sets.values()|max %}
+  <section class="rounded-lg border border-gray-200 bg-white p-6 mb-6 space-y-5">
+    <div>
+      <h2 class="font-serif text-xl">By muscle</h2>
+      <p class="text-xs text-gray-500">Sets this week, and days since each muscle was last trained
+        (red after {{ stale_after_days }} days).</p>
+    </div>
+    {% for group, muscles in muscle_groups.items() %}
+    <div class="space-y-3">
+      <p class="text-xs font-medium uppercase tracking-wide text-gray-500">{{ group }}</p>
+      {% for m in muscles %}
+        {% set days = summary.days_since_trained[m] %}
+        {% if days is none %}
+          {{ bar(muscle_label(m), summary.strength_sets[m], max_sets, "never trained", true) }}
+        {% else %}
+          {{ bar(muscle_label(m), summary.strength_sets[m], max_sets,
+                 "today" if days == 0 else (days ~ " day" ~ ("" if days == 1 else "s") ~ " ago"),
+                 days >= stale_after_days) }}
+        {% endif %}
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </section>
+
+  {% if summary.cardio_minutes.by_exercise %}
+  {% set max_cardio = summary.cardio_minutes.by_exercise.values()|max %}
+  <section class="rounded-lg border border-gray-200 bg-white p-6 mb-6 space-y-3">
+    <h2 class="font-serif text-xl">Cardio minutes</h2>
+    {% for name, minutes in summary.cardio_minutes.by_exercise.items() %}
+      {{ bar(name, minutes, max_cardio) }}
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  {% if summary.progress %}
+  <section class="rounded-lg border border-gray-200 bg-white p-6">
+    <h2 class="font-serif text-xl mb-1">Progress</h2>
+    <p class="text-xs text-gray-500 mb-3">Best score this week vs. the last session before it.</p>
+    <table class="min-w-full text-sm">
+      <tbody class="divide-y divide-gray-200">
+        {% for row in summary.progress %}
+        <tr>
+          <td class="py-2 font-medium">{{ row.exercise }}</td>
+          <td class="py-2 text-right tabular-nums">{{ fmt(row.best) }}</td>
+          <td class="py-2 pl-4 text-right text-xs whitespace-nowrap">
+            {% if row.change_pct is none %}
+              <span class="text-gray-500">first time</span>
+            {% elif row.change_pct > 0 %}
+              <span class="font-medium text-green-700">&#9650; {{ row.change_pct }}%</span>
+            {% elif row.change_pct == 0 %}
+              <span class="text-gray-600">= matched</span>
+            {% else %}
+              <span class="font-medium text-red-700">&#9660; {{ row.change_pct }}%</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
   {% endif %}
 </div>
 {% endblock %}

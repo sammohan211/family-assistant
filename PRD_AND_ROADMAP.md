@@ -113,10 +113,10 @@ Two tables: a household-shared **catalog** of named exercises and per-user **log
 3. **Work score**, computed at write time and **persisted** so body-weight changes don't rewrite history: `weight×reps×sets` / `distance_km×body_weight` / `body_weight×fraction×reps×sets` / `duration minutes`. The weight used is stored as `body_weight_used`, and editing a log re-scores with it rather than today's weight. Scores are only comparable within one exercise; the household goal is simply to meet or beat the last session's score.
 4. **Body weight** on the User profile, editable any time; used at write time; not versioned.
 5. Each adult sees their own log at `/exercise` (visible to the other; no privacy flags).
-6. **Weekly view** (`/exercise/weekly`): ISO-week total, per-region and per-muscle subtotals (secondary muscles at half credit), delta vs. prior week. Still sums `work_score` across exercises; §10.16 step 2 switches it to sets and minutes.
+6. **Weekly view** (`/exercise/weekly`): built from the §10.16 weekly summaries: sets per muscle, cardio minutes, balance, days since trained, per-exercise progress, each vs the prior week. `work_score` is never summed across exercises.
 7. **Assistant logging** by exercise name (case-insensitive); unknown names are a validation error, never auto-created.
 
-**Audit 2026-09-26 — limitations found** (tags, cardio-as-body-group, unused duration and edit re-scoring fixed by §10.16 step 1; incomparable totals remain until step 2): free-text muscle tags copied from gym-machine labels merge opposing muscles (`biceps and triceps`, `chest upper and middle back`) and several are wrong or synonyms; the three scoring types produce incomparable numbers, so the weekly totals and deltas are dominated by strength work (a ~3 h hike scores under half a set of curls); `cardio` is modelled as a body group, so cardio never counts toward the legs; `duration_minutes` is unused; `update_log` re-scores an edited log with the *current* body weight, contradicting item 3.
+**Audit 2026-09-26 — limitations found** (all fixed: tags, cardio-as-body-group, unused duration and edit re-scoring by §10.16 step 1; incomparable totals by step 2): free-text muscle tags copied from gym-machine labels merge opposing muscles (`biceps and triceps`, `chest upper and middle back`) and several are wrong or synonyms; the three scoring types produce incomparable numbers, so the weekly totals and deltas are dominated by strength work (a ~3 h hike scores under half a set of curls); `cardio` is modelled as a body group, so cardio never counts toward the legs; `duration_minutes` is unused; `update_log` re-scores an edited log with the *current* body weight, contradicting item 3.
 
 ### 10.8 Dashboard
 
@@ -173,7 +173,7 @@ Shipped 2026-09-20 (migration `0025`). Per-user glucose reading log at `/glucose
 
 Data model: `GlucoseReading` — per-user (`user_id` FK, `ondelete="CASCADE"`), same shape as `BloodPressureReading` (§12) plus a `context` column. No assistant tool, consistent with how BP/Hikes shipped UI-only (§21).
 
-### 10.16 Training Guidance — designed 2026-09-26; step 1 built, steps 2–4 planned
+### 10.16 Training Guidance — designed 2026-09-26; steps 1–2 built, steps 3–4 planned
 
 **Goal:** passive weekly hints on what to train. At the start of a week the user presses **Refresh** on a dashboard card and gets 2–3 priorities — body area, muscles, and exercise options split by gym and home. Hints only: no workout plans, no nagging, never medical advice (§5.4). Primary user is one adult; the card is per-user, so the other adult gets their own if they log exercise.
 
@@ -255,13 +255,13 @@ As built, beyond the spec below: old `body_group`/`muscle_groups` are dropped on
 
 **Effect on existing logs:**
 - Log rows are not modified. Muscles, region, modality and location live only on the catalog and are read at query time, so past weeks are re-interpreted with the corrected tags.
-- Saved `work_score` values stay as they are, except cardio logs, which are re-scored to minutes from their stored `duration_minutes`. The 3 Treadmill logs have no duration: they keep their row, count as sessions for recency, and add 0 cardio minutes (no estimating).
+- Saved `work_score` values stay as they are, except cardio logs, which are re-scored to minutes from their stored `duration_minutes`; logs without a duration score 0.
 - `body_weight_used` is backfilled with the user's current weight (an approximation).
-- The Treadmill and any other timed exercise without a logged duration now score 0.
+- **As deployed (2026-09-26):** 17 of 22 Hiking logs and all 3 Treadmill logs turned out to have no duration (the audit's "~195 min" average covered only the 5 that did), so they scored 0. The owner approved estimates, applied by hand after the migration to that user's 18 logs: at least 4 km at trail pace (3.2 km/h, or that day's Hike-module pace), under 4 km at 5 km/h walking pace. Each is marked `(duration est.)` in its notes. The other adult's two duration-less hikes were left at 0.
 - The `exercise_logs → exercises` FK is `ON DELETE RESTRICT`, so no exercise with logs can be deleted by mistake. The two deletions above have 0 logs.
 - Take a manual backup immediately before deploying.
 
-#### Step 2 — Weekly state summary (no LLM)
+#### Step 2 — Weekly state summary (no LLM) — built (migration `0027`, `exercise/summary.py`)
 
 One **TrainingWeekSummary** row per (user, ISO week), holding a JSONB snapshot computed from that week's exercise logs:
 - `active_days`
@@ -274,9 +274,11 @@ One **TrainingWeekSummary** row per (user, ISO week), holding a JSONB snapshot c
 `work_score` is never summed across exercises. It is only compared with earlier logs of the same exercise.
 
 **Lifecycle:**
-- Summaries are built **lazily** when a completed week without one is requested. No scheduler.
-- Creating, editing or deleting a log dated in a completed week deletes that week's row, so it is rebuilt on next use.
-- The existing `/exercise/weekly` view switches to sets and minutes in place of mixed `work_score` totals.
+- Summaries are built **lazily** when a completed week without one is requested. No scheduler. The current week is always built live, marked partial, and measured as of today; a completed week is measured as of its Sunday.
+- Creating, editing or deleting a log deletes the stored summary for that log's week **and every later week**, since later weeks' "days since trained" and "vs previous" can depend on it. Any catalog edit or delete drops all stored summaries (it re-interprets every week). They are rebuilt on next use.
+- Each summary stores a `version`; a summary from an older version is rebuilt on read, so changing the shape never needs a data migration.
+- Strength logs without a set count count as one set. Cardio adds minutes and recency, never sets.
+- `/exercise/weekly` now shows active days, strength sets and cardio minutes (each vs the prior week), push/pull/core/lower balance, sets and days-since-trained for every muscle (never-trained or 7+ days highlighted), cardio minutes per exercise, and per-exercise progress. The summed `work_score` total is gone.
 
 #### Step 3 — Dashboard training-priorities card (LLM)
 
@@ -370,7 +372,7 @@ Two granularities, together the primary AI debugging surface:
 
 ## 12. Data Model
 
-Single implicit household; no Household/HouseholdMember/AuditLog entities. Authoritative schema: `alembic/versions/` (0001–0026) and each module's `models.py`. Summary of entities and their non-obvious decisions:
+Single implicit household; no Household/HouseholdMember/AuditLog entities. Authoritative schema: `alembic/versions/` (0001–0027) and each module's `models.py`. Summary of entities and their non-obvious decisions:
 
 - **User** ×2, seeded from `.env`; carries `body_weight` for exercise scoring.
 - **FamilyMember** — name, notes, school_days. Preferences/allergies live in Memory, not columns.
@@ -378,7 +380,7 @@ Single implicit household; no Household/HouseholdMember/AuditLog entities. Autho
 - **Recipe** (§10.5) — name (unique), meal_type, ingredients (JSONB list of names), optional instructions/notes, coarse nullable calories/protein_g. No FK from plan entries.
 - **MealPlanEntry** — date, meal_type, free-text title, notes, is_favorite, created_by.
 - **LunchPlanEntry** — family_member FK, date, items (JSONB `{name, notes?}` list), notes, packed_status (unsurfaced), created_by.
-- **Exercise** (catalog) + **ExerciseLog** — per §10.7; `work_score` persisted at write time so later body-weight edits don't distort history. Catalog uses fixed-vocabulary primary/secondary muscles + region/modality/location; logs carry `body_weight_used` (§10.16 step 1). Planned: **TrainingWeekSummary** and **TrainingPriorities** tables.
+- **Exercise** (catalog) + **ExerciseLog** — per §10.7; `work_score` persisted at write time so later body-weight edits don't distort history. Catalog uses fixed-vocabulary primary/secondary muscles + region/modality/location; logs carry `body_weight_used` (§10.16 step 1). **TrainingWeekSummary** (§10.16 step 2): one JSONB snapshot per user per completed ISO week, unique on (user, week). Planned: **TrainingPriorities**.
 - **BloodPressureReading** — per §10.9; `map_value` persisted, category derived on read.
 - **GlucoseReading** — per §10.15; per-user like BloodPressureReading, but reachable only by one designated owner (route-level check + hidden nav entry) — the app's first whole-module single-user restriction rather than ownership scoping.
 - **Hike** — per §10.10; `speed_kmh` persisted.
@@ -506,7 +508,7 @@ All build-time questions have answers now: model = whatever `OPENROUTER_MODEL` p
 **Near-term backlog** (unphased; when an item ships, delete it here and update its PRD section in-place):
 
 - **Expand assistant tool coverage as needs surface** — update/delete/duplicate variants when a real flow demands them, not to complete the matrix.
-- **Training guidance (§10.16)** — designed 2026-09-26: (1) ✅ catalog re-model + re-tag migration, (2) weekly state summaries, (3) dashboard training-priorities card with LLM refresh, (4) later: mid-week progress ticks + assistant chat tool over the same summaries.
+- **Training guidance (§10.16)** — designed 2026-09-26: (1) ✅ catalog re-model + re-tag migration, (2) ✅ weekly state summaries, (3) dashboard training-priorities card with LLM refresh, (4) later: mid-week progress ticks + assistant chat tool over the same summaries.
 - **Assistant read support for exercise history** — an `exercise.search`-style tool + prompt-builder pre-fetch, so "how much did I run this week?" works. Should read the §10.16 weekly summaries rather than raw logs once they exist.
 - **Clarification Phase 2** — one self-repair retry on validation failure (§11.5a).
 - **Clarification Phase 3** — multi-turn threads (`thread_id`, `pending_clarification`).
