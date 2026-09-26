@@ -14,6 +14,7 @@ from family_assistant.exercise.models import Exercise, ExerciseLog, TrainingPrio
 from family_assistant.exercise.priorities import (
     CannedPrioritiesLLM,
     PrioritiesError,
+    _options,
     rank_areas,
     refresh_priorities,
     validate_answer,
@@ -114,6 +115,16 @@ def test_muscles_done_this_week_are_not_suggested() -> None:
     suggested = {m for a in rank_areas(history, current, CATALOG) for m in a["muscles"]}
     assert "chest" not in suggested
     assert "triceps" not in suggested
+
+
+def test_options_favour_the_lead_muscle_over_minor_ones() -> None:
+    curl = _ex("Hammer curl", ["biceps", "forearms"], location="home")
+    one_arm_row = _ex("One-arm row", ["upper_back"], location="home", secondary=["biceps"])
+    need = {"upper_back": 0.9, "rear_delts": 0.7, "forearms": 0.6}
+
+    options = _options([curl, one_arm_row, BENCH], need, "strength")
+
+    assert options == {"gym": [], "home": ["One-arm row", "Hammer curl"]}
 
 
 def test_cardio_below_usual_minutes_is_suggested() -> None:

@@ -129,20 +129,27 @@ def _muscle_reason(m: dict[str, Any]) -> str:
     )
 
 
-def _options(exercises: list[Exercise], muscles: list[str], modality: str) -> dict[str, list[str]]:
-    """Catalog exercises for these muscles, best match first, split by location."""
-    wanted = set(muscles)
+def _options(
+    exercises: list[Exercise], need: dict[str, float], modality: str
+) -> dict[str, list[str]]:
+    """Catalog exercises for these muscles, best match first, split by location.
+
+    ``need`` maps each chosen muscle to its score. An exercise earns the score of
+    each needed muscle it trains (in full as primary, half as secondary), so a
+    row that hits the lead muscle outranks a curl that only touches a minor one.
+    """
     ranked = []
     for exercise in exercises:
         if exercise.modality != modality:
             continue
         if modality == "cardio":
-            ranked.append((0, exercise.name, exercise))
+            ranked.append((0.0, exercise.name, exercise))
             continue
-        primary = len(wanted & set(exercise.primary_muscles))
-        secondary = len(wanted & set(exercise.secondary_muscles))
-        if primary or secondary:
-            ranked.append((-(primary * 2 + secondary), exercise.name, exercise))
+        fit = sum(need.get(m, 0) for m in exercise.primary_muscles) + 0.5 * sum(
+            need.get(m, 0) for m in exercise.secondary_muscles
+        )
+        if fit > 0:
+            ranked.append((-fit, exercise.name, exercise))
     ranked.sort(key=lambda row: row[:2])
     gym = [e.name for _, _, e in ranked if e.location in ("gym", "both")]
     home = [e.name for _, _, e in ranked if e.location in ("home", "both")]
@@ -177,7 +184,7 @@ def rank_areas(
                 "muscles": names,
                 "detail": chosen,
                 "reason": _muscle_reason(chosen[0]),
-                **_options(exercises, names, "strength"),
+                **_options(exercises, {m["muscle"]: m["score"] for m in chosen}, "strength"),
             }
         )
 
@@ -193,7 +200,7 @@ def rank_areas(
                 "muscles": [],
                 "detail": [],
                 "reason": f"{done} of ~{round(target)} cardio minutes this week.",
-                **_options(exercises, [], "cardio"),
+                **_options(exercises, {}, "cardio"),
             }
         )
 
@@ -245,7 +252,8 @@ You receive JSON with this week's candidate priorities, already ranked by code
 the gym and for home. Choose 2 or 3 of the candidates (fewer if fewer are
 given) and write one short, encouraging reason for each, grounded in the facts.
 For each, pick up to 3 gym options and up to 3 home options, ONLY from that
-candidate's own lists, copying names exactly. Use only the muscles listed for
+candidate's own lists (ordered best match first; prefer earlier ones), copying
+names exactly. Use only the muscles listed for
 that candidate. Do not invent exercises, muscles, numbers or medical advice.
 If "wins" is not empty, add one short "keep_it_up" line praising them;
 otherwise set it to null.

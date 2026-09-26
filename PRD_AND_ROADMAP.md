@@ -309,7 +309,7 @@ The card is per-user and shows the stored result for the current ISO week. Befor
   - Areas are the four muscle groups plus Cardio. Cardio scores 0.8 × its minutes shortfall vs the 4-week average (floor 60 min).
   - An area's score is its top muscle's score. It lists up to 3 muscles within 60% of that score.
   - Areas below 0.35, or with no catalog options, are dropped; at most 3 are kept.
-  - Options are ranked by primary-muscle matches, capped at 5 per location. `both` counts for gym and home.
+  - Each option is ranked by how much of the area's need it covers: the sum of its muscles' scores, primary in full and secondary at half. A row that hits the lead muscle therefore outranks a curl that only touches forearms. Options are capped at 5 per location. `both` counts for gym and home.
 - **LLM call:**
   - It uses the LLM client directly (`chat_json`), like the old horoscope feature. It does not go through `process_command`, since no tools are involved.
   - The LLM only picks among the ranked areas and their candidates.

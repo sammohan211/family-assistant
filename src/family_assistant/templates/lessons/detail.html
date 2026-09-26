@@ -162,7 +162,7 @@
           {% if lesson.test.score %}<p class="text-sm text-gray-600 mt-1">Score: {{ lesson.test.score }}</p>{% endif %}
           {% if lesson.test.notes %}<p class="text-sm text-gray-500 mt-1 whitespace-pre-line">{{ lesson.test.notes }}</p>{% endif %}
           {% if lesson.test.done and lesson.test.done_at %}
-          <p class="text-xs text-gray-400 mt-1">Completed {{ lesson.test.done_at.strftime('%b %-d, %Y') }}</p>
+          <p class="text-xs text-gray-400 mt-1">Completed {{ (lesson.test.done_at|local).strftime('%b %-d, %Y') }}</p>
           {% endif %}
         </div>
         <form method="post" action="/lessons/{{ lesson.id }}/test/toggle">

@@ -46,7 +46,7 @@
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
         <p class="font-mono text-xs text-gray-500 tabular-nums">
-          #{{ interaction.id }} · {{ interaction.created_at.strftime('%a %b %-d, %-I:%M %p') }}
+          #{{ interaction.id }} · {{ (interaction.created_at|local).strftime('%a %b %-d, %-I:%M %p') }}
           {% if interaction.latency_ms is not none %}
             · {{ interaction.latency_ms }} ms
           {% endif %}

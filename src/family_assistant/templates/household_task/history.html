@@ -24,7 +24,7 @@
       <tbody class="divide-y divide-gray-200">
         {% for c in completions %}
         <tr>
-          <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ c.completed_at.strftime('%a %b %-d, %-I:%M %p') }}</td>
+          <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ (c.completed_at|local).strftime('%a %b %-d, %-I:%M %p') }}</td>
           <td class="px-4 py-2 text-gray-900">{{ c.task.name if c.task else '(deleted task)' }}</td>
           <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ c.completed_by.name if c.completed_by else '—' }}</td>
           <td class="px-4 py-2 whitespace-nowrap text-gray-500">{{ c.due_on.strftime('%b %-d') if c.due_on else '—' }}</td>
