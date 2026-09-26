@@ -30,6 +30,7 @@ from family_assistant.exercise.services import (
     delete_log,
     get_exercise,
     get_log,
+    latest_log_by_exercise,
     list_exercises,
     list_user_logs,
     set_body_weight,
@@ -152,6 +153,41 @@ def _scoring_by_exercise(exercises: list[Exercise]) -> dict[str, str]:
     return {str(ex.id): ex.scoring_type for ex in exercises}
 
 
+def _fmt_number(value: Decimal | int | None) -> str:
+    return "" if value is None else f"{float(value):g}"
+
+
+def _last_session_hint(log: ExerciseLog) -> dict[str, str]:
+    """Display strings for one prior log: greyed placeholders + a summary line."""
+    parts: list[str] = []
+    if log.sets is not None and log.reps is not None:
+        set_reps = f"{log.sets} x {log.reps}"
+        if log.weight is not None:
+            set_reps += f" @ {_fmt_number(log.weight)}"
+        parts.append(set_reps)
+    if log.distance_km is not None:
+        parts.append(f"{_fmt_number(log.distance_km)} km")
+    if log.duration_minutes is not None:
+        parts.append(f"{log.duration_minutes} min")
+    return {
+        "date": f"{log.date:%b} {log.date.day}, {log.date.year}",
+        "summary": " · ".join(parts),
+        "score": f"{log.work_score:,.0f}",
+        "sets": _fmt_number(log.sets),
+        "reps": _fmt_number(log.reps),
+        "weight": _fmt_number(log.weight),
+        "distance_km": _fmt_number(log.distance_km),
+        "duration_minutes": _fmt_number(log.duration_minutes),
+    }
+
+
+def _last_sessions(db: DbSession, user: User) -> dict[str, dict[str, str]]:
+    return {
+        str(exercise_id): _last_session_hint(log)
+        for exercise_id, log in latest_log_by_exercise(db, user=user).items()
+    }
+
+
 def _render_log_form(
     request: Request,
     *,
@@ -161,6 +197,7 @@ def _render_log_form(
     error: str | None,
     form_data: dict[str, str] | None = None,
     status_code: int = 200,
+    last_sessions: dict[str, dict[str, str]] | None = None,
 ) -> Response:
     return templates.TemplateResponse(
         request,
@@ -170,6 +207,7 @@ def _render_log_form(
             "user": user,
             "exercises": exercises,
             "scoring_by_exercise": _scoring_by_exercise(exercises),
+            "last_sessions": last_sessions or {},
             "error": error,
             "form_data": form_data or {},
         },
@@ -478,7 +516,14 @@ def log_new_form(
     user: Annotated[User, Depends(require_user)],
 ) -> Response:
     exercises = list_exercises(db)
-    return _render_log_form(request, log_item=None, user=user, exercises=exercises, error=None)
+    return _render_log_form(
+        request,
+        log_item=None,
+        user=user,
+        exercises=exercises,
+        error=None,
+        last_sessions=_last_sessions(db, user),
+    )
 
 
 def _validate_and_create_or_update(

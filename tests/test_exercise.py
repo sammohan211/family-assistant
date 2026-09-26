@@ -25,6 +25,7 @@ from family_assistant.exercise.services import (
     create_log,
     get_exercise,
     get_exercise_by_name,
+    latest_log_by_exercise,
     list_exercises,
     set_body_weight,
     update_log,
@@ -992,3 +993,79 @@ def test_weekly_view_shows_delta_vs_prior(
     body = response.content
     assert b"+80" in body
     assert b"+25.0%" in body
+
+
+# ---------------------------------------------------------------------------
+# "Last time" hints on the log form
+# ---------------------------------------------------------------------------
+
+
+def _log_weighted(db: Session, user: User, exercise, entry_date: date, weight: str):
+    return create_log(
+        db,
+        user=user,
+        exercise=exercise,
+        entry_date=entry_date,
+        sets=3,
+        reps=10,
+        weight=Decimal(weight),
+        distance_km=None,
+        duration_minutes=None,
+        notes=None,
+    )
+
+
+def test_latest_log_by_exercise_picks_most_recent_per_exercise(
+    db_session: Session, seeded_user: User
+) -> None:
+    from family_assistant.auth.services import hash_password
+
+    other = User(name="Bob", email="bob@example.com", password_hash=hash_password("x"))
+    db_session.add(other)
+    db_session.commit()
+    curl = create_exercise(
+        db_session, name="Curl", body_group="upper", muscle_groups=[], scoring_type="weighted"
+    )
+    row = create_exercise(
+        db_session, name="Row", body_group="upper", muscle_groups=[], scoring_type="weighted"
+    )
+    _log_weighted(db_session, seeded_user, curl, date(2026, 9, 10), "30")
+    latest_curl = _log_weighted(db_session, seeded_user, curl, date(2026, 9, 19), "36")
+    _log_weighted(db_session, seeded_user, curl, date(2026, 9, 15), "33")
+    latest_row = _log_weighted(db_session, seeded_user, row, date(2026, 9, 12), "80")
+    _log_weighted(db_session, other, curl, date(2026, 9, 25), "50")
+
+    latest = latest_log_by_exercise(db_session, user=seeded_user)
+
+    assert {k: v.id for k, v in latest.items()} == {curl.id: latest_curl.id, row.id: latest_row.id}
+
+
+def test_new_log_form_shows_last_session_hint(
+    authenticated_client: TestClient, db_session: Session, seeded_user: User
+) -> None:
+    curl = create_exercise(
+        db_session, name="Curl", body_group="upper", muscle_groups=[], scoring_type="weighted"
+    )
+    _log_weighted(db_session, seeded_user, curl, date(2026, 9, 19), "36")
+
+    response = authenticated_client.get("/exercise/new")
+
+    assert response.status_code == 200
+    body = response.text
+    assert "Use last values" in body
+    assert "Sep 19, 2026" in body
+    assert "1,080" in body  # 36 x 10 x 3
+
+
+def test_edit_log_form_has_no_last_session_hints(
+    authenticated_client: TestClient, db_session: Session, seeded_user: User
+) -> None:
+    curl = create_exercise(
+        db_session, name="Curl", body_group="upper", muscle_groups=[], scoring_type="weighted"
+    )
+    log = _log_weighted(db_session, seeded_user, curl, date(2026, 9, 19), "36")
+
+    response = authenticated_client.get(f"/exercise/{log.id}/edit")
+
+    assert response.status_code == 200
+    assert "Sep 19, 2026" not in response.text
