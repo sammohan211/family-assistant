@@ -119,7 +119,7 @@
         </div>
       </div>
       <div class="text-xs text-gray-400">
-        <span class="font-mono tabular-nums">{{ m.updated_at.strftime("%Y-%m-%d") }}</span>
+        <span class="font-mono tabular-nums">{{ (m.updated_at|local).strftime("%Y-%m-%d") }}</span>
         {% if m.created_by_user %} · added by {{ m.created_by_user.name }}{% endif %}
       </div>
     </li>

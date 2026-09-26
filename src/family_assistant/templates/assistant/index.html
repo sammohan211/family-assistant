@@ -49,7 +49,7 @@
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
         <p class="font-mono text-xs text-gray-500 tabular-nums">
-          {{ latest.created_at.strftime('%a %b %-d, %-I:%M %p') }}
+          {{ (latest.created_at|local).strftime('%a %b %-d, %-I:%M %p') }}
           ·
           <a href="/assistant/interactions/{{ latest.id }}/trace" class="text-gray-500 hover:text-gray-900 underline-offset-2 hover:underline">trace</a>
         </p>
@@ -132,7 +132,7 @@
       <li class="px-4 py-3 flex items-start justify-between gap-3">
         <div class="min-w-0">
           <p class="font-mono text-xs text-gray-500 tabular-nums">
-            {{ entry.created_at.strftime('%a %b %-d, %-I:%M %p') }}
+            {{ (entry.created_at|local).strftime('%a %b %-d, %-I:%M %p') }}
             ·
             <a href="/assistant/interactions/{{ entry.id }}/trace" class="text-gray-500 hover:text-gray-900 underline-offset-2 hover:underline">trace</a>
           </p>
