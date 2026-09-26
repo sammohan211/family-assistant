@@ -16,7 +16,7 @@ docker compose down                  # stop all; data preserved in volumes
 docker compose up -d --build         # rebuild + start
 docker compose exec app bash         # shell in the app container
 docker compose exec postgres psql -U family_assistant
-docker compose exec app pytest       # test suite
+# tests: see "Running tests" below (not runnable inside family-app)
 ```
 
 ## Deploy
@@ -30,6 +30,24 @@ Fast-forwards to `origin/main`, dumps the DB *before* migrating, rebuilds, waits
 **Rollback reverts code, not schema.** If a migration is the culprit, restore the pre-migrate dump (below) instead of relying on `rollback.sh`.
 
 The manual equivalent: `git pull` → `docker compose up -d --build` → `docker compose exec app alembic upgrade head` → check logs. `up -d --build` is idempotent; `alembic upgrade head` with nothing pending is a no-op.
+
+## Running tests
+
+The production image is built without dev dependencies or `tests/`, so tests can't run inside `family-app`. Run them for any pushed branch in a throwaway container on the stack's network. The live app and database are untouched: `tests/conftest.py` swaps the database name to `family_assistant_test` (create it once with `docker compose exec postgres createdb -U family_assistant family_assistant_test`).
+
+```bash
+cd ~/family-assistant && git fetch origin
+git worktree add --detach /tmp/fa-test origin/<branch>
+docker run --rm --network family-assistant_default \
+  -v /tmp/fa-test:/src -w /src \
+  -e DATABASE_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)" \
+  -e UV_LINK_MODE=copy -e UV_PROJECT_ENVIRONMENT=/tmp/venv \
+  ghcr.io/astral-sh/uv:python3.13-bookworm-slim \
+  sh -c "uv sync -q --frozen --extra dev && uv run pytest -q -p no:cacheprovider"
+git worktree remove --force /tmp/fa-test
+```
+
+Lint and format checks don't need a database: run `uv run ruff check . && uv run ruff format --check .` on the laptop.
 
 ## Logs & debugging
 
