@@ -34,7 +34,10 @@ def _now() -> datetime:
 
 
 def _loaded(statement):
-    return statement.options(
+    # populate_existing: children are added by FK (not appended to the parent's
+    # collection) and sessions use expire_on_commit=False, so an already-loaded
+    # parent would otherwise keep a stale collection.
+    return statement.execution_options(populate_existing=True).options(
         selectinload(Project.milestones),
         selectinload(Project.entries),
     )

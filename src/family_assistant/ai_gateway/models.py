@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -13,6 +13,7 @@ from family_assistant.db import Base
 
 class AssistantInteraction(Base):
     __tablename__ = "assistant_interactions"
+    __table_args__ = (Index("ix_assistant_interactions_user_created", "user_id", "created_at"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
@@ -48,6 +49,7 @@ class InteractionTrace(Base):
     """
 
     __tablename__ = "interaction_traces"
+    __table_args__ = (Index("ix_interaction_traces_interaction_ts", "interaction_id", "ts_ms"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     interaction_id: Mapped[int] = mapped_column(

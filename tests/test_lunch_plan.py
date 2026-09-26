@@ -251,6 +251,12 @@ def test_delete_lunch_plan_entry(
 _WEEK_START = "2026-05-18"
 
 
+def _day_card(weekday: str) -> bytes:
+    """A rendered day card's heading. The page header's week range ("May 18 to
+    May 24") always contains the first and last dates, so match weekday cards."""
+    return f'<h3 class="font-medium">{weekday}</h3>'.encode()
+
+
 def test_lunch_grid_only_shows_school_days(
     authenticated_client: TestClient, db_session: Session
 ) -> None:
@@ -261,13 +267,13 @@ def test_lunch_grid_only_shows_school_days(
     response = authenticated_client.get(f"/lunch-plan?week_start={_WEEK_START}")
     assert response.status_code == 200
     body = response.content
-    assert b"May 18" in body  # Monday
-    assert b"May 20" in body  # Wednesday
-    assert b"May 19" not in body  # Tuesday
-    assert b"May 21" not in body  # Thursday
-    assert b"May 22" not in body  # Friday
-    assert b"May 23" not in body  # Saturday
-    assert b"May 24" not in body  # Sunday
+    assert _day_card("Monday") in body
+    assert _day_card("Wednesday") in body
+    assert _day_card("Tuesday") not in body
+    assert _day_card("Thursday") not in body
+    assert _day_card("Friday") not in body
+    assert _day_card("Saturday") not in body
+    assert _day_card("Sunday") not in body
 
 
 def test_lunch_grid_includes_days_with_existing_entries(
@@ -292,10 +298,10 @@ def test_lunch_grid_includes_days_with_existing_entries(
     response = authenticated_client.get(f"/lunch-plan?week_start={_WEEK_START}")
     assert response.status_code == 200
     body = response.content
-    assert b"May 18" in body  # Monday (school day)
-    assert b"May 21" in body  # Thursday (has entry)
+    assert _day_card("Monday") in body  # school day
+    assert _day_card("Thursday") in body  # has entry
     assert b"Field trip lunch" in body
-    assert b"May 19" not in body  # Tuesday (no school, no entry)
+    assert _day_card("Tuesday") not in body  # no school, no entry
 
 
 def test_new_lunch_form_shows_empty_state_when_no_family_members(
@@ -337,7 +343,7 @@ def test_lunch_grid_shows_hint_when_no_school_days_configured(
     assert response.status_code == 200
     body = response.content
     assert b"No school days configured for Lila" in body
-    assert b"May 18" not in body  # No day cards rendered for this member
+    assert _day_card("Monday") not in body  # No day cards rendered for this member
 
 
 # ---------------------------------------------------------------------------

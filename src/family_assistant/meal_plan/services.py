@@ -17,6 +17,11 @@ MEAL_TYPES = ("breakfast", "lunch", "dinner", "snack")
 # ---------------------------------------------------------------------------
 
 
+def _optional_text(value: str | None) -> str | None:
+    """Strip free text; blank or whitespace-only becomes None."""
+    return (value or "").strip() or None
+
+
 def _normalize_ingredients(ingredients: list[str]) -> list[str]:
     seen: list[str] = []
     for raw in ingredients:
@@ -72,8 +77,8 @@ def create_recipe(
         name=name.strip(),
         meal_type=meal_type,
         ingredients=_normalize_ingredients(ingredients),
-        instructions=instructions.strip() if instructions else None,
-        notes=notes.strip() if notes else None,
+        instructions=_optional_text(instructions),
+        notes=_optional_text(notes),
         calories=calories,
         protein_g=protein_g,
     )
@@ -103,8 +108,8 @@ def update_recipe(
     recipe.name = name.strip()
     recipe.meal_type = meal_type
     recipe.ingredients = _normalize_ingredients(ingredients)
-    recipe.instructions = instructions.strip() if instructions else None
-    recipe.notes = notes.strip() if notes else None
+    recipe.instructions = _optional_text(instructions)
+    recipe.notes = _optional_text(notes)
     recipe.calories = calories
     recipe.protein_g = protein_g
     db.commit()
@@ -178,7 +183,7 @@ def create_meal_plan_entry(
         date=entry_date,
         meal_type=meal_type,
         title=title.strip(),
-        notes=notes.strip() if notes else None,
+        notes=_optional_text(notes),
         is_favorite=is_favorite,
         created_by_user_id=user.id,
     )
@@ -204,7 +209,7 @@ def update_meal_plan_entry(
     entry.date = entry_date
     entry.meal_type = meal_type
     entry.title = title.strip()
-    entry.notes = notes.strip() if notes else None
+    entry.notes = _optional_text(notes)
     entry.is_favorite = is_favorite
     db.commit()
     db.refresh(entry)
