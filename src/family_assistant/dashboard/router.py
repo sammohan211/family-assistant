@@ -12,6 +12,8 @@ from family_assistant.ai_gateway.services import list_recent_interactions
 from family_assistant.auth.dependencies import require_user
 from family_assistant.auth.models import User
 from family_assistant.db import get_session
+from family_assistant.exercise.priorities import get_priorities, has_recent_logs
+from family_assistant.exercise.taxonomy import muscle_label
 from family_assistant.family_member.models import FamilyMember
 from family_assistant.grocery.services import (
     create_grocery_item,
@@ -87,6 +89,9 @@ def index(
             "open_items": open_items,
             "open_count": len(open_items),
             "recent_interactions": list_recent_interactions(db, user_id=user.id, limit=5),
+            "show_training": has_recent_logs(db, user=user, today=today),
+            "training": get_priorities(db, user=user, today=today),
+            "muscle_label": muscle_label,
         },
     )
 

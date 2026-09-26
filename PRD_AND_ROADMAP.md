@@ -120,7 +120,7 @@ Two tables: a household-shared **catalog** of named exercises and per-user **log
 
 ### 10.8 Dashboard
 
-Five cards: today's meals; **due household tasks** (overdue + due-today, with one-click Done — added with §10.11); this week's school lunches per kid; open grocery (count + quick-add + first items); the current user's recent assistant activity. AI-generated weekly summary card: phase 2. Planned: a **training priorities** card with a Refresh button (§10.16).
+Five cards: today's meals; **due household tasks** (overdue + due-today, with one-click Done — added with §10.11); this week's school lunches per kid; open grocery (count + quick-add + first items); the current user's recent assistant activity. AI-generated weekly summary card: phase 2. A **training priorities** card with a Refresh button (§10.16 step 3) spans the top row for users with exercise logs in the last 4 weeks.
 
 ### 10.9 Blood Pressure Module
 
@@ -173,7 +173,7 @@ Shipped 2026-09-20 (migration `0025`). Per-user glucose reading log at `/glucose
 
 Data model: `GlucoseReading` — per-user (`user_id` FK, `ondelete="CASCADE"`), same shape as `BloodPressureReading` (§12) plus a `context` column. No assistant tool, consistent with how BP/Hikes shipped UI-only (§21).
 
-### 10.16 Training Guidance — designed 2026-09-26; steps 1–2 built, steps 3–4 planned
+### 10.16 Training Guidance — designed 2026-09-26; steps 1–3 built, step 4 planned
 
 **Goal:** passive weekly hints on what to train. At the start of a week the user presses **Refresh** on a dashboard card and gets 2–3 priorities — body area, muscles, and exercise options split by gym and home. Hints only: no workout plans, no nagging, never medical advice (§5.4). Primary user is one adult; the card is per-user, so the other adult gets their own if they log exercise.
 
@@ -298,6 +298,29 @@ The card is per-user and shows the stored result for the current ISO week. Befor
 5. Store the result in **TrainingPriorities** (user, `week_start` unique per user, content JSONB, model, generated_at, `is_fallback`). Refreshing again overwrites it, so there is at most one LLM call per press.
 6. **Fallback.** If the LLM is unavailable or its output is invalid, the card shows the top of the deterministic ranking with its candidate exercises and no prose.
 
+**As built (2026-09-26, `exercise/priorities.py`, migration `0028`):**
+- **Score per muscle** = 0.5 × need + 0.5 × staleness.
+  - Need is the share of this week's target not yet done; the target is the higher of the 4-week average and the floor (`SET_FLOOR` = 4 sets).
+  - Staleness is days since trained, capped at 14.
+  - A muscle whose target is already met scores 0.
+  - The weaker side of push/pull or upper/lower gets +0.15 when below 75% of the stronger.
+  - Trained today or yesterday: × 0.5. Never trained: × 0.6, so it surfaces without outranking a muscle you've let slip.
+- **Areas:**
+  - Areas are the four muscle groups plus Cardio. Cardio scores 0.8 × its minutes shortfall vs the 4-week average (floor 60 min).
+  - An area's score is its top muscle's score. It lists up to 3 muscles within 60% of that score.
+  - Areas below 0.35, or with no catalog options, are dropped; at most 3 are kept.
+  - Options are ranked by primary-muscle matches, capped at 5 per location. `both` counts for gym and home.
+- **LLM call:**
+  - It uses the LLM client directly (`chat_json`), like the old horoscope feature. It does not go through `process_command`, since no tools are involved.
+  - The LLM only picks among the ranked areas and their candidates.
+  - Validation also drops unknown areas and duplicates.
+  - Every priority carries a factual code-built reason (e.g. "Chest: last trained 9 days ago; 0 of ~6 sets this week"). This is the fallback's text and fills in a missing LLM reason.
+  - "Keep it up" lists exercises that met or beat their last score.
+- **Card and routes:**
+  - The card spans the dashboard's top row. Refresh posts to `/exercise/priorities/refresh`.
+  - A week with nothing to rank shows "on track" and is not a fallback.
+  - `USE_MOCK_LLM` uses a canned echo client.
+
 **Privacy:** each user's card reads only their own logs. Blood Sugar and BP are not inputs (their privacy and advice rules would need their own decision).
 
 #### Step 4 — later
@@ -372,7 +395,7 @@ Two granularities, together the primary AI debugging surface:
 
 ## 12. Data Model
 
-Single implicit household; no Household/HouseholdMember/AuditLog entities. Authoritative schema: `alembic/versions/` (0001–0027) and each module's `models.py`. Summary of entities and their non-obvious decisions:
+Single implicit household; no Household/HouseholdMember/AuditLog entities. Authoritative schema: `alembic/versions/` (0001–0028) and each module's `models.py`. Summary of entities and their non-obvious decisions:
 
 - **User** ×2, seeded from `.env`; carries `body_weight` for exercise scoring.
 - **FamilyMember** — name, notes, school_days. Preferences/allergies live in Memory, not columns.
@@ -380,7 +403,7 @@ Single implicit household; no Household/HouseholdMember/AuditLog entities. Autho
 - **Recipe** (§10.5) — name (unique), meal_type, ingredients (JSONB list of names), optional instructions/notes, coarse nullable calories/protein_g. No FK from plan entries.
 - **MealPlanEntry** — date, meal_type, free-text title, notes, is_favorite, created_by.
 - **LunchPlanEntry** — family_member FK, date, items (JSONB `{name, notes?}` list), notes, packed_status (unsurfaced), created_by.
-- **Exercise** (catalog) + **ExerciseLog** — per §10.7; `work_score` persisted at write time so later body-weight edits don't distort history. Catalog uses fixed-vocabulary primary/secondary muscles + region/modality/location; logs carry `body_weight_used` (§10.16 step 1). **TrainingWeekSummary** (§10.16 step 2): one JSONB snapshot per user per completed ISO week, unique on (user, week). Planned: **TrainingPriorities**.
+- **Exercise** (catalog) + **ExerciseLog** — per §10.7; `work_score` persisted at write time so later body-weight edits don't distort history. Catalog uses fixed-vocabulary primary/secondary muscles + region/modality/location; logs carry `body_weight_used` (§10.16 step 1). **TrainingWeekSummary** (§10.16 step 2): one JSONB snapshot per user per completed ISO week, unique on (user, week). **TrainingPriorities** (§10.16 step 3): one row per user per ISO week, overwritten on Refresh.
 - **BloodPressureReading** — per §10.9; `map_value` persisted, category derived on read.
 - **GlucoseReading** — per §10.15; per-user like BloodPressureReading, but reachable only by one designated owner (route-level check + hidden nav entry) — the app's first whole-module single-user restriction rather than ownership scoping.
 - **Hike** — per §10.10; `speed_kmh` persisted.
@@ -508,7 +531,7 @@ All build-time questions have answers now: model = whatever `OPENROUTER_MODEL` p
 **Near-term backlog** (unphased; when an item ships, delete it here and update its PRD section in-place):
 
 - **Expand assistant tool coverage as needs surface** — update/delete/duplicate variants when a real flow demands them, not to complete the matrix.
-- **Training guidance (§10.16)** — designed 2026-09-26: (1) ✅ catalog re-model + re-tag migration, (2) ✅ weekly state summaries, (3) dashboard training-priorities card with LLM refresh, (4) later: mid-week progress ticks + assistant chat tool over the same summaries.
+- **Training guidance (§10.16)** — designed 2026-09-26: (1) ✅ catalog re-model + re-tag migration, (2) ✅ weekly state summaries, (3) ✅ dashboard training-priorities card with LLM refresh, (4) later: mid-week progress ticks + assistant chat tool over the same summaries.
 - **Assistant read support for exercise history** — an `exercise.search`-style tool + prompt-builder pre-fetch, so "how much did I run this week?" works. Should read the §10.16 weekly summaries rather than raw logs once they exist.
 - **Clarification Phase 2** — one self-repair retry on validation failure (§11.5a).
 - **Clarification Phase 3** — multi-turn threads (`thread_id`, `pending_clarification`).
