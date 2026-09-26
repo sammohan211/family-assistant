@@ -24,8 +24,8 @@ def test_dashboard_renders_empty_state(authenticated_client: TestClient) -> None
     assert response.status_code == 200
     body = response.content
     assert b"Dashboard" in body
-    assert b"Nothing planned for today" in body
-    assert b"No open items" in body
+    assert b"A clean slate." in body
+    assert b"All caught up." in body
     assert b"No family members yet" in body
 
 

@@ -27,6 +27,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -134,6 +135,9 @@ class LessonResource(Base):
 
 class LessonTest(Base):
     __tablename__ = "lesson_tests"
+    # Migration 0023 created both this constraint (from unique=True) and the
+    # unique index below; declare it so the models match the schema.
+    __table_args__ = (UniqueConstraint("lesson_id", name="lesson_tests_lesson_id_key"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     # One test per lesson — the unique constraint enforces it at the DB level.
