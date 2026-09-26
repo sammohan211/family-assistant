@@ -5,6 +5,7 @@ body-weight setter, and the per-user exercise log (list, new, edit, delete)
 at `/exercise`. The weekly aggregation view lands in the next commit.
 """
 
+from contextlib import suppress
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Annotated
@@ -14,10 +15,16 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
+from family_assistant.ai_gateway.llm import LLMClient, default_client
 from family_assistant.auth.dependencies import require_user
 from family_assistant.auth.models import User
 from family_assistant.db import get_session
 from family_assistant.exercise.models import Exercise, ExerciseLog
+from family_assistant.exercise.priorities import (
+    CannedPrioritiesLLM,
+    PrioritiesError,
+    refresh_priorities,
+)
 from family_assistant.exercise.scoring import ScoringInputError
 from family_assistant.exercise.services import (
     create_exercise,
@@ -41,6 +48,7 @@ from family_assistant.exercise.taxonomy import (
     REGIONS,
     muscle_label,
 )
+from family_assistant.settings import get_settings
 from family_assistant.templating import templates
 
 router = APIRouter(
@@ -303,6 +311,37 @@ def weekly_view(
             "stale_after_days": STALE_AFTER_DAYS,
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Training priorities (dashboard card, PRD §10.16 step 3)
+# ---------------------------------------------------------------------------
+
+
+def get_priorities_llm() -> LLMClient:
+    """LLM for the priorities card. Tests override via app.dependency_overrides."""
+    if get_settings().use_mock_llm:
+        return CannedPrioritiesLLM()
+    return default_client()
+
+
+def _model_label() -> str | None:
+    settings = get_settings()
+    if settings.use_mock_llm:
+        return "mock"
+    return settings.openrouter_model
+
+
+@router.post("/priorities/refresh")
+def priorities_refresh(
+    db: Annotated[DbSession, Depends(get_session)],
+    user: Annotated[User, Depends(require_user)],
+    llm: Annotated[LLMClient, Depends(get_priorities_llm)],
+) -> Response:
+    # The card is hidden without recent logs, so there is nothing to refresh.
+    with suppress(PrioritiesError):
+        refresh_priorities(db, user=user, llm=llm, model_label=_model_label())
+    return RedirectResponse(url="/dashboard#training", status_code=303)
 
 
 # ---------------------------------------------------------------------------

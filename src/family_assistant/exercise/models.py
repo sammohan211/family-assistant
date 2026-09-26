@@ -13,6 +13,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     ForeignKey,
@@ -94,3 +95,27 @@ class TrainingWeekSummary(Base):
     week_start: Mapped[date] = mapped_column(Date())
     data: Mapped[dict] = mapped_column(JSONB())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TrainingPriorities(Base):
+    """One user's training priorities for one ISO week (PRD §10.16 step 3).
+
+    Written by Refresh on the dashboard card; a second refresh in the same week
+    overwrites it. ``content`` holds the validated LLM answer, or the
+    deterministic ranking when ``is_fallback`` is true.
+    """
+
+    __tablename__ = "training_priorities"
+    __table_args__ = (
+        UniqueConstraint("user_id", "week_start", name="uq_training_priorities_user_week"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    week_start: Mapped[date] = mapped_column(Date())
+    content: Mapped[dict] = mapped_column(JSONB())
+    model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    is_fallback: Mapped[bool] = mapped_column(Boolean(), default=False, server_default="false")
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
