@@ -255,9 +255,9 @@ As built, beyond the spec below: old `body_group`/`muscle_groups` are dropped on
 
 **Effect on existing logs:**
 - Log rows are not modified. Muscles, region, modality and location live only on the catalog and are read at query time, so past weeks are re-interpreted with the corrected tags.
-- Saved `work_score` values stay as they are, except cardio logs, which are re-scored to minutes from their stored `duration_minutes`. The 3 Treadmill logs have no duration: they keep their row, count as sessions for recency, and add 0 cardio minutes (no estimating).
+- Saved `work_score` values stay as they are, except cardio logs, which are re-scored to minutes from their stored `duration_minutes`; logs without a duration score 0.
 - `body_weight_used` is backfilled with the user's current weight (an approximation).
-- The Treadmill and any other timed exercise without a logged duration now score 0.
+- **As deployed (2026-09-26):** 17 of 22 Hiking logs and all 3 Treadmill logs turned out to have no duration (the audit's "~195 min" average covered only the 5 that did), so they scored 0. The owner approved estimates, applied by hand after the migration to that user's 18 logs: at least 4 km at trail pace (3.2 km/h, or that day's Hike-module pace), under 4 km at 5 km/h walking pace. Each is marked `(duration est.)` in its notes. The other adult's two duration-less hikes were left at 0.
 - The `exercise_logs → exercises` FK is `ON DELETE RESTRICT`, so no exercise with logs can be deleted by mistake. The two deletions above have 0 logs.
 - Take a manual backup immediately before deploying.
 
