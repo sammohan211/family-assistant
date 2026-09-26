@@ -598,7 +598,7 @@ def test_catalog_list_renders_existing_exercises(
     response = authenticated_client.get("/exercise/catalog")
     assert response.status_code == 200
     assert b"Bench press" in response.content
-    assert b"chest" in response.content
+    assert b"Chest" in response.content
 
 
 def test_catalog_create_via_form(authenticated_client: TestClient, db_session: Session) -> None:
@@ -1074,9 +1074,9 @@ def test_weekly_view_renders_breakdowns(
     )
     response = authenticated_client.get("/exercise/weekly")
     assert response.status_code == 200
-    assert b"By body group" in response.content
-    assert b"By muscle group" in response.content
-    assert b"chest" in response.content
+    assert b"By region" in response.content
+    assert b"By muscle" in response.content
+    assert b"Chest" in response.content
     assert b"triceps" in response.content
 
 

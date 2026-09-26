@@ -229,6 +229,11 @@ def upgrade() -> None:
         )
     )
 
+    # The old columns have served their purpose (defaults above); drop them before
+    # any INSERT below, since body_group is NOT NULL.
+    op.drop_column("exercises", "body_group")
+    op.drop_column("exercises", "muscle_groups")
+
     for entry in RETAG:
         _retag(conn, entry[0], entry)
 
@@ -288,8 +293,6 @@ def upgrade() -> None:
     op.alter_column("exercises", "region", nullable=False)
     op.alter_column("exercises", "modality", nullable=False)
     op.alter_column("exercises", "location", nullable=False)
-    op.drop_column("exercises", "body_group")
-    op.drop_column("exercises", "muscle_groups")
 
 
 def downgrade() -> None:

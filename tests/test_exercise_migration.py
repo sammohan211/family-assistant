@@ -32,7 +32,8 @@ def alembic_cfg(engine: Engine) -> Iterator[Config]:
     try:
         yield cfg
     finally:
-        command.upgrade(cfg, "head")
+        # Delete rows first: if the upgrade under test failed, the schema is still
+        # at 0025 and the upgrade below would fail again on the same data.
         with engine.begin() as conn:
             conn.execute(
                 text(
@@ -43,6 +44,7 @@ def alembic_cfg(engine: Engine) -> Iterator[Config]:
             )
             conn.execute(text("DELETE FROM exercises"))
             conn.execute(text("DELETE FROM users WHERE email = :email"), {"email": EMAIL})
+        command.upgrade(cfg, "head")
 
 
 def _seed_old_catalog(conn: Connection, *, row_machine_logged: bool) -> None:
