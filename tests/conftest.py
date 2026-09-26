@@ -29,7 +29,8 @@ ALEMBIC_INI = Path(__file__).resolve().parent.parent / "alembic.ini"
 
 def _alembic_config(database_url: str) -> Config:
     cfg = Config(str(ALEMBIC_INI))
-    cfg.set_main_option("sqlalchemy.url", database_url)
+    # configparser treats "%" as interpolation, so escape it (URL-encoded passwords).
+    cfg.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
     return cfg
 
 
@@ -56,7 +57,8 @@ def engine() -> Iterator[Engine]:
             f"  docker compose exec postgres createdb -U family_assistant family_assistant_test\n"
             f"Underlying error: {e}"
         )
-    command.upgrade(_alembic_config(str(url)), "head")
+    # str(url) masks the password as "***"; render it in full for Alembic.
+    command.upgrade(_alembic_config(url.render_as_string(hide_password=False)), "head")
     yield engine
     engine.dispose()
 
