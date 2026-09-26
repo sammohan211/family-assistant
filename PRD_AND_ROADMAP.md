@@ -532,6 +532,13 @@ All build-time questions have answers now: model = whatever `OPENROUTER_MODEL` p
 
 - **Expand assistant tool coverage as needs surface** — update/delete/duplicate variants when a real flow demands them, not to complete the matrix.
 - **Training guidance (§10.16)** — designed 2026-09-26: (1) ✅ catalog re-model + re-tag migration, (2) ✅ weekly state summaries, (3) ✅ dashboard training-priorities card with LLM refresh, (4) later: mid-week progress ticks + assistant chat tool over the same summaries.
+- **BP and Blood Sugar monitor/nudge cards (§10.9, §10.15)**: idea from 2026-09-26, not designed yet. The plan is dashboard cards like the training priorities card (§10.16 step 3): code computes, the LLM only phrases, with a deterministic fallback. **Prerequisite:** a few weeks of real readings; neither module is in use yet.
+  - **Code decides:** it compares readings to fixed guideline ranges and to the user's own baseline or trend, and flags gaps in logging consistency. The LLM never judges whether a reading is concerning.
+  - **Nudges are about habits.** Examples: "no fasting reading in 5 days", "evenings running higher than mornings", "logged BP 4 of 7 days". A high reading or rising trend says "worth raising with your doctor". There is no diagnosis or medication talk (non-goal §5.4).
+  - **Open decisions:**
+    - Whether readings may be sent to the LLM provider at all, or only aggregates (the §10.16 privacy note excluded them pending this).
+    - Blood Sugar stays owner-only (§10.15), so its card shows only for the owner.
+  - **Possible later:** correlating training weeks (§10.16 summaries) with BP/glucose trends, once months of both exist.
 - **Assistant read support for exercise history** — an `exercise.search`-style tool + prompt-builder pre-fetch, so "how much did I run this week?" works. Should read the §10.16 weekly summaries rather than raw logs once they exist.
 - **Clarification Phase 2** — one self-repair retry on validation failure (§11.5a).
 - **Clarification Phase 3** — multi-turn threads (`thread_id`, `pending_clarification`).
