@@ -116,9 +116,11 @@ Two tables: a household-shared **catalog** of named exercises and per-user **log
 6. **Weekly view** (`/exercise/weekly`): ISO-week total, per-body-group and per-muscle-group subtotals, delta vs. prior week. Per-exercise breakdown is phase 2.
 7. **Assistant logging** by exercise name (case-insensitive); unknown names are a validation error, never auto-created.
 
+**Audit 2026-09-26 — known limitations, fixed by the planned re-model in §10.16:** free-text muscle tags copied from gym-machine labels merge opposing muscles (`biceps and triceps`, `chest upper and middle back`) and several are wrong or synonyms; the three scoring types produce incomparable numbers, so the weekly totals and deltas are dominated by strength work (a ~3 h hike scores under half a set of curls); `cardio` is modelled as a body group, so cardio never counts toward the legs; `duration_minutes` is unused; `update_log` re-scores an edited log with the *current* body weight, contradicting item 3.
+
 ### 10.8 Dashboard
 
-Five cards: today's meals; **due household tasks** (overdue + due-today, with one-click Done — added with §10.11); this week's school lunches per kid; open grocery (count + quick-add + first items); the current user's recent assistant activity. AI-generated weekly summary card: phase 2.
+Five cards: today's meals; **due household tasks** (overdue + due-today, with one-click Done — added with §10.11); this week's school lunches per kid; open grocery (count + quick-add + first items); the current user's recent assistant activity. AI-generated weekly summary card: phase 2. Planned: a **training priorities** card with a Refresh button (§10.16).
 
 ### 10.9 Blood Pressure Module
 
@@ -170,6 +172,133 @@ Shipped 2026-09-20 (migration `0025`). Per-user glucose reading log at `/glucose
 - No prefill of "today" on the date field (matching BP, which has none either), so the server/household timezone mismatch flagged during design never becomes a bug in practice — if a "today" quick-fill is ever added, it must be set client-side (`new Date()` in the browser), never server-rendered.
 
 Data model: `GlucoseReading` — per-user (`user_id` FK, `ondelete="CASCADE"`), same shape as `BloodPressureReading` (§12) plus a `context` column. No assistant tool, consistent with how BP/Hikes shipped UI-only (§21).
+
+### 10.16 Training Guidance — planned (designed 2026-09-26, not built)
+
+**Goal:** passive weekly hints on what to train. At the start of a week the user presses **Refresh** on a dashboard card and gets 2–3 priorities — body area, muscles, and exercise options split by gym and home. Hints only: no workout plans, no nagging, never medical advice (§5.4). Primary user is one adult; the card is per-user, so the other adult gets their own if they log exercise.
+
+**Principle — code decides, the LLM phrases** (same pattern as the removed horoscope, §10.12): all numbers, rankings and exercise candidates are computed deterministically; the LLM only selects among them, groups them and writes a one-line reason, and its output is validated against the catalog.
+
+**Data decisions (from the household):**
+- Units are **lb** throughout, body weight included. A dumbbell `weight` is the **total of both** dumbbells; single-arm moves (Single Arm Row, Concentration curl, Triceps kickback) log the one dumbbell.
+- Training happens at the **gym and at home** (dumbbells, sit-ups, push-ups, a cardio rowing machine).
+- **Only the exercise log's `Hiking` entries** are used for training analysis. The Hike module (§10.10) is a Bruce Trail credit tracker and is not read, so nothing is counted twice.
+
+#### Step 1 — Catalog re-model and re-tag migration (no LLM)
+
+**Fixed muscle vocabulary** (16), replacing the free-text tags:
+
+| Group | Muscles |
+|---|---|
+| Upper push | `chest`, `front_delts`, `side_delts`, `triceps` |
+| Upper pull | `upper_back`, `rear_delts`, `biceps`, `forearms` |
+| Core | `abs`, `lower_back`, `hip_flexors` |
+| Lower | `quads`, `hamstrings`, `glutes`, `adductors`, `calves` |
+
+**`exercises` changes:**
+- Add `primary_muscles` and `secondary_muscles` (JSONB lists, validated against the vocabulary).
+- Add `region` (`upper` | `lower` | `core` | `full`), `modality` (`strength` | `cardio`) and `location` (`gym` | `home` | `both`).
+- Add a `timed` scoring type: `work_score = duration_minutes`, and duration is required. All cardio exercises use it (distance stays optional input).
+- Retire `body_group` and the free-text `muscle_groups`.
+
+**`exercise_logs` changes:**
+- Add `body_weight_used`, set at write time.
+- Editing a log re-scores it with its own `body_weight_used`, not the user's current weight.
+
+**Re-tag table** (applied by a hand-written data migration). Primary muscles count as 1 set each, secondary as ½. Cardio rows list the muscles whose "last trained" date they update; they don't add strength sets.
+
+| Exercise | Region | Primary | Secondary | Where | Scoring |
+|---|---|---|---|---|---|
+| Chest press machine | upper | chest | triceps, front_delts | gym | weighted |
+| Pec fly machine | upper | chest | front_delts | gym | weighted |
+| Dumbbell bench press | upper | chest | triceps, front_delts | both | weighted |
+| Flat Dumbbell Press | — | *duplicate of Dumbbell bench press; deleted (0 logs)* | | | |
+| Pushups | upper | chest | triceps, front_delts, abs | home | bodyweight 0.64 |
+| Dumbbell shoulder press | upper | front_delts | side_delts, triceps | both | weighted |
+| Shoulder press machine | upper | front_delts | side_delts, triceps | gym | weighted |
+| Front raise | upper | front_delts | — | both | weighted |
+| Lateral Raise | upper | side_delts | — | both | weighted |
+| Triceps pushdown | upper | triceps | — | gym | weighted |
+| Triceps extension machine | upper | triceps | — | gym | weighted |
+| Triceps kickback | upper | triceps | — | both | weighted |
+| Overhead Dumbbell Triceps Extension | upper | triceps | — | both | weighted |
+| Lat pulldown | upper | upper_back | biceps, rear_delts | gym | weighted |
+| Seated Cable Row | upper | upper_back | biceps, rear_delts | gym | weighted |
+| Single Arm Row | upper | upper_back | biceps, rear_delts | both | weighted |
+| Rear Delt Pec Fly Machine | upper | rear_delts | upper_back | gym | weighted |
+| Hammer Curl | upper | biceps | forearms | both | weighted |
+| Barbell curl | upper | biceps | forearms | gym | weighted |
+| Seated dumbbell curl | upper | biceps | forearms | both | weighted |
+| Concentration curl | upper | biceps | — | both | weighted |
+| Arm curl machine | upper | biceps | forearms | gym | weighted |
+| Sit-ups | core | abs | hip_flexors | home | bodyweight 0.38 |
+| Abdominal machine | core | abs | hip_flexors | gym | weighted |
+| Captain's Chair Leg Raise | core *(was lower)* | abs, hip_flexors | — | gym | bodyweight 0.5 |
+| Leg raise | core | abs, hip_flexors | — | gym | weighted |
+| Leg Raise unweighted | core | abs, hip_flexors | — | both | bodyweight 0.4 |
+| Back Extension Machine | core | lower_back | glutes, hamstrings | gym | weighted |
+| Hack squat | lower | quads | glutes, adductors | gym | weighted |
+| Leg press | lower | quads, glutes | hamstrings, adductors | gym | weighted |
+| Leg extension | lower | quads | — | gym | weighted |
+| Leg curl | lower | hamstrings | calves | gym | weighted |
+| Dumbbell squat | lower | quads, glutes | adductors | both | weighted |
+| Romanian Dead Lift | lower | hamstrings, glutes | lower_back, forearms | both | weighted |
+| Kettle Bell Swing | lower *(was core)* | glutes, hamstrings | lower_back, abs | both | weighted |
+| Hiking | full · cardio | *recency:* quads, glutes, calves | — | outdoors (`both`) | timed |
+| Treadmill | lower · cardio | *recency:* calves | — | gym | timed |
+| StairMaster | lower · cardio | *recency:* quads, glutes, calves | — | gym | timed |
+| Row Machine → **Rowing machine** | full · cardio | *recency:* upper_back, quads | — | home | timed |
+
+`Row Machine` was a never-logged weighted entry. It is repurposed as the home cardio rowing machine (renamed, re-typed).
+
+**Effect on existing logs:**
+- Log rows are not modified. Muscles, region, modality and location live only on the catalog and are read at query time, so past weeks are re-interpreted with the corrected tags.
+- Saved `work_score` values stay as they are, except cardio logs, which are re-scored to minutes from their stored `duration_minutes`. The 3 Treadmill logs have no duration: they keep their row, count as sessions for recency, and add 0 cardio minutes (no estimating).
+- `body_weight_used` is backfilled with the user's current weight (an approximation).
+- The `exercise_logs → exercises` FK is `ON DELETE RESTRICT`, so no exercise with logs can be deleted by mistake. The two deletions above have 0 logs.
+- Take a manual backup immediately before deploying.
+
+#### Step 2 — Weekly state summary (no LLM)
+
+One **TrainingWeekSummary** row per (user, ISO week), holding a JSONB snapshot computed from that week's exercise logs:
+- `active_days`
+- `strength_sets` per muscle: primary = 1 × logged sets, secondary = ½ × logged sets
+- `balance`: push vs pull sets; upper vs lower vs core sets
+- `cardio_minutes`, total and per exercise
+- `days_since_trained` per muscle, as of week end (strength and cardio recency both count)
+- per-exercise best `work_score` and change vs the previous time, for progress only
+
+`work_score` is never summed across exercises. It is only compared with earlier logs of the same exercise.
+
+**Lifecycle:**
+- Summaries are built **lazily** when a completed week without one is requested. No scheduler.
+- Creating, editing or deleting a log dated in a completed week deletes that week's row, so it is rebuilt on next use.
+- The existing `/exercise/weekly` view switches to sets and minutes in place of mixed `work_score` totals.
+
+#### Step 3 — Dashboard training-priorities card (LLM)
+
+The card is per-user and shows the stored result for the current ISO week. Before the first refresh of a week, it shows a Refresh prompt. It is hidden for users with no exercise logs in the last 4 weeks.
+
+**Pressing Refresh:**
+1. Ensure summaries exist for the **last 4 complete weeks**, plus the current week so far, marked as partial. Including the partial week means a mid-week refresh won't re-suggest something already done on Monday.
+2. **Rank muscles deterministically.** Signals, in rough order:
+   - days since last trained
+   - sets vs the user's own 4-week average, plus a small per-muscle floor (a tunable constant, initially about 4 sets/week) so never-trained muscles still surface
+   - push/pull balance and upper/lower balance
+   - cardio minutes vs the 4-week average
+
+   There are no fixed weekly quotas. For each top muscle, collect the matching catalog exercises (primary first) split by `location`.
+3. **One LLM call** through the AI gateway (§16.7), JSON output validated with Pydantic (§19). The input is the summaries, the ranking and the candidate exercises. The output is 2–3 priorities, each with a body area, muscles, a one-line reason, gym options and home options. An optional "keep it up" line is allowed.
+4. **Validate the answer.** Exercise names not in the catalog and muscles not in the vocabulary are dropped. If nothing valid remains, fall back to step 6.
+5. Store the result in **TrainingPriorities** (user, `week_start` unique per user, content JSONB, model, generated_at, `is_fallback`). Refreshing again overwrites it, so there is at most one LLM call per press.
+6. **Fallback.** If the LLM is unavailable or its output is invalid, the card shows the top of the deterministic ranking with its candidate exercises and no prose.
+
+**Privacy:** each user's card reads only their own logs. Blood Sugar and BP are not inputs (their privacy and advice rules would need their own decision).
+
+#### Step 4 — later
+
+- Mid-week progress ticks on the card, e.g. "upper back: 4 of ~6 sets" (deterministic).
+- An assistant chat tool that reads the same weekly summaries. This also covers the "exercise history read" backlog item (§21).
 
 ## 11. Embedded AI, Memory, and Retrieval
 
@@ -246,7 +375,7 @@ Single implicit household; no Household/HouseholdMember/AuditLog entities. Autho
 - **Recipe** (§10.5) — name (unique), meal_type, ingredients (JSONB list of names), optional instructions/notes, coarse nullable calories/protein_g. No FK from plan entries.
 - **MealPlanEntry** — date, meal_type, free-text title, notes, is_favorite, created_by.
 - **LunchPlanEntry** — family_member FK, date, items (JSONB `{name, notes?}` list), notes, packed_status (unsurfaced), created_by.
-- **Exercise** (catalog) + **ExerciseLog** — per §10.7; `work_score` persisted at write time so later body-weight edits don't distort history.
+- **Exercise** (catalog) + **ExerciseLog** — per §10.7; `work_score` persisted at write time so later body-weight edits don't distort history. Planned (§10.16): fixed-vocabulary primary/secondary muscles, region/modality/location, `timed` scoring, `body_weight_used`; new **TrainingWeekSummary** and **TrainingPriorities** tables.
 - **BloodPressureReading** — per §10.9; `map_value` persisted, category derived on read.
 - **GlucoseReading** — per §10.15; per-user like BloodPressureReading, but reachable only by one designated owner (route-level check + hidden nav entry) — the app's first whole-module single-user restriction rather than ownership scoping.
 - **Hike** — per §10.10; `speed_kmh` persisted.
@@ -374,7 +503,8 @@ All build-time questions have answers now: model = whatever `OPENROUTER_MODEL` p
 **Near-term backlog** (unphased; when an item ships, delete it here and update its PRD section in-place):
 
 - **Expand assistant tool coverage as needs surface** — update/delete/duplicate variants when a real flow demands them, not to complete the matrix.
-- **Assistant read support for exercise history** — an `exercise.search`-style tool + prompt-builder pre-fetch, so "how much did I run this week?" works.
+- **Training guidance (§10.16)** — designed 2026-09-26: (1) exercise catalog re-model + re-tag migration, (2) weekly state summaries, (3) dashboard training-priorities card with LLM refresh, (4) later: mid-week progress ticks + assistant chat tool over the same summaries.
+- **Assistant read support for exercise history** — an `exercise.search`-style tool + prompt-builder pre-fetch, so "how much did I run this week?" works. Should read the §10.16 weekly summaries rather than raw logs once they exist.
 - **Clarification Phase 2** — one self-repair retry on validation failure (§11.5a).
 - **Clarification Phase 3** — multi-turn threads (`thread_id`, `pending_clarification`).
 - **Deterministic eval set** — `tests/eval/` of (input, expected_tool_calls) pairs scored 0–1; catches prompt regressions on model changes.
