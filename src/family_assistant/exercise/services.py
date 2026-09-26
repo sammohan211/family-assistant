@@ -168,6 +168,26 @@ def list_user_logs(db: DbSession, *, user: User, limit: int = 100) -> list[Exerc
     return list(db.scalars(_with_relationships(statement)).all())
 
 
+def latest_log_by_exercise(db: DbSession, *, user: User) -> dict[int, ExerciseLog]:
+    """The user's most recent log for each exercise, keyed by exercise id.
+
+    Feeds the "last time" hints on the log form. Same tie-break order as
+    ``list_user_logs`` so "most recent" means the same thing everywhere.
+    """
+    statement = (
+        select(ExerciseLog)
+        .where(ExerciseLog.user_id == user.id)
+        .order_by(
+            ExerciseLog.exercise_id,
+            ExerciseLog.date.desc(),
+            ExerciseLog.created_at.desc(),
+            ExerciseLog.id.desc(),
+        )
+        .distinct(ExerciseLog.exercise_id)
+    )
+    return {log.exercise_id: log for log in db.scalars(statement).all()}
+
+
 def get_log(db: DbSession, log_id: int) -> ExerciseLog | None:
     statement = select(ExerciseLog).where(ExerciseLog.id == log_id)
     return db.scalars(_with_relationships(statement)).first()
