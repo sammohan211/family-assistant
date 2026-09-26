@@ -1077,7 +1077,7 @@ def test_weekly_view_renders_breakdowns(
     assert b"By region" in response.content
     assert b"By muscle" in response.content
     assert b"Chest" in response.content
-    assert b"triceps" in response.content
+    assert b"Triceps" in response.content
 
 
 def test_weekly_view_accepts_week_param(
