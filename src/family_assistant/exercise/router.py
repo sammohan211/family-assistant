@@ -18,11 +18,7 @@ from family_assistant.auth.dependencies import require_user
 from family_assistant.auth.models import User
 from family_assistant.db import get_session
 from family_assistant.exercise.models import Exercise, ExerciseLog
-from family_assistant.exercise.scoring import (
-    BODY_GROUPS,
-    SCORING_TYPES,
-    ScoringInputError,
-)
+from family_assistant.exercise.scoring import ScoringInputError
 from family_assistant.exercise.services import (
     create_exercise,
     create_log,
@@ -39,6 +35,13 @@ from family_assistant.exercise.services import (
     week_start,
     weekly_summary,
 )
+from family_assistant.exercise.taxonomy import (
+    LOCATIONS,
+    MODALITIES,
+    MUSCLE_GROUPS,
+    REGIONS,
+    muscle_label,
+)
 from family_assistant.templating import templates
 
 router = APIRouter(
@@ -51,10 +54,6 @@ router = APIRouter(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _parse_tags(raw: str) -> list[str]:
-    return [tag for tag in (part.strip() for part in raw.split(",")) if tag]
 
 
 def _parse_fraction(raw: str) -> tuple[Decimal | None, str | None]:
@@ -99,8 +98,11 @@ def _render_catalog_form(
         {
             "item": item,
             "user": user,
-            "body_groups": BODY_GROUPS,
-            "scoring_types": SCORING_TYPES,
+            "regions": REGIONS,
+            "modalities": MODALITIES,
+            "locations": LOCATIONS,
+            "muscle_groups": MUSCLE_GROUPS,
+            "muscle_label": muscle_label,
             "error": error,
             "form_data": form_data or {},
         },
@@ -289,6 +291,7 @@ def weekly_view(
         {
             "summary": summary,
             "user": user,
+            "muscle_label": muscle_label,
             "prev_week": prev_week,
             "next_week": next_week,
             "today_week_start": week_start(date.today()),
@@ -311,7 +314,7 @@ def catalog_list_view(
     return templates.TemplateResponse(
         request,
         "exercise/catalog/list.html",
-        {"exercises": exercises, "user": user},
+        {"exercises": exercises, "user": user, "muscle_label": muscle_label},
     )
 
 
@@ -320,82 +323,100 @@ def catalog_new_form(request: Request, user: Annotated[User, Depends(require_use
     return _render_catalog_form(request, item=None, user=user, error=None)
 
 
+def _save_catalog_form(
+    request: Request,
+    db: DbSession,
+    *,
+    user: User,
+    item: Exercise | None,
+    name: str,
+    region: str,
+    modality: str,
+    location: str,
+    primary_muscles: list[str],
+    secondary_muscles: list[str],
+    scoring_type: str,
+    bodyweight_fraction: str,
+) -> Response:
+    """Shared create/update path: validate, save, or re-render with the error."""
+    form_data = {
+        "name": name,
+        "region": region,
+        "modality": modality,
+        "location": location,
+        "primary_muscles": primary_muscles,
+        "secondary_muscles": secondary_muscles,
+        "scoring_type": scoring_type,
+        "bodyweight_fraction": bodyweight_fraction,
+    }
+
+    def fail(error: str | None, status_code: int = 400) -> Response:
+        return _render_catalog_form(
+            request,
+            item=item,
+            user=user,
+            error=error,
+            form_data=form_data,
+            status_code=status_code,
+        )
+
+    cleaned_name = name.strip()
+    if not cleaned_name:
+        return fail("Name is required.")
+    fraction, fraction_error = _parse_fraction(bodyweight_fraction)
+    if fraction is None:
+        return fail(fraction_error)
+    fields = {
+        "name": cleaned_name,
+        "region": region,
+        "modality": modality,
+        "location": location,
+        "primary_muscles": primary_muscles,
+        "secondary_muscles": secondary_muscles,
+        "scoring_type": scoring_type,
+        "bodyweight_fraction": fraction,
+    }
+    try:
+        if item is None:
+            create_exercise(db, **fields)
+        else:
+            update_exercise(db, exercise_id=item.id, **fields)
+    except ValueError as exc:
+        return fail(f"{exc}.")
+    except IntegrityError:
+        db.rollback()
+        return fail(f"An exercise named {cleaned_name!r} already exists.", status_code=409)
+    return RedirectResponse(url="/exercise/catalog", status_code=303)
+
+
 @router.post("/catalog")
 def catalog_create_view(
     request: Request,
     db: Annotated[DbSession, Depends(get_session)],
     user: Annotated[User, Depends(require_user)],
     name: Annotated[str, Form()],
-    body_group: Annotated[str, Form()],
-    muscle_groups: Annotated[str, Form()] = "",
+    region: Annotated[str, Form()],
+    modality: Annotated[str, Form()] = "strength",
+    location: Annotated[str, Form()] = "both",
+    primary_muscles: Annotated[list[str] | None, Form()] = None,
+    secondary_muscles: Annotated[list[str] | None, Form()] = None,
     scoring_type: Annotated[str, Form()] = "weighted",
     bodyweight_fraction: Annotated[str, Form()] = "1.000",
 ) -> Response:
-    form_data = {
-        "name": name,
-        "body_group": body_group,
-        "muscle_groups": muscle_groups,
-        "scoring_type": scoring_type,
-        "bodyweight_fraction": bodyweight_fraction,
-    }
-    cleaned_name = name.strip()
-    if not cleaned_name:
-        return _render_catalog_form(
-            request,
-            item=None,
-            user=user,
-            error="Name is required.",
-            form_data=form_data,
-            status_code=400,
-        )
-    if body_group not in BODY_GROUPS:
-        return _render_catalog_form(
-            request,
-            item=None,
-            user=user,
-            error=f"Body group must be one of {', '.join(BODY_GROUPS)}.",
-            form_data=form_data,
-            status_code=400,
-        )
-    if scoring_type not in SCORING_TYPES:
-        return _render_catalog_form(
-            request,
-            item=None,
-            user=user,
-            error=f"Scoring type must be one of {', '.join(SCORING_TYPES)}.",
-            form_data=form_data,
-            status_code=400,
-        )
-    fraction, fraction_error = _parse_fraction(bodyweight_fraction)
-    if fraction is None:
-        return _render_catalog_form(
-            request,
-            item=None,
-            user=user,
-            error=fraction_error,
-            form_data=form_data,
-            status_code=400,
-        )
-    try:
-        create_exercise(
-            db,
-            name=cleaned_name,
-            body_group=body_group,
-            muscle_groups=_parse_tags(muscle_groups),
-            scoring_type=scoring_type,
-            bodyweight_fraction=fraction,
-        )
-    except IntegrityError:
-        db.rollback()
-        return _render_catalog_form(
-            request,
-            item=None,
-            user=user,
-            error=f"An exercise named {cleaned_name!r} already exists.",
-            form_data=form_data,
-            status_code=409,
-        )
-    return RedirectResponse(url="/exercise/catalog", status_code=303)
+    return _save_catalog_form(
+        request,
+        db,
+        user=user,
+        item=None,
+        name=name,
+        region=region,
+        modality=modality,
+        location=location,
+        primary_muscles=primary_muscles or [],
+        secondary_muscles=secondary_muscles or [],
+        scoring_type=scoring_type,
+        bodyweight_fraction=bodyweight_fraction,
+    )
 
 
 @router.get("/catalog/{exercise_id}/edit", response_class=HTMLResponse)
@@ -418,80 +439,31 @@ def catalog_update_view(
     user: Annotated[User, Depends(require_user)],
     exercise_id: int,
     name: Annotated[str, Form()],
-    body_group: Annotated[str, Form()],
-    muscle_groups: Annotated[str, Form()] = "",
+    region: Annotated[str, Form()],
+    modality: Annotated[str, Form()] = "strength",
+    location: Annotated[str, Form()] = "both",
+    primary_muscles: Annotated[list[str] | None, Form()] = None,
+    secondary_muscles: Annotated[list[str] | None, Form()] = None,
     scoring_type: Annotated[str, Form()] = "weighted",
     bodyweight_fraction: Annotated[str, Form()] = "1.000",
 ) -> Response:
     item = get_exercise(db, exercise_id)
     if item is None:
         return RedirectResponse(url="/exercise/catalog", status_code=303)
-    form_data = {
-        "name": name,
-        "body_group": body_group,
-        "muscle_groups": muscle_groups,
-        "scoring_type": scoring_type,
-        "bodyweight_fraction": bodyweight_fraction,
-    }
-    cleaned_name = name.strip()
-    if not cleaned_name:
-        return _render_catalog_form(
-            request,
-            item=item,
-            user=user,
-            error="Name is required.",
-            form_data=form_data,
-            status_code=400,
-        )
-    if body_group not in BODY_GROUPS:
-        return _render_catalog_form(
-            request,
-            item=item,
-            user=user,
-            error=f"Body group must be one of {', '.join(BODY_GROUPS)}.",
-            form_data=form_data,
-            status_code=400,
-        )
-    if scoring_type not in SCORING_TYPES:
-        return _render_catalog_form(
-            request,
-            item=item,
-            user=user,
-            error=f"Scoring type must be one of {', '.join(SCORING_TYPES)}.",
-            form_data=form_data,
-            status_code=400,
-        )
-    fraction, fraction_error = _parse_fraction(bodyweight_fraction)
-    if fraction is None:
-        return _render_catalog_form(
-            request,
-            item=item,
-            user=user,
-            error=fraction_error,
-            form_data=form_data,
-            status_code=400,
-        )
-    try:
-        update_exercise(
-            db,
-            exercise_id=exercise_id,
-            name=cleaned_name,
-            body_group=body_group,
-            muscle_groups=_parse_tags(muscle_groups),
-            scoring_type=scoring_type,
-            bodyweight_fraction=fraction,
-        )
-    except IntegrityError:
-        db.rollback()
-        return _render_catalog_form(
-            request,
-            item=item,
-            user=user,
-            error=f"An exercise named {cleaned_name!r} already exists.",
-            form_data=form_data,
-            status_code=409,
-        )
-    return RedirectResponse(url="/exercise/catalog", status_code=303)
+    return _save_catalog_form(
+        request,
+        db,
+        user=user,
+        item=item,
+        name=name,
+        region=region,
+        modality=modality,
+        location=location,
+        primary_muscles=primary_muscles or [],
+        secondary_muscles=secondary_muscles or [],
+        scoring_type=scoring_type,
+        bodyweight_fraction=bodyweight_fraction,
+    )
 
 
 @router.post("/catalog/{exercise_id}/delete")

@@ -3,12 +3,14 @@
 Pure functions — no DB, no IO. Called by the service layer at write time
 and persisted on the ``exercise_logs.work_score`` column so historical
 scores stay stable when a user later changes their body weight.
+
+A work score is only meaningful against earlier logs of the *same* exercise
+(PRD §10.16) — the scoring types produce incomparable numbers.
 """
 
 from decimal import Decimal
 
-SCORING_TYPES: tuple[str, ...] = ("weighted", "distance", "bodyweight_fraction")
-BODY_GROUPS: tuple[str, ...] = ("upper", "lower", "core", "cardio")
+SCORING_TYPES: tuple[str, ...] = ("weighted", "distance", "bodyweight_fraction", "timed")
 
 
 class ScoringInputError(ValueError):
@@ -28,13 +30,15 @@ def compute_work_score(
     reps: int | None,
     weight: Decimal | None,
     distance_km: Decimal | None,
+    duration_minutes: int | None = None,
 ) -> Decimal:
     """Return the work score for one log entry.
 
-    Formulas (PRD §10.7):
+    Formulas (PRD §10.7, §10.16):
       - weighted:            weight * reps * sets
       - distance:            distance_km * body_weight
       - bodyweight_fraction: body_weight * bodyweight_fraction * reps * sets
+      - timed:               duration_minutes
     """
     if scoring_type == "weighted":
         if weight is None or reps is None or sets is None:
@@ -61,5 +65,10 @@ def compute_work_score(
             else Decimal("1.000")
         )
         return _to_decimal(body_weight) * fraction * _to_decimal(reps) * _to_decimal(sets)
+
+    if scoring_type == "timed":
+        if duration_minutes is None:
+            raise ScoringInputError("timed scoring requires duration_minutes")
+        return _to_decimal(duration_minutes)
 
     raise ScoringInputError(f"Unknown scoring_type: {scoring_type!r}")

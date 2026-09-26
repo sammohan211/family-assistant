@@ -24,9 +24,9 @@
       <thead class="bg-gray-50">
         <tr>
           <th class="px-4 py-2 text-left font-medium text-gray-600">Name</th>
-          <th class="px-4 py-2 text-left font-medium text-gray-600">Body group</th>
+          <th class="px-4 py-2 text-left font-medium text-gray-600">Region</th>
           <th class="px-4 py-2 text-left font-medium text-gray-600">Scoring</th>
-          <th class="px-4 py-2 text-left font-medium text-gray-600">Muscle groups</th>
+          <th class="px-4 py-2 text-left font-medium text-gray-600">Muscles</th>
           <th class="px-4 py-2 text-right font-medium text-gray-600"></th>
         </tr>
       </thead>
@@ -34,7 +34,10 @@
         {% for ex in exercises %}
         <tr>
           <td class="px-4 py-2 font-medium">{{ ex.name }}</td>
-          <td class="px-4 py-2 text-gray-700">{{ ex.body_group }}</td>
+          <td class="px-4 py-2 text-gray-700">
+            {{ ex.region }}
+            <span class="block text-xs text-gray-500">{{ ex.modality }} · {{ ex.location }}</span>
+          </td>
           <td class="px-4 py-2 text-gray-700">
             {{ ex.scoring_type }}
             {% if ex.scoring_type == "bodyweight_fraction" %}
@@ -42,9 +45,15 @@
             {% endif %}
           </td>
           <td class="px-4 py-2">
-            {% for tag in ex.muscle_groups %}
-              <span class="inline-block text-xs bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded mr-1">{{ tag }}</span>
+            {% for m in ex.primary_muscles %}
+              <span class="inline-block text-xs bg-gray-200 text-gray-800 font-medium px-1.5 py-0.5 rounded mr-1">{{ muscle_label(m) }}</span>
             {% endfor %}
+            {% for m in ex.secondary_muscles %}
+              <span class="inline-block text-xs bg-gray-50 text-gray-500 px-1.5 py-0.5 rounded mr-1">{{ muscle_label(m) }}</span>
+            {% endfor %}
+            {% if not ex.primary_muscles %}
+              <span class="text-xs text-red-700">needs muscles</span>
+            {% endif %}
           </td>
           <td class="px-4 py-2 text-right whitespace-nowrap">
             <a href="/exercise/catalog/{{ ex.id }}/edit"
@@ -65,7 +74,7 @@
   <div class="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center space-y-2">
     <p class="text-sm text-gray-600">No exercises yet.</p>
     <p class="text-xs text-gray-500">
-      Add a few — e.g. <em>Bench press</em> (weighted), <em>Run</em> (distance),
+      Add a few — e.g. <em>Bench press</em> (weighted), <em>Run</em> (timed),
       <em>Captain's chair</em> (bodyweight_fraction, 0.5) — then start logging.
     </p>
   </div>

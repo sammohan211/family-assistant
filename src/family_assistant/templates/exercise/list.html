@@ -36,12 +36,12 @@
           <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ log.date.strftime('%a %b %-d') }}</td>
           <td class="px-4 py-2">
             <span class="font-medium">{{ log.exercise.name }}</span>
-            <span class="ml-1 text-xs text-gray-500">{{ log.exercise.body_group }}</span>
+            <span class="ml-1 text-xs text-gray-500">{{ log.exercise.region }}</span>
           </td>
           <td class="px-4 py-2 text-gray-700">
             {% if log.exercise.scoring_type == "weighted" %}
               {{ log.sets }} × {{ log.reps }} @ {{ "%g"|format(log.weight) }}
-            {% elif log.exercise.scoring_type == "distance" %}
+            {% elif log.exercise.scoring_type in ("distance", "timed") and log.distance_km is not none %}
               {{ "%g"|format(log.distance_km) }} km
             {% elif log.exercise.scoring_type == "bodyweight_fraction" %}
               {{ log.sets }} × {{ log.reps }}

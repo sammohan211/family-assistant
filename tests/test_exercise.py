@@ -5,6 +5,7 @@ this file covers the scoring calculator, service-layer CRUD + weekly
 aggregation, and the assistant tool's name-lookup behavior.
 """
 
+import re
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -18,7 +19,7 @@ from family_assistant.ai_gateway.tools import (
     execute_tool_call,
 )
 from family_assistant.auth.models import User
-from family_assistant.exercise.models import ExerciseLog
+from family_assistant.exercise.models import Exercise, ExerciseLog
 from family_assistant.exercise.scoring import ScoringInputError, compute_work_score
 from family_assistant.exercise.services import (
     create_exercise,
@@ -115,29 +116,94 @@ def test_scoring_unknown_type_raises() -> None:
         )
 
 
+def test_scoring_timed_is_minutes() -> None:
+    score = compute_work_score(
+        "timed",
+        body_weight=None,
+        bodyweight_fraction=None,
+        sets=None,
+        reps=None,
+        weight=None,
+        distance_km=Decimal("4.9"),
+        duration_minutes=195,
+    )
+    assert score == Decimal("195")
+
+
+def test_scoring_timed_without_duration_raises() -> None:
+    with pytest.raises(ScoringInputError, match="duration_minutes"):
+        compute_work_score(
+            "timed",
+            body_weight=None,
+            bodyweight_fraction=None,
+            sets=None,
+            reps=None,
+            weight=None,
+            distance_km=Decimal("5"),
+        )
+
+
 # ---------------------------------------------------------------------------
 # Catalog
 # ---------------------------------------------------------------------------
 
 
-def test_create_exercise_normalizes_tags(db_session: Session) -> None:
+def test_create_exercise_normalizes_muscles(db_session: Session) -> None:
     ex = create_exercise(
         db_session,
         name="Bench press",
-        body_group="upper",
-        muscle_groups=["Chest", "  chest  ", "triceps"],
+        region="upper",
+        primary_muscles=["Triceps", "  chest  ", "chest"],
+        secondary_muscles=["front_delts"],
         scoring_type="weighted",
     )
-    assert ex.muscle_groups == ["chest", "triceps"]
+    # Deduped, lowercased, and in vocabulary order.
+    assert ex.primary_muscles == ["chest", "triceps"]
+    assert ex.secondary_muscles == ["front_delts"]
+    assert (ex.modality, ex.location) == ("strength", "both")
     assert ex.bodyweight_fraction == Decimal("1.000")
+
+
+@pytest.mark.parametrize(
+    ("primary", "secondary", "message"),
+    [
+        (["pecs"], [], "Unknown muscle"),
+        ([], ["chest"], "at least one primary"),
+        (["chest"], ["chest"], "both primary and secondary"),
+    ],
+)
+def test_create_exercise_rejects_bad_muscles(
+    db_session: Session, primary: list[str], secondary: list[str], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        create_exercise(
+            db_session,
+            name="Bench press",
+            region="upper",
+            primary_muscles=primary,
+            secondary_muscles=secondary,
+            scoring_type="weighted",
+        )
+
+
+def test_create_exercise_rejects_unknown_region(db_session: Session) -> None:
+    with pytest.raises(ValueError, match="Unknown region"):
+        create_exercise(
+            db_session,
+            name="Bench press",
+            region="torso",
+            primary_muscles=["chest"],
+            scoring_type="weighted",
+        )
 
 
 def test_get_exercise_by_name_is_case_insensitive(db_session: Session) -> None:
     create_exercise(
         db_session,
         name="Hike",
-        body_group="cardio",
-        muscle_groups=[],
+        region="full",
+        modality="cardio",
+        primary_muscles=["quads"],
         scoring_type="distance",
     )
     found = get_exercise_by_name(db_session, "hike")
@@ -148,15 +214,15 @@ def test_list_exercises_sorted_by_name(db_session: Session) -> None:
     create_exercise(
         db_session,
         name="Squat",
-        body_group="lower",
-        muscle_groups=["quads"],
+        region="lower",
+        primary_muscles=["quads"],
         scoring_type="weighted",
     )
     create_exercise(
         db_session,
         name="Bench press",
-        body_group="upper",
-        muscle_groups=["chest"],
+        region="upper",
+        primary_muscles=["chest"],
         scoring_type="weighted",
     )
     names = [e.name for e in list_exercises(db_session)]
@@ -173,8 +239,9 @@ def test_create_log_persists_work_score(db_session: Session, seeded_user: User) 
     ex = create_exercise(
         db_session,
         name="Run",
-        body_group="cardio",
-        muscle_groups=["legs"],
+        region="full",
+        modality="cardio",
+        primary_muscles=["quads"],
         scoring_type="distance",
     )
     log = create_log(
@@ -199,8 +266,9 @@ def test_log_score_persists_when_body_weight_later_changes(
     ex = create_exercise(
         db_session,
         name="Walk",
-        body_group="cardio",
-        muscle_groups=[],
+        region="full",
+        modality="cardio",
+        primary_muscles=["quads"],
         scoring_type="distance",
     )
     log = create_log(
@@ -226,8 +294,8 @@ def test_update_log_recomputes_score(db_session: Session, seeded_user: User) -> 
     ex = create_exercise(
         db_session,
         name="Bench press",
-        body_group="upper",
-        muscle_groups=["chest"],
+        region="upper",
+        primary_muscles=["chest"],
         scoring_type="weighted",
     )
     log = create_log(
@@ -259,27 +327,93 @@ def test_update_log_recomputes_score(db_session: Session, seeded_user: User) -> 
     assert updated.work_score == Decimal("2400")
 
 
+def _pushups(db: Session) -> Exercise:
+    return create_exercise(
+        db,
+        name="Pushups",
+        region="upper",
+        primary_muscles=["chest"],
+        scoring_type="bodyweight_fraction",
+        bodyweight_fraction=Decimal("0.5"),
+    )
+
+
+def test_create_log_records_body_weight_used(db_session: Session, seeded_user: User) -> None:
+    set_body_weight(db_session, user=seeded_user, body_weight=Decimal("180"))
+    log = create_log(
+        db_session,
+        user=seeded_user,
+        exercise=_pushups(db_session),
+        entry_date=date(2026, 5, 18),
+        sets=2,
+        reps=10,
+        weight=None,
+        distance_km=None,
+        duration_minutes=None,
+        notes=None,
+    )
+    assert log.body_weight_used == Decimal("180")
+    assert log.work_score == Decimal("1800")  # 180 x 0.5 x 10 x 2
+
+
+def test_update_log_rescores_with_original_body_weight(
+    db_session: Session, seeded_user: User
+) -> None:
+    set_body_weight(db_session, user=seeded_user, body_weight=Decimal("180"))
+    pushups = _pushups(db_session)
+    log = create_log(
+        db_session,
+        user=seeded_user,
+        exercise=pushups,
+        entry_date=date(2026, 5, 18),
+        sets=2,
+        reps=10,
+        weight=None,
+        distance_km=None,
+        duration_minutes=None,
+        notes=None,
+    )
+    set_body_weight(db_session, user=seeded_user, body_weight=Decimal("200"))
+
+    # Fixing a typo in an old entry must not apply today's weight.
+    updated = update_log(
+        db_session,
+        log_id=log.id,
+        user=seeded_user,
+        exercise=pushups,
+        entry_date=date(2026, 5, 18),
+        sets=2,
+        reps=12,
+        weight=None,
+        distance_km=None,
+        duration_minutes=None,
+        notes="fixed reps",
+    )
+    assert updated is not None
+    assert updated.body_weight_used == Decimal("180")
+    assert updated.work_score == Decimal("2160")  # 180 x 0.5 x 12 x 2
+
+
 # ---------------------------------------------------------------------------
 # Weekly aggregation
 # ---------------------------------------------------------------------------
 
 
-def test_weekly_summary_groups_by_body_group_and_muscle_group(
-    db_session: Session, seeded_user: User
-) -> None:
+def test_weekly_summary_groups_by_region_and_muscle(db_session: Session, seeded_user: User) -> None:
     set_body_weight(db_session, user=seeded_user, body_weight=Decimal("80"))
     bench = create_exercise(
         db_session,
         name="Bench press",
-        body_group="upper",
-        muscle_groups=["chest", "triceps"],
+        region="upper",
+        primary_muscles=["chest"],
+        secondary_muscles=["triceps"],
         scoring_type="weighted",
     )
     squat = create_exercise(
         db_session,
         name="Squat",
-        body_group="lower",
-        muscle_groups=["quads"],
+        region="lower",
+        primary_muscles=["quads"],
         scoring_type="weighted",
     )
     create_log(
@@ -310,13 +444,13 @@ def test_weekly_summary_groups_by_body_group_and_muscle_group(
     summary = weekly_summary(db_session, user=seeded_user, reference=date(2026, 5, 22))
     assert summary.week_start == date(2026, 5, 18)
     assert summary.total == Decimal("1800") + Decimal("2400")
-    body_scores = {row.label: row.score for row in summary.by_body_group}
-    assert body_scores["upper"] == Decimal("1800")
-    assert body_scores["lower"] == Decimal("2400")
-    assert body_scores["core"] == Decimal("0")
-    muscle_scores = {row.label: row.score for row in summary.by_muscle_group}
+    region_scores = {row.label: row.score for row in summary.by_region}
+    assert region_scores["upper"] == Decimal("1800")
+    assert region_scores["lower"] == Decimal("2400")
+    assert region_scores["core"] == Decimal("0")
+    muscle_scores = {row.label: row.score for row in summary.by_muscle}
     assert muscle_scores["chest"] == Decimal("1800")
-    assert muscle_scores["triceps"] == Decimal("1800")
+    assert muscle_scores["triceps"] == Decimal("900")  # secondary: half credit
     assert muscle_scores["quads"] == Decimal("2400")
 
 
@@ -327,8 +461,9 @@ def test_weekly_summary_computes_delta_vs_prior_week(
     ex = create_exercise(
         db_session,
         name="Run",
-        body_group="cardio",
-        muscle_groups=["legs"],
+        region="full",
+        modality="cardio",
+        primary_muscles=["quads"],
         scoring_type="distance",
     )
     # Prior week (Mon May 11): 4 km -> 320
@@ -372,8 +507,9 @@ def test_weekly_summary_delta_pct_none_when_no_prior(
     ex = create_exercise(
         db_session,
         name="Run",
-        body_group="cardio",
-        muscle_groups=["legs"],
+        region="full",
+        modality="cardio",
+        primary_muscles=["quads"],
         scoring_type="distance",
     )
     create_log(
@@ -455,14 +591,14 @@ def test_catalog_list_renders_existing_exercises(
     create_exercise(
         db_session,
         name="Bench press",
-        body_group="upper",
-        muscle_groups=["chest"],
+        region="upper",
+        primary_muscles=["chest"],
         scoring_type="weighted",
     )
     response = authenticated_client.get("/exercise/catalog")
     assert response.status_code == 200
     assert b"Bench press" in response.content
-    assert b"chest" in response.content
+    assert b"Chest" in response.content
 
 
 def test_catalog_create_via_form(authenticated_client: TestClient, db_session: Session) -> None:
@@ -470,8 +606,10 @@ def test_catalog_create_via_form(authenticated_client: TestClient, db_session: S
         "/exercise/catalog",
         data={
             "name": "Captain's chair",
-            "body_group": "core",
-            "muscle_groups": "core, hip flexors",
+            "region": "core",
+            "modality": "strength",
+            "location": "gym",
+            "primary_muscles": ["abs", "hip_flexors"],
             "scoring_type": "bodyweight_fraction",
             "bodyweight_fraction": "0.5",
         },
@@ -480,8 +618,9 @@ def test_catalog_create_via_form(authenticated_client: TestClient, db_session: S
     assert response.status_code == 303
     item = get_exercise_by_name(db_session, "Captain's chair")
     assert item is not None
-    assert item.body_group == "core"
-    assert item.muscle_groups == ["core", "hip flexors"]
+    assert (item.region, item.modality, item.location) == ("core", "strength", "gym")
+    assert item.primary_muscles == ["abs", "hip_flexors"]
+    assert item.secondary_muscles == []
     assert item.scoring_type == "bodyweight_fraction"
     assert item.bodyweight_fraction == Decimal("0.5")
 
@@ -491,8 +630,8 @@ def test_catalog_create_rejects_blank_name(authenticated_client: TestClient) -> 
         "/exercise/catalog",
         data={
             "name": "   ",
-            "body_group": "upper",
-            "muscle_groups": "",
+            "region": "upper",
+            "primary_muscles": ["chest"],
             "scoring_type": "weighted",
             "bodyweight_fraction": "1.000",
         },
@@ -502,22 +641,43 @@ def test_catalog_create_rejects_blank_name(authenticated_client: TestClient) -> 
     assert b"Name is required" in response.content
 
 
-def test_catalog_create_rejects_unknown_body_group(
+def test_catalog_create_rejects_unknown_region(
     authenticated_client: TestClient,
 ) -> None:
     response = authenticated_client.post(
         "/exercise/catalog",
         data={
             "name": "Bench press",
-            "body_group": "torso",  # not in BODY_GROUPS
-            "muscle_groups": "chest",
+            "region": "torso",  # not in REGIONS
+            "primary_muscles": ["chest"],
             "scoring_type": "weighted",
             "bodyweight_fraction": "1.000",
         },
         follow_redirects=False,
     )
     assert response.status_code == 400
-    assert b"Body group must be one of" in response.content
+    assert b"Unknown region" in response.content
+
+
+def test_catalog_create_requires_a_primary_muscle(
+    authenticated_client: TestClient, db_session: Session
+) -> None:
+    response = authenticated_client.post(
+        "/exercise/catalog",
+        data={
+            "name": "Mystery",
+            "region": "upper",
+            "secondary_muscles": ["biceps"],
+            "scoring_type": "weighted",
+            "bodyweight_fraction": "1.000",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 400
+    assert b"at least one primary muscle" in response.content
+    # The re-rendered form keeps what was ticked.
+    assert re.search(rb'value="biceps"\s+checked', response.content)
+    assert get_exercise_by_name(db_session, "Mystery") is None
 
 
 def test_catalog_create_rejects_duplicate_name(
@@ -526,16 +686,16 @@ def test_catalog_create_rejects_duplicate_name(
     create_exercise(
         db_session,
         name="Bench press",
-        body_group="upper",
-        muscle_groups=["chest"],
+        region="upper",
+        primary_muscles=["chest"],
         scoring_type="weighted",
     )
     response = authenticated_client.post(
         "/exercise/catalog",
         data={
             "name": "Bench press",
-            "body_group": "upper",
-            "muscle_groups": "chest",
+            "region": "upper",
+            "primary_muscles": ["chest"],
             "scoring_type": "weighted",
             "bodyweight_fraction": "1.000",
         },
@@ -549,8 +709,9 @@ def test_catalog_edit_form_renders(authenticated_client: TestClient, db_session:
     item = create_exercise(
         db_session,
         name="Run",
-        body_group="cardio",
-        muscle_groups=["legs"],
+        region="full",
+        modality="cardio",
+        primary_muscles=["quads"],
         scoring_type="distance",
     )
     response = authenticated_client.get(f"/exercise/catalog/{item.id}/edit")
@@ -562,16 +723,17 @@ def test_catalog_update_via_form(authenticated_client: TestClient, db_session: S
     item = create_exercise(
         db_session,
         name="Squat",
-        body_group="lower",
-        muscle_groups=["quads"],
+        region="lower",
+        primary_muscles=["quads"],
         scoring_type="weighted",
     )
     response = authenticated_client.post(
         f"/exercise/catalog/{item.id}",
         data={
             "name": "Back squat",
-            "body_group": "lower",
-            "muscle_groups": "quads, glutes",
+            "region": "lower",
+            "primary_muscles": ["quads", "glutes"],
+            "secondary_muscles": ["hamstrings"],
             "scoring_type": "weighted",
             "bodyweight_fraction": "1.000",
         },
@@ -580,15 +742,16 @@ def test_catalog_update_via_form(authenticated_client: TestClient, db_session: S
     assert response.status_code == 303
     db_session.refresh(item)
     assert item.name == "Back squat"
-    assert item.muscle_groups == ["quads", "glutes"]
+    assert item.primary_muscles == ["quads", "glutes"]
+    assert item.secondary_muscles == ["hamstrings"]
 
 
 def test_catalog_delete_via_form(authenticated_client: TestClient, db_session: Session) -> None:
     item = create_exercise(
         db_session,
         name="Yoga",
-        body_group="core",
-        muscle_groups=[],
+        region="core",
+        primary_muscles=["abs"],
         scoring_type="weighted",
     )
     item_id = item.id
@@ -632,8 +795,8 @@ def test_assistant_tool_logs_against_catalog(db_session: Session, seeded_user: U
     create_exercise(
         db_session,
         name="Bench press",
-        body_group="upper",
-        muscle_groups=["chest"],
+        region="upper",
+        primary_muscles=["chest"],
         scoring_type="weighted",
     )
     args = ExerciseLogActivityArgs(
@@ -676,8 +839,8 @@ def test_log_new_form_renders_with_catalog(
     create_exercise(
         db_session,
         name="Bench press",
-        body_group="upper",
-        muscle_groups=["chest"],
+        region="upper",
+        primary_muscles=["chest"],
         scoring_type="weighted",
     )
     response = authenticated_client.get("/exercise/new")
@@ -693,8 +856,8 @@ def test_log_create_weighted(
     ex = create_exercise(
         db_session,
         name="Bench press",
-        body_group="upper",
-        muscle_groups=["chest"],
+        region="upper",
+        primary_muscles=["chest"],
         scoring_type="weighted",
     )
     response = authenticated_client.post(
@@ -720,8 +883,9 @@ def test_log_create_distance_requires_body_weight(
     ex = create_exercise(
         db_session,
         name="Run",
-        body_group="cardio",
-        muscle_groups=["legs"],
+        region="full",
+        modality="cardio",
+        primary_muscles=["quads"],
         scoring_type="distance",
     )
     response = authenticated_client.post(
@@ -746,8 +910,9 @@ def test_log_create_distance_succeeds_with_body_weight(
     ex = create_exercise(
         db_session,
         name="Run",
-        body_group="cardio",
-        muscle_groups=["legs"],
+        region="full",
+        modality="cardio",
+        primary_muscles=["quads"],
         scoring_type="distance",
     )
     response = authenticated_client.post(
@@ -779,8 +944,8 @@ def test_log_create_rejects_bad_date(authenticated_client: TestClient, db_sessio
     ex = create_exercise(
         db_session,
         name="Bench press",
-        body_group="upper",
-        muscle_groups=["chest"],
+        region="upper",
+        primary_muscles=["chest"],
         scoring_type="weighted",
     )
     response = authenticated_client.post(
@@ -804,8 +969,8 @@ def test_log_edit_and_update(
     ex = create_exercise(
         db_session,
         name="Bench press",
-        body_group="upper",
-        muscle_groups=["chest"],
+        region="upper",
+        primary_muscles=["chest"],
         scoring_type="weighted",
     )
     log = create_log(
@@ -847,8 +1012,8 @@ def test_log_delete(
     ex = create_exercise(
         db_session,
         name="Bench press",
-        body_group="upper",
-        muscle_groups=["chest"],
+        region="upper",
+        primary_muscles=["chest"],
         scoring_type="weighted",
     )
     log = create_log(
@@ -888,8 +1053,8 @@ def test_weekly_view_renders_breakdowns(
     bench = create_exercise(
         db_session,
         name="Bench press",
-        body_group="upper",
-        muscle_groups=["chest", "triceps"],
+        region="upper",
+        primary_muscles=["chest", "triceps"],
         scoring_type="weighted",
     )
     today = date.today()
@@ -909,10 +1074,10 @@ def test_weekly_view_renders_breakdowns(
     )
     response = authenticated_client.get("/exercise/weekly")
     assert response.status_code == 200
-    assert b"By body group" in response.content
-    assert b"By muscle group" in response.content
-    assert b"chest" in response.content
-    assert b"triceps" in response.content
+    assert b"By region" in response.content
+    assert b"By muscle" in response.content
+    assert b"Chest" in response.content
+    assert b"Triceps" in response.content
 
 
 def test_weekly_view_accepts_week_param(
@@ -922,8 +1087,9 @@ def test_weekly_view_accepts_week_param(
     ex = create_exercise(
         db_session,
         name="Run",
-        body_group="cardio",
-        muscle_groups=["legs"],
+        region="full",
+        modality="cardio",
+        primary_muscles=["quads"],
         scoring_type="distance",
     )
     create_log(
@@ -958,8 +1124,9 @@ def test_weekly_view_shows_delta_vs_prior(
     ex = create_exercise(
         db_session,
         name="Run",
-        body_group="cardio",
-        muscle_groups=["legs"],
+        region="full",
+        modality="cardio",
+        primary_muscles=["quads"],
         scoring_type="distance",
     )
     today = date.today()
@@ -1024,10 +1191,10 @@ def test_latest_log_by_exercise_picks_most_recent_per_exercise(
     db_session.add(other)
     db_session.commit()
     curl = create_exercise(
-        db_session, name="Curl", body_group="upper", muscle_groups=[], scoring_type="weighted"
+        db_session, name="Curl", region="upper", primary_muscles=["chest"], scoring_type="weighted"
     )
     row = create_exercise(
-        db_session, name="Row", body_group="upper", muscle_groups=[], scoring_type="weighted"
+        db_session, name="Row", region="upper", primary_muscles=["chest"], scoring_type="weighted"
     )
     _log_weighted(db_session, seeded_user, curl, date(2026, 9, 10), "30")
     latest_curl = _log_weighted(db_session, seeded_user, curl, date(2026, 9, 19), "36")
@@ -1044,7 +1211,7 @@ def test_new_log_form_shows_last_session_hint(
     authenticated_client: TestClient, db_session: Session, seeded_user: User
 ) -> None:
     curl = create_exercise(
-        db_session, name="Curl", body_group="upper", muscle_groups=[], scoring_type="weighted"
+        db_session, name="Curl", region="upper", primary_muscles=["chest"], scoring_type="weighted"
     )
     _log_weighted(db_session, seeded_user, curl, date(2026, 9, 19), "36")
 
@@ -1061,7 +1228,7 @@ def test_edit_log_form_has_no_last_session_hints(
     authenticated_client: TestClient, db_session: Session, seeded_user: User
 ) -> None:
     curl = create_exercise(
-        db_session, name="Curl", body_group="upper", muscle_groups=[], scoring_type="weighted"
+        db_session, name="Curl", region="upper", primary_muscles=["chest"], scoring_type="weighted"
     )
     log = _log_weighted(db_session, seeded_user, curl, date(2026, 9, 19), "36")
 

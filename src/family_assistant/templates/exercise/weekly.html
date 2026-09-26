@@ -63,31 +63,32 @@
     </p>
   </div>
   {% else %}
-    {# Body group breakdown #}
-    {% set max_body = summary.by_body_group|map(attribute='score')|max %}
+    {# Region breakdown #}
+    {% set max_body = summary.by_region|map(attribute='score')|max %}
     <section class="rounded-lg border border-gray-200 bg-white p-6 mb-6 space-y-3">
-      <h2 class="font-serif text-xl">By body group</h2>
+      <h2 class="font-serif text-xl">By region</h2>
       <div class="space-y-3">
-        {% for row in summary.by_body_group %}
+        {% for row in summary.by_region %}
           {{ score_bar(row.label, row.score, max_body) }}
         {% endfor %}
       </div>
     </section>
 
-    {# Muscle group breakdown #}
-    {% if summary.by_muscle_group %}
-    {% set max_muscle = summary.by_muscle_group|map(attribute='score')|max %}
+    {# Muscle breakdown #}
+    {% if summary.by_muscle %}
+    {% set max_muscle = summary.by_muscle|map(attribute='score')|max %}
     <section class="rounded-lg border border-gray-200 bg-white p-6 space-y-3">
-      <h2 class="font-serif text-xl">By muscle group</h2>
+      <h2 class="font-serif text-xl">By muscle</h2>
+      <p class="text-xs text-gray-500">Primary muscles get the full score, secondary muscles half.</p>
       <div class="space-y-3">
-        {% for row in summary.by_muscle_group %}
-          {{ score_bar(row.label, row.score, max_muscle) }}
+        {% for row in summary.by_muscle %}
+          {{ score_bar(muscle_label(row.label), row.score, max_muscle) }}
         {% endfor %}
       </div>
     </section>
     {% else %}
     <section class="rounded-lg border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-600">
-      No muscle group tags on this week's exercises. Add tags in the
+      No muscles set on this week's exercises. Pick them in the
       <a href="/exercise/catalog" class="text-accent hover:underline">catalog</a> to see breakdowns.
     </section>
     {% endif %}
