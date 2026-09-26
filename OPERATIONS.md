@@ -41,11 +41,15 @@ git worktree add --detach /tmp/fa-test origin/<branch>
 docker run --rm --network family-assistant_default \
   -v /tmp/fa-test:/src -w /src \
   -e DATABASE_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)" \
+  -e SESSION_SECRET=test-secret -e APP_BASE_URL=http://testserver \
+  -e COOKIE_SECURE=false -e USE_MOCK_LLM=true \
   -e UV_LINK_MODE=copy -e UV_PROJECT_ENVIRONMENT=/tmp/venv \
   ghcr.io/astral-sh/uv:python3.13-bookworm-slim \
   sh -c "uv sync -q --frozen --extra dev && uv run pytest -q -p no:cacheprovider"
 git worktree remove --force /tmp/fa-test
 ```
+
+Only `DATABASE_URL` comes from `.env`; the other settings are dummy test values. `COOKIE_SECURE=false` because the test client uses plain http, and `USE_MOCK_LLM=true` so tests never call OpenRouter.
 
 Lint and format checks don't need a database: run `uv run ruff check . && uv run ruff format --check .` on the laptop.
 
