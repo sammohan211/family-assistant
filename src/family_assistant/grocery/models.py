@@ -10,7 +10,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from family_assistant.auth.models import User
 from family_assistant.db import Base
 
-GroceryStatus = Literal["open", "purchased"]
+# open = to buy; purchased = bought and on hand; used_up = gone (kept as history
+# for the recent-items chips). ``location`` only matters while on hand.
+GroceryStatus = Literal["open", "purchased", "used_up"]
+GroceryLocation = Literal["kitchen", "freezer"]
 
 
 class GroceryItem(Base):
@@ -22,6 +25,9 @@ class GroceryItem(Base):
     quantity: Mapped[Decimal | None] = mapped_column(Numeric(10, 3), nullable=True)
     unit: Mapped[str | None] = mapped_column(String(30), nullable=True)
     status: Mapped[GroceryStatus] = mapped_column(String(20), default="open", server_default="open")
+    location: Mapped[GroceryLocation] = mapped_column(
+        String(20), default="kitchen", server_default="kitchen"
+    )
     notes: Mapped[str | None] = mapped_column(Text(), nullable=True)
     added_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     purchased_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)

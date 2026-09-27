@@ -6,8 +6,8 @@
 <div class="max-w-5xl mx-auto px-4 py-8 space-y-8">
   <div class="flex items-center justify-between gap-4">
     <div>
-      <h1 class="font-serif text-3xl tracking-tight">Grocery list</h1>
-      <p class="text-sm text-gray-500">Shared household list with quick re-add for recent items.</p>
+      <h1 class="font-serif text-3xl tracking-tight">Groceries</h1>
+      <p class="text-sm text-gray-500">What to buy, and what's already in the kitchen and freezer.</p>
     </div>
     <a href="/grocery/new"
        class="bg-accent hover:bg-accent-700 text-white text-sm font-medium px-4 py-2.5 rounded-md">
@@ -17,7 +17,7 @@
 
   <section class="space-y-3">
     <div class="flex items-center justify-between">
-      <h2 class="font-serif text-xl">Open items</h2>
+      <h2 class="font-serif text-xl">To buy</h2>
       <span class="text-sm text-gray-500">{{ open_items|length }} remaining</span>
     </div>
     {% if open_items %}
@@ -44,7 +44,7 @@
             {{ csrf_input() }}
             <button type="submit"
                     class="text-sm font-medium text-green-700 hover:bg-green-50 border border-green-200 rounded-md px-3 py-2">
-              Purchased
+              Bought
             </button>
           </form>
           <a href="/grocery/{{ item.id }}/edit"
@@ -79,18 +79,22 @@
     {% endif %}
   </section>
 
+  {% macro on_hand_section(title, items, location, other, other_label, empty) %}
   <section class="space-y-3">
-    <div class="flex items-center justify-between">
-      <h2 class="font-serif text-xl">Purchased recently</h2>
-      <span class="text-sm text-gray-500">{{ purchased_items|length }} shown</span>
+    <div class="flex items-center justify-between gap-4">
+      <h2 class="font-serif text-xl">{{ title }}</h2>
+      <div class="flex items-center gap-3">
+        <span class="text-sm text-gray-500">{{ items|length }} on hand</span>
+        <a href="/grocery/new?where={{ location }}" class="text-sm text-accent hover:underline">Add</a>
+      </div>
     </div>
-    {% if purchased_items %}
+    {% if items %}
     <ul class="divide-y divide-gray-200 bg-white rounded-lg border border-gray-200">
-      {% for item in purchased_items %}
-      <li class="px-4 py-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+      {% for item in items %}
+      <li class="px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-2">
-            <span class="font-medium text-gray-700">{{ item.name }}</span>
+            <span class="font-medium">{{ item.name }}</span>
             {% if item.quantity %}
             <span class="text-sm text-gray-500">{{ item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}</span>
             {% endif %}
@@ -101,35 +105,44 @@
           {% if item.notes %}
           <p class="mt-1 text-sm text-gray-500">{{ item.notes }}</p>
           {% endif %}
-          <p class="mt-1 text-xs text-gray-400">
-            Added by {{ item.added_by_user.name }}
-            {% if item.purchased_by_user %}
-            · Purchased by {{ item.purchased_by_user.name }}
-            {% endif %}
-          </p>
         </div>
-        <div class="flex items-center gap-2 shrink-0">
+        <div class="flex flex-wrap items-center gap-2 shrink-0">
+          <form method="post" action="/grocery/{{ item.id }}/used-up">
+            {{ csrf_input() }}
+            <button type="submit"
+                    class="text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-300 rounded-md px-3 py-2">
+              Used up
+            </button>
+          </form>
           <form method="post" action="/grocery/{{ item.id }}/restore">
             {{ csrf_input() }}
-            <button type="submit"
+            <button type="submit" title="Used up and back on the to-buy list"
                     class="text-sm font-medium text-accent hover:bg-accent-50 border border-accent/30 rounded-md px-3 py-2">
-              Restore
+              Buy again
             </button>
           </form>
-          <form method="post" action="/grocery/{{ item.id }}/delete">
+          <form method="post" action="/grocery/{{ item.id }}/move">
             {{ csrf_input() }}
+            <input type="hidden" name="location" value="{{ other }}">
             <button type="submit"
-                    class="text-sm font-medium text-red-600 hover:bg-red-50 border border-red-200 rounded-md px-3 py-2">
-              Delete
+                    class="text-sm text-gray-600 hover:bg-gray-50 rounded-md px-2 py-2">
+              {{ other_label }}
             </button>
           </form>
+          <a href="/grocery/{{ item.id }}/edit" class="text-sm text-gray-600 hover:bg-gray-50 rounded-md px-2 py-2">Edit</a>
         </div>
       </li>
       {% endfor %}
     </ul>
     {% else %}
-    <p class="text-gray-500">Nothing has been marked purchased yet.</p>
+    <p class="text-gray-500">{{ empty }}</p>
     {% endif %}
   </section>
+  {% endmacro %}
+
+  {{ on_hand_section("In the kitchen", kitchen_items, "kitchen", "freezer", "To freezer",
+                     "Items you mark bought land here.") }}
+  {{ on_hand_section("In the freezer", freezer_items, "freezer", "kitchen", "To kitchen",
+                     "Nothing in the freezer yet.") }}
 </div>
 {% endblock %}

@@ -30,7 +30,7 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session as DbSession
 
 from family_assistant.ai_gateway.tools import tool_catalog
-from family_assistant.grocery.services import list_open_items
+from family_assistant.grocery.services import list_on_hand_items, list_open_items
 from family_assistant.lunch_plan.services import (
     list_family_members,
     start_of_week,
@@ -38,11 +38,12 @@ from family_assistant.lunch_plan.services import (
 from family_assistant.lunch_plan.services import (
     list_week_entries as list_lunch_week_entries,
 )
+from family_assistant.meal_plan.options import match_recipes
 from family_assistant.meal_plan.services import list_recipes
 from family_assistant.meal_plan.services import list_week_entries as list_meal_week_entries
 from family_assistant.memory.services import list_memories
 
-SYSTEM_PROMPT = """You are a household assistant for a single household with two adult users.
+BASE_PROMPT = """You are a household assistant for a single household with two adult users.
 You translate natural-language commands into structured tool calls.
 
 You MUST respond with a JSON object in this exact shape:
@@ -63,27 +64,34 @@ Rules:
 - Use YYYY-MM-DD for dates. The current date is provided in CONTEXT.
 - When referring to a family member or an existing grocery item, use the integer
   id shown in CONTEXT.
+- CONTEXT.grocery_to_buy is the shopping list: things the household does NOT
+  have yet. CONTEXT.on_hand is what they have (location kitchen or freezer).
+  Never treat to-buy items as on hand.
 - Keep reply short — one or two sentences.
+"""
 
-EXAMPLES (showing correct shape and when to ask vs act):
-
+# Examples per domain; only the domains a request touches are sent (a small
+# model does better with less to read, and copies examples less).
+EXAMPLES: dict[str, str] = {
+    "grocery": """
 Input: "add milk and bread to the list"
 Output: {"tool_calls": [{"name": "grocery.add_items", "args": {"items": [{"name": "milk"}, {"name": "bread"}]}}], "reply": "Added milk and bread."}
 Note: items is a list of OBJECTS, each with a name. Don't flatten to a string.
       Don't ask for quantity/unit/category — they're optional.
 
-Input: "mark eggs as purchased"  (CONTEXT.open_grocery_items has Eggs id 41)
+Input: "mark eggs as purchased"  (CONTEXT.grocery_to_buy has Eggs id 41)
 Output: {"tool_calls": [{"name": "grocery.mark_purchased", "args": {"item_ids": [41]}}], "reply": "Marked eggs as purchased."}
-Note: use the integer id from CONTEXT.open_grocery_items; do not pass item names to the tool.
+Note: use the integer id from CONTEXT.grocery_to_buy; do not pass item names to the tool.
 
-Input: "I bought the milk"  (CONTEXT.open_grocery_items has 2% milk id 12 and whole milk id 15)
+Input: "I bought the milk"  (CONTEXT.grocery_to_buy has 2% milk id 12 and whole milk id 15)
 Output: {"tool_calls": [], "reply": "I see two milk items — 2% (id 12) and whole (id 15). Which one did you buy?"}
 Note: if multiple existing items match, ask instead of guessing.
 
-Input: "mark eggs and milk as purchased"  (CONTEXT.open_grocery_items has Eggs id 41 and Milk id 52)
+Input: "mark eggs and milk as purchased"  (CONTEXT.grocery_to_buy has Eggs id 41 and Milk id 52)
 Output: {"tool_calls": [{"name": "grocery.mark_purchased", "args": {"item_ids": [41, 52]}}], "reply": "Marked eggs and milk as purchased."}
 Note: when multiple existing grocery items are named unambiguously, pass all matching ids in one item_ids list.
-
+""",
+    "meal": """
 Input: "schedule dinner for Saturday"
 Output: {"tool_calls": [], "reply": "What should we have for dinner Saturday?"}
 Note: meal_plan.create_entry requires a title — don't guess one.
@@ -92,18 +100,23 @@ Input: "plan tacos for Friday"
 Output: {"tool_calls": [{"name": "meal_plan.create_entry", "args": {"date": "2026-05-22", "meal_type": "dinner", "title": "Tacos"}}], "reply": "Planned tacos for Friday dinner."}
 Note: infer meal_type from the meal named in the request when it is explicit.
 
-Input: "what can I make for dinner with what we have?"  (CONTEXT.recipe_catalog has dinner recipes; CONTEXT.open_grocery_items lists what's on hand)
-Output: {"tool_calls": [], "reply": "From your recipes, Butter Chicken & Rice fits — you've got chicken and rice on the list. Want me to plan it?"}
-Note: suggest from recipe_catalog, preferring recipes whose ingredients already appear in open_grocery_items. Do NOT invent recipes that aren't in the catalog; if nothing matches, say so and offer to plan something anyway.
+Input: "what can I make for dinner with what we have?"  (CONTEXT.recipe_matches.ready has <recipe A>; recipe_matches.almost has <recipe B> missing <ingredient>)
+Output: {"tool_calls": [], "reply": "<recipe A> — you have everything. <recipe B> works too if you pick up <ingredient>. Want me to plan one?"}
+Note: recipe_matches is already computed against on_hand: "ready" has everything, "almost" lists what's "missing". Answer ONLY from the names actually in recipe_matches; never reuse names from these examples. If both lists are empty, say nothing matches what's on hand. "Suggest dinner ideas" or "what should we cook" means the same thing: suggest from recipe_matches, don't ask what they're in the mood for.
 
-Input: "for next week's dinners, is the grocery list enough or do we need more?"  (CONTEXT.planned_meals lists this week's and next week's dinners by title and date; CONTEXT.recipe_catalog has their ingredients; CONTEXT.open_grocery_items is what's on hand)
-Output: {"tool_calls": [], "reply": "Next week you've planned Butter Chicken & Rice and Egg Tacos. You already have rice and eggs, but you're missing chicken breast, butter chicken sauce, tortillas, and cheese. Want me to add those to the grocery list?"}
-Note: match each planned meal title to a recipe in recipe_catalog, compare that recipe's ingredients against open_grocery_items, and report what's missing. planned_meals and planned_lunches cover the current AND upcoming week — use each entry's date to focus on the week the user asked about. Offer to add the missing items rather than adding them unprompted.
+Input: "for next week's dinners, is the grocery list enough or do we need more?"  (CONTEXT.planned_meals lists this week's and next week's dinners by title and date; CONTEXT.recipe_catalog has their ingredients; CONTEXT.on_hand and CONTEXT.grocery_to_buy)
+Output: {"tool_calls": [], "reply": "Next week you've planned <recipe A> and <recipe B>. <ingredients> are covered, but <other ingredients> aren't. Want me to add those to the grocery list?"}
+Note: match each planned meal title to a recipe in recipe_catalog; an ingredient is covered if it's in on_hand or already in grocery_to_buy. Report what's not covered. If planned_meals has nothing for that week, say so and offer to suggest meals from recipe_matches. planned_meals and planned_lunches cover the current AND upcoming week — use each entry's date to focus on the week the user asked about. Offer to add the missing items rather than adding them unprompted.
+
+Input: "add the ingredients for egg tacos to the list"  (CONTEXT.recipe_catalog has Egg Tacos: corn tortillas, eggs, cheese, salsa; CONTEXT.on_hand has Eggs and Cheddar Cheese)
+Output: {"tool_calls": [{"name": "grocery.add_items", "args": {"items": [{"name": "corn tortillas"}, {"name": "salsa"}]}}], "reply": "Added corn tortillas and salsa — you already have eggs and cheese."}
+Note: use the recipe's own ingredient names from recipe_catalog, skipping ones in on_hand or grocery_to_buy. Never add a vague item like "egg tacos ingredients".
 
 Input: "plan butter chicken for Friday"  (CONTEXT.recipe_catalog has "Butter Chicken & Rice")
 Output: {"tool_calls": [{"name": "meal_plan.create_entry", "args": {"date": "2026-05-22", "meal_type": "dinner", "title": "Butter Chicken & Rice"}}], "reply": "Planned Butter Chicken & Rice for Friday dinner."}
 Note: when the request names a recipe that exists in recipe_catalog, use that recipe's exact name as the meal title.
-
+""",
+    "lunch": """
 Input: "pack a lunch for <family member name> tomorrow"  (CONTEXT.family_members has <family member name> id 7; CONTEXT.recipe_catalog has lunch components grouped by note: Carb/Fruit/Veg/Treat)
 Output: {"tool_calls": [{"name": "lunch_plan.create_entry", "args": {"family_member_id": 7, "date": "2026-05-21", "items": [{"name": "Grilled Cheese"}, {"name": "Apple"}, {"name": "Cookies"}]}}], "reply": "Packed grilled cheese, an apple, and a cookie for <family member name>."}
 Note: compose a school lunch from recipe_catalog lunch components — typically one Carb plus a Fruit and a Treat. Respect any hard restriction in household_memories.
@@ -116,6 +129,11 @@ Input: "pack lunch for tomorrow"  (CONTEXT.family_members has multiple family me
 Output: {"tool_calls": [], "reply": "Which family member is this lunch for?"}
 Note: if a required field is missing and cannot be inferred safely, ask a clarifying question.
 
+Input: "pack peanut butter for <family member name> tomorrow"  (household_memories has <family member name>: peanut hard restriction)
+Output: {"tool_calls": [], "reply": "Memory says <family member name> has a peanut restriction. Want me to pick something else?"}
+Note: when a request conflicts with a hard restriction in household_memories, ask instead of acting.
+""",
+    "exercise": """
 Input: "log a 30 minute run for 2026-05-20"
 Output: {"tool_calls": [{"name": "exercise.log_activity", "args": {"exercise_name": "run", "date": "2026-05-20", "duration_minutes": 30}}], "reply": "Logged a 30-minute run."}
 Note: for read or write exercise commands, the exercise_name must refer to an existing catalog entry.
@@ -134,11 +152,8 @@ Output: {"tool_calls": [], "reply": "Which exercise — a run, a lift, something
 Input: "log <exercise name> for 45 minutes today"  (<exercise name> is not in the exercise catalog)
 Output: {"tool_calls": [], "reply": "I don't see <exercise name> in the exercise catalog yet. Want to add it first in /exercise/catalog?"}
 Note: if the exercise name is not in the catalog, ask instead of inventing or mapping it to something else.
-
-Input: "pack peanut butter for <family member name> tomorrow"  (household_memories has <family member name>: peanut hard restriction)
-Output: {"tool_calls": [], "reply": "Memory says <family member name> has a peanut restriction. Want me to pick something else?"}
-Note: when a request conflicts with a hard restriction in household_memories, ask instead of acting.
-
+""",
+    "memory": """
 Input: "remember that we always do meal prep on Sundays"
 Output: {"tool_calls": [{"name": "memory.create", "args": {"subject_type": "household", "memory_type": "routine", "content": "We always do meal prep on Sundays."}}], "reply": "Got it."}
 
@@ -157,17 +172,40 @@ Note: for pure questions about data already present in CONTEXT, answer directly 
 Input: "search memories for <family member name> allergies"  (CONTEXT.family_members has <family member name> id 7)
 Output: {"tool_calls": [{"name": "memory.search", "args": {"query": "allerg", "subject_type": "family_member", "subject_id": 7, "memory_type": "restriction", "limit": 10}}], "reply": "Searching <family member name>'s restriction memories."}
 Note: use memory.search when the user explicitly asks to search saved memories or filter memory records.
-"""
+""",
+}
+
+# Full prompt with every example: what an input touching no known domain gets,
+# and what the prompt-contract tests check.
+SYSTEM_PROMPT = (
+    BASE_PROMPT
+    + "\nEXAMPLES (showing correct shape and when to ask vs act):\n"
+    + "".join(EXAMPLES.values())
+)
+
+
+# Tools each domain may need. "meal" includes grocery so "add what's missing
+# for <recipe>" works.
+DOMAIN_TOOLS: dict[str, tuple[str, ...]] = {
+    "grocery": ("grocery.add_items", "grocery.mark_purchased"),
+    "meal": ("grocery.add_items", "grocery.mark_purchased", "meal_plan.create_entry"),
+    "lunch": ("lunch_plan.create_entry",),
+    "exercise": ("exercise.log_activity",),
+    "memory": ("memory.create", "memory.search"),
+}
 
 
 @dataclass
 class PromptContext:
     today: date
-    open_grocery_items: list[dict]
+    domains: list[str]
+    grocery_to_buy: list[dict]
+    on_hand: list[dict]
     family_members: list[dict]
     planned_meals: list[dict]
     planned_lunches: list[dict]
     recipe_catalog: list[dict]
+    recipe_matches: dict[str, list[dict]]
     household_memories: list[dict]
 
 
@@ -183,9 +221,59 @@ def _matches(text: str, words: tuple[str, ...]) -> bool:
 # Token sets pruned of overly generic verbs ("add", "list", "plan") that fire
 # across unrelated domains. The LLM is told to ask when context is missing, so
 # a false negative is cheaper than a false positive that wastes prompt budget.
-_GROCERY_TOKENS = ("grocery", "groceries", "shopping", "buy", "bought", "purchase", "purchased")
+_GROCERY_TOKENS = (
+    "grocery",
+    "groceries",
+    "shopping",
+    "buy",
+    "bought",
+    "purchase",
+    "purchased",
+    "have",
+    "kitchen",
+    "fridge",
+    "freezer",
+    "pantry",
+    "ingredient",
+)
 _MEAL_TOKENS = ("meal", "dinner", "breakfast", "snack", "cook", "eat")  # "lunch" handled below
 _LUNCH_TOKENS = ("lunch", "school", "pack", "packed", "packing")
+_EXERCISE_TOKENS = (
+    "log",
+    "logged",
+    "exercise",
+    "workout",
+    "run",
+    "ran",
+    "walk",
+    "walked",
+    "lift",
+    "set",
+    "rep",
+    "km",
+    "mile",
+    "minute",
+    "gym",
+    "hike",
+    "cycling",
+    "swim",
+)
+_MEMORY_TOKENS = (
+    "remember",
+    "memory",
+    "memories",
+    "forget",
+    "allergy",
+    "allergies",
+    "allergic",
+    "restriction",
+    "prefer",
+    "preference",
+    "routine",
+    "like",
+    "love",
+    "hate",
+)
 
 
 def _grocery_relevant(text: str) -> bool:
@@ -200,16 +288,39 @@ def _lunch_relevant(text: str) -> bool:
     return _matches(text.lower(), _LUNCH_TOKENS)
 
 
+def _domains(text: str, *, meal: bool, lunch: bool) -> list[str]:
+    """Domains an input touches, in EXAMPLES order; all of them when none match."""
+    lowered = text.lower()
+    found = {
+        "grocery": _grocery_relevant(text),
+        "meal": meal,
+        "lunch": lunch,
+        "exercise": _matches(lowered, _EXERCISE_TOKENS),
+        "memory": _matches(lowered, _MEMORY_TOKENS),
+    }
+    return [d for d in EXAMPLES if found[d]] or list(EXAMPLES)
+
+
 def build_context(db: DbSession, input_text: str, today: date | None = None) -> PromptContext:
     today = today or date.today()
     week_start = start_of_week(today)
 
+    # Recipes load for meal/lunch input, or when a saved recipe is named ("add
+    # the ingredients for chickpea curry"), so the assistant uses the household's
+    # own ingredient lists instead of inventing them.
+    recipes = list_recipes(db)
+    lowered = input_text.lower()
+    recipe_named = any(r.name.lower() in lowered for r in recipes)
+    meal_or_lunch = _meal_relevant(input_text) or _lunch_relevant(input_text) or recipe_named
+
     # Groceries also load for meal/lunch-relevant input so the assistant can
     # suggest recipes that use what's already on hand ("what can I make for
     # dinner?", "pack a lunch from what we have").
-    open_grocery_items: list[dict] = []
-    if _grocery_relevant(input_text) or _meal_relevant(input_text) or _lunch_relevant(input_text):
-        open_grocery_items = [
+    grocery_to_buy: list[dict] = []
+    on_hand: list[dict] = []
+    on_hand_rows = []
+    if _grocery_relevant(input_text) or meal_or_lunch:
+        grocery_to_buy = [
             {
                 "id": item.id,
                 "name": item.name,
@@ -218,6 +329,10 @@ def build_context(db: DbSession, input_text: str, today: date | None = None) -> 
                 "unit": item.unit,
             }
             for item in list_open_items(db)
+        ]
+        on_hand_rows = list_on_hand_items(db)
+        on_hand = [
+            {"id": item.id, "name": item.name, "location": item.location} for item in on_hand_rows
         ]
 
     family_members = [
@@ -261,7 +376,8 @@ def build_context(db: DbSession, input_text: str, today: date | None = None) -> 
     # suggest a dish/lunch from the household's saved recipes rather than
     # inventing one. Ingredients are names only — match against groceries above.
     recipe_catalog: list[dict] = []
-    if _meal_relevant(input_text) or _lunch_relevant(input_text):
+    recipe_matches: dict[str, list[dict]] = {"ready": [], "almost": []}
+    if meal_or_lunch:
         recipe_catalog = [
             {
                 "id": r.id,
@@ -272,8 +388,10 @@ def build_context(db: DbSession, input_text: str, today: date | None = None) -> 
                 "calories": r.calories,
                 "protein_g": r.protein_g,
             }
-            for r in list_recipes(db)
+            for r in recipes
         ]
+        # Precomputed so the model doesn't have to cross-check ingredient lists.
+        recipe_matches = match_recipes([r for r in recipes if r.meal_type != "lunch"], on_hand_rows)
 
     household_memories = [
         {
@@ -289,11 +407,18 @@ def build_context(db: DbSession, input_text: str, today: date | None = None) -> 
 
     return PromptContext(
         today=today,
-        open_grocery_items=open_grocery_items,
+        domains=_domains(
+            input_text,
+            meal=_meal_relevant(input_text) or recipe_named,
+            lunch=_lunch_relevant(input_text),
+        ),
+        grocery_to_buy=grocery_to_buy,
+        on_hand=on_hand,
         family_members=family_members,
         planned_meals=planned_meals,
         planned_lunches=planned_lunches,
         recipe_catalog=recipe_catalog,
+        recipe_matches=recipe_matches,
         household_memories=household_memories,
     )
 
@@ -301,19 +426,24 @@ def build_context(db: DbSession, input_text: str, today: date | None = None) -> 
 def render_messages(context: PromptContext, input_text: str) -> list[dict[str, str]]:
     context_block = {
         "today": context.today.isoformat(),
-        "open_grocery_items": context.open_grocery_items,
+        "grocery_to_buy": context.grocery_to_buy,
+        "on_hand": context.on_hand,
         "family_members": context.family_members,
         "planned_meals": context.planned_meals,
         "planned_lunches": context.planned_lunches,
         "recipe_catalog": context.recipe_catalog,
+        "recipe_matches": context.recipe_matches,
         "household_memories": context.household_memories,
     }
+    tool_names = {name for d in context.domains for name in DOMAIN_TOOLS[d]}
     system_content = (
-        SYSTEM_PROMPT
-        + "\n\nTOOL_CATALOG:\n"
-        + json.dumps(tool_catalog(), indent=2)
+        BASE_PROMPT
+        + "\nEXAMPLES (showing correct shape and when to ask vs act):\n"
+        + "".join(EXAMPLES[d] for d in context.domains)
+        + "\nTOOL_CATALOG:\n"
+        + json.dumps(tool_catalog(tool_names), separators=(",", ":"))
         + "\n\nCONTEXT:\n"
-        + json.dumps(context_block, indent=2, default=str)
+        + json.dumps(context_block, separators=(",", ":"), default=str)
     )
     return [
         {"role": "system", "content": system_content},

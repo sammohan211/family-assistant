@@ -19,7 +19,7 @@ def test_grocery_list_requires_auth(client: TestClient) -> None:
 def test_grocery_list_renders_for_authenticated_user(authenticated_client: TestClient) -> None:
     response = authenticated_client.get("/grocery")
     assert response.status_code == 200
-    assert b"Grocery list" in response.content
+    assert b"Groceries" in response.content
     assert b"No open grocery items" in response.content
 
 

@@ -1,5 +1,5 @@
 {# Shared header for all /meal-plan/* pages.
-   Caller sets `active` to "plan" or "catalog" so the right tab is highlighted. #}
+   Caller sets `active` to "plan", "options" or "catalog" so the right tab is highlighted. #}
 
 {% set tab_base = "px-3 py-2 text-sm font-medium rounded-md" %}
 {% set tab_active = "bg-white text-gray-900 shadow-sm" %}
@@ -9,6 +9,10 @@
   <a href="/meal-plan"
      class="{{ tab_base }} {{ tab_active if active == 'plan' else tab_idle }}">
     Plan
+  </a>
+  <a href="/meal-plan/options"
+     class="{{ tab_base }} {{ tab_active if active == 'options' else tab_idle }}">
+    What can I make?
   </a>
   <a href="/meal-plan/catalog"
      class="{{ tab_base }} {{ tab_active if active == 'catalog' else tab_idle }}">

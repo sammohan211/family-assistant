@@ -497,7 +497,7 @@ def test_process_command_hard_restriction_memory_requires_confirmation(
 # --- Prompt context smoke test --------------------------------------------
 
 
-def test_prompt_includes_open_grocery_items_for_grocery_command(
+def test_prompt_includes_grocery_to_buy_for_grocery_command(
     db_session: Session, seeded_user: User
 ) -> None:
     db_session.add(GroceryItem(name="apples", added_by_user_id=seeded_user.id))
@@ -520,7 +520,7 @@ def test_prompt_omits_grocery_items_for_unrelated_command(
     process_command(seeded_user, "log 30 minutes cycling", db_session, llm=llm)
 
     [system, _user] = llm.calls[0]
-    assert "open_grocery_items" in system["content"]
+    assert "grocery_to_buy" in system["content"]
     assert '"apples"' not in system["content"]
 
 
