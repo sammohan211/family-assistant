@@ -2,16 +2,20 @@
 
 from datetime import date, datetime, timedelta
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Query, Request, Response
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
+from family_assistant.ai_gateway.llm import LLMClient, default_client
 from family_assistant.auth.dependencies import require_user
 from family_assistant.auth.models import User
 from family_assistant.db import get_session
+from family_assistant.grocery.services import create_grocery_item, find_open_item_with_name
 from family_assistant.meal_plan.models import MealPlanEntry, Recipe
+from family_assistant.meal_plan.options import CannedMealOptionsLLM, build_options, suggest
 from family_assistant.meal_plan.services import (
     MEAL_TYPES,
     create_meal_plan_entry,
@@ -21,6 +25,7 @@ from family_assistant.meal_plan.services import (
     duplicate_meal_plan_entry,
     get_meal_plan_entry,
     get_recipe,
+    get_recipe_by_name,
     list_meal_recipes,
     list_recent_entries,
     list_week_entries,
@@ -29,6 +34,7 @@ from family_assistant.meal_plan.services import (
     update_meal_plan_entry,
     update_recipe,
 )
+from family_assistant.settings import get_settings
 from family_assistant.templating import templates
 
 # Meal catalog covers everything except school-lunch components (those live in
@@ -140,16 +146,14 @@ def new_form(
     db: Annotated[DbSession, Depends(get_session)],
     meal_date: Annotated[str | None, Query()] = None,
     meal_type: Annotated[str | None, Query()] = None,
+    title: Annotated[str | None, Query()] = None,
 ) -> Response:
     default_date = meal_date or date.today().isoformat()
     default_meal_type = meal_type if meal_type in MEAL_TYPES else "dinner"
-    return _render_form(
-        request,
-        db=db,
-        item=None,
-        error=None,
-        form_data={"date": default_date, "meal_type": default_meal_type},
-    )
+    form_data = {"date": default_date, "meal_type": default_meal_type}
+    if title:
+        form_data["title"] = title
+    return _render_form(request, db=db, item=None, error=None, form_data=form_data)
 
 
 @router.post("")
@@ -274,6 +278,57 @@ def _validate_recipe(
     if protein_error:
         return None, None, protein_error
     return calories_val, protein_val, None
+
+
+# ---------------------------------------------------------------------------
+# What can I make? (recipes matched against groceries on hand)
+# ---------------------------------------------------------------------------
+
+
+def get_meal_options_llm() -> LLMClient:
+    """LLM for the meal options picks. Tests override via app.dependency_overrides."""
+    if get_settings().use_mock_llm:
+        return CannedMealOptionsLLM()
+    return default_client()
+
+
+@router.get("/options", response_class=HTMLResponse)
+def options_view(
+    request: Request,
+    db: Annotated[DbSession, Depends(get_session)],
+    llm: Annotated[LLMClient, Depends(get_meal_options_llm)],
+    ask: Annotated[bool, Query()] = False,
+    added: Annotated[str | None, Query()] = None,
+) -> Response:
+    options = build_options(db, list_meal_recipes(db))
+    picks = suggest(db, llm, options, date.today()) if ask else None
+    return templates.TemplateResponse(
+        request,
+        "meal_plan/options.html",
+        {"options": options, "asked": ask, "picks": picks, "added": added},
+    )
+
+
+@router.post("/options/add-missing")
+def options_add_missing(
+    db: Annotated[DbSession, Depends(get_session)],
+    user: Annotated[User, Depends(require_user)],
+    recipe: Annotated[str, Form()],
+) -> Response:
+    """Put a recipe's missing ingredients on the to-buy list (skipping ones already there)."""
+    row = get_recipe_by_name(db, recipe)
+    if row is None:
+        return RedirectResponse(url="/meal-plan/options", status_code=303)
+    missing = next(
+        (r["missing"] for r in build_options(db, [row])["almost"]),
+        [],
+    )
+    for name in missing:
+        if find_open_item_with_name(db, name) is None:
+            create_grocery_item(
+                db, user=user, name=name, category=None, quantity=None, unit=None, notes=None
+            )
+    return RedirectResponse(url=f"/meal-plan/options?added={quote(row.name)}", status_code=303)
 
 
 @router.get("/catalog", response_class=HTMLResponse)

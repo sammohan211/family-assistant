@@ -333,8 +333,8 @@ TOOLS: dict[str, ToolSpec] = {
             args_model=GroceryMarkPurchasedArgs,
             handler=_handle_grocery_mark_purchased,
             description=(
-                "Mark one or more grocery items as purchased. "
-                "Use the item_id from the open grocery list in context."
+                "Mark one or more to-buy grocery items as bought (they become on hand). "
+                "Use the item id from grocery_to_buy in context."
             ),
         ),
         ToolSpec(
@@ -419,8 +419,8 @@ def execute_tool_call(call: ValidatedToolCall, db: DbSession, user: User) -> Too
         return ToolResult(outcome="runtime_error", error=f"{type(exc).__name__}: {exc}")
 
 
-def tool_catalog() -> list[dict[str, Any]]:
-    """Render the tool catalog for inclusion in the LLM prompt."""
+def tool_catalog(names: set[str] | None = None) -> list[dict[str, Any]]:
+    """Render the tool catalog (optionally only ``names``) for the LLM prompt."""
     return [
         {
             "name": spec.name,
@@ -428,6 +428,7 @@ def tool_catalog() -> list[dict[str, Any]]:
             "args_schema": spec.args_model.model_json_schema(),
         }
         for spec in TOOLS.values()
+        if names is None or spec.name in names
     ]
 
 

@@ -1,4 +1,8 @@
-"""Grocery CRUD services (PRD Section 10.4)."""
+"""Grocery CRUD services (PRD Section 10.4).
+
+An item moves To buy (``open``) → On hand (``purchased``, in the kitchen or the
+freezer) → ``used_up``. What's on hand feeds the "What can I make?" matcher.
+"""
 
 from decimal import Decimal
 
@@ -8,6 +12,8 @@ from sqlalchemy.orm import selectinload
 
 from family_assistant.auth.models import User
 from family_assistant.grocery.models import GroceryItem
+
+LOCATIONS: tuple[str, ...] = ("kitchen", "freezer")
 
 
 def _with_users(statement):
@@ -26,12 +32,12 @@ def list_open_items(db: DbSession) -> list[GroceryItem]:
     return list(db.scalars(_with_users(statement)).all())
 
 
-def list_purchased_items(db: DbSession, limit: int = 20) -> list[GroceryItem]:
-    statement = (
-        select(GroceryItem)
-        .where(GroceryItem.status == "purchased")
-        .order_by(GroceryItem.updated_at.desc(), GroceryItem.id.desc())
-        .limit(limit)
+def list_on_hand_items(db: DbSession, *, location: str | None = None) -> list[GroceryItem]:
+    statement = select(GroceryItem).where(GroceryItem.status == "purchased")
+    if location is not None:
+        statement = statement.where(GroceryItem.location == location)
+    statement = statement.order_by(
+        GroceryItem.category.is_(None), GroceryItem.category, GroceryItem.name
     )
     return list(db.scalars(_with_users(statement)).all())
 
@@ -90,14 +96,20 @@ def create_grocery_item(
     quantity: Decimal | None,
     unit: str | None,
     notes: str | None,
+    on_hand: bool = False,
+    location: str = "kitchen",
 ) -> GroceryItem:
+    """Add to the to-buy list, or straight to on hand when ``on_hand``."""
     item = GroceryItem(
         name=name.strip(),
         category=category.strip() if category else None,
         quantity=quantity,
         unit=unit.strip() if unit else None,
         notes=notes.strip() if notes else None,
+        status="purchased" if on_hand else "open",
+        location=location,
         added_by_user_id=user.id,
+        purchased_by_user_id=user.id if on_hand else None,
     )
     db.add(item)
     db.commit()
@@ -139,7 +151,28 @@ def mark_grocery_item_purchased(db: DbSession, *, item_id: int, user: User) -> G
     return item
 
 
+def mark_grocery_item_used_up(db: DbSession, *, item_id: int) -> GroceryItem | None:
+    item = db.get(GroceryItem, item_id)
+    if item is None:
+        return None
+    item.status = "used_up"
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def move_grocery_item(db: DbSession, *, item_id: int, location: str) -> GroceryItem | None:
+    item = db.get(GroceryItem, item_id)
+    if item is None or location not in LOCATIONS:
+        return None
+    item.location = location
+    db.commit()
+    db.refresh(item)
+    return item
+
+
 def restore_grocery_item(db: DbSession, *, item_id: int) -> GroceryItem | None:
+    """Put an item back on the to-buy list (from on hand: "buy again")."""
     item = db.get(GroceryItem, item_id)
     if item is None:
         return None
@@ -171,4 +204,5 @@ def clone_grocery_item(db: DbSession, *, item_id: int, user: User) -> GroceryIte
         quantity=item.quantity,
         unit=item.unit,
         notes=item.notes,
+        location=item.location,
     )

@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}What can I make? · Family Assistant{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8 space-y-8">
+  {% set active = "options" %}
+  {% include "meal_plan/_header.html" with context %}
+
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h1 class="font-serif text-3xl tracking-tight">What can I make?</h1>
+      <p class="text-sm text-gray-500">
+        Your recipes checked against the {{ options.on_hand_count }} item{{ "" if options.on_hand_count == 1 else "s" }}
+        <a href="/grocery" class="text-accent hover:underline">on hand</a> in the kitchen and freezer.
+      </p>
+    </div>
+    {% if options.ready or options.almost %}
+    <a href="/meal-plan/options?ask=1"
+       class="rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-700">
+      Suggest for me
+    </a>
+    {% endif %}
+  </div>
+
+  {% if added %}
+  <div class="text-sm text-green-800 bg-green-50 border border-green-200 rounded px-3 py-2">
+    Added what's missing for {{ added }} to the <a href="/grocery" class="underline">to-buy list</a>.
+  </div>
+  {% endif %}
+
+  {% if asked %}
+  <section class="rounded-xl border border-accent/30 bg-accent-50 p-4 space-y-2">
+    <h2 class="font-serif text-xl">Suggestions</h2>
+    {% if picks %}
+    <ul class="space-y-2">
+      {% for pick in picks %}
+      <li><span class="font-medium">{{ pick.name }}</span>{% if pick.reason %}: <span class="text-gray-700">{{ pick.reason }}</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% elif picks is none %}
+    <p class="text-sm text-gray-600">Couldn't get suggestions right now. The matches below still apply.</p>
+    {% else %}
+    <p class="text-sm text-gray-600">Nothing to suggest yet.</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% macro recipe_row(r) %}
+  <li class="px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+    <div class="min-w-0">
+      <div class="font-medium">{{ r.name }}</div>
+      {% if r.missing %}
+      <p class="text-sm text-amber-700">Missing: {{ r.missing|join(", ") }}</p>
+      {% endif %}
+      {% if r.have %}
+      <p class="text-xs text-gray-500">
+        Have: {{ r.have|join(", ") }}
+        {% if r.from_freezer %}· thaw {{ r.from_freezer|join(", ") }}{% endif %}
+      </p>
+      {% endif %}
+    </div>
+    <div class="flex items-center gap-2 shrink-0">
+      {% if r.missing %}
+      <form method="post" action="/meal-plan/options/add-missing">
+        {{ csrf_input() }}
+        <input type="hidden" name="recipe" value="{{ r.name }}">
+        <button type="submit"
+                class="text-sm font-medium text-accent hover:bg-accent-50 border border-accent/30 rounded-md px-3 py-2">
+          Add missing to list
+        </button>
+      </form>
+      {% endif %}
+      <a href="/meal-plan/new?title={{ r.name|urlencode }}&meal_type={{ r.meal_type }}"
+         class="text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-300 rounded-md px-3 py-2">
+        Plan
+      </a>
+    </div>
+  </li>
+  {% endmacro %}
+
+  <section class="space-y-3">
+    <h2 class="font-serif text-xl">Ready now</h2>
+    {% if options.ready %}
+    <ul class="divide-y divide-gray-200 bg-white rounded-lg border border-gray-200">
+      {% for r in options.ready %}{{ recipe_row(r) }}{% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-gray-500">No recipe has everything on hand.</p>
+    {% endif %}
+  </section>
+
+  <section class="space-y-3">
+    <h2 class="font-serif text-xl">Missing one or two things</h2>
+    {% if options.almost %}
+    <ul class="divide-y divide-gray-200 bg-white rounded-lg border border-gray-200">
+      {% for r in options.almost %}{{ recipe_row(r) }}{% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-gray-500">Nothing is one or two items away.</p>
+    {% endif %}
+  </section>
+
+  <p class="text-xs text-gray-400">
+    Matching goes by ingredient names in the <a href="/meal-plan/catalog" class="underline">catalog</a>.
+    If something you have isn't matching, give the grocery item and the ingredient the same name.
+  </p>
+</div>
+{% endblock %}

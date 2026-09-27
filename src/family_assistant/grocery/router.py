@@ -16,10 +16,12 @@ from family_assistant.grocery.services import (
     delete_grocery_item,
     find_open_item_with_name,
     get_grocery_item,
+    list_on_hand_items,
     list_open_items,
-    list_purchased_items,
     list_recent_items,
     mark_grocery_item_purchased,
+    mark_grocery_item_used_up,
+    move_grocery_item,
     restore_grocery_item,
     update_grocery_item,
 )
@@ -76,15 +78,16 @@ def list_view(
         "grocery/list.html",
         {
             "open_items": list_open_items(db),
-            "purchased_items": list_purchased_items(db),
+            "kitchen_items": list_on_hand_items(db, location="kitchen"),
+            "freezer_items": list_on_hand_items(db, location="freezer"),
             "recent_items": list_recent_items(db),
         },
     )
 
 
 @router.get("/new", response_class=HTMLResponse)
-def new_form(request: Request) -> Response:
-    return _render_form(request, item=None, error=None)
+def new_form(request: Request, where: str = "list") -> Response:
+    return _render_form(request, item=None, error=None, form_data={"where": where})
 
 
 @router.post("")
@@ -97,6 +100,7 @@ def create_view(
     quantity: Annotated[str, Form()] = "",
     unit: Annotated[str, Form()] = "",
     notes: Annotated[str, Form()] = "",
+    where: Annotated[str, Form()] = "list",
     confirm_duplicate: Annotated[str, Form()] = "",
 ) -> Response:
     form_data = {
@@ -105,7 +109,10 @@ def create_view(
         "quantity": quantity,
         "unit": unit,
         "notes": notes,
+        "where": where,
     }
+    # "list" = to buy; "kitchen" / "freezer" = already on hand there.
+    on_hand = where in ("kitchen", "freezer")
     if not name.strip():
         return _render_form(
             request,
@@ -123,7 +130,7 @@ def create_view(
             form_data=form_data,
             status_code=400,
         )
-    if confirm_duplicate != "true":
+    if not on_hand and confirm_duplicate != "true":
         duplicate = find_open_item_with_name(db, name)
         if duplicate is not None:
             return _render_form(
@@ -142,6 +149,8 @@ def create_view(
         quantity=parsed_quantity,
         unit=unit,
         notes=notes,
+        on_hand=on_hand,
+        location=where if on_hand else "kitchen",
     )
     return RedirectResponse(url="/grocery", status_code=303)
 
@@ -218,6 +227,25 @@ def purchase_view(
     user: Annotated[User, Depends(require_user)],
 ) -> Response:
     mark_grocery_item_purchased(db, item_id=item_id, user=user)
+    return RedirectResponse(url="/grocery", status_code=303)
+
+
+@router.post("/{item_id}/used-up")
+def used_up_view(
+    item_id: int,
+    db: Annotated[DbSession, Depends(get_session)],
+) -> Response:
+    mark_grocery_item_used_up(db, item_id=item_id)
+    return RedirectResponse(url="/grocery", status_code=303)
+
+
+@router.post("/{item_id}/move")
+def move_view(
+    item_id: int,
+    db: Annotated[DbSession, Depends(get_session)],
+    location: Annotated[str, Form()],
+) -> Response:
+    move_grocery_item(db, item_id=item_id, location=location)
     return RedirectResponse(url="/grocery", status_code=303)
 
 
