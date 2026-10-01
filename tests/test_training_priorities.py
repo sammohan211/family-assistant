@@ -3,6 +3,7 @@
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,6 +18,7 @@ from family_assistant.exercise.priorities import (
     _options,
     rank_areas,
     refresh_priorities,
+    training_card,
     validate_answer,
 )
 from family_assistant.exercise.router import get_priorities_llm
@@ -229,24 +231,28 @@ def _seed(db: Session, user: User, day: date) -> None:
     )
 
 
-def test_refresh_stores_one_row_per_week_and_overwrites(
-    db_session: Session, seeded_user: User
-) -> None:
+def test_refresh_calls_the_llm_once_per_week(db_session: Session, seeded_user: User) -> None:
     _seed(db_session, seeded_user, TODAY - timedelta(days=10))
     llm = FakeLLM()
 
     first = refresh_priorities(db_session, user=seeded_user, llm=llm, model_label="m", today=TODAY)
-    refresh_priorities(db_session, user=seeded_user, llm=llm, model_label="m", today=TODAY)
+    again = refresh_priorities(db_session, user=seeded_user, llm=llm, model_label="m", today=TODAY)
 
     rows = db_session.scalars(select(TrainingPriorities)).all()
-    assert len(rows) == 1 and rows[0].id == first.id
-    assert llm.calls == 2
+    assert len(rows) == 1 and rows[0].id == first.id == again.id
+    assert llm.calls == 1
     assert rows[0].week_start == MON
     assert rows[0].is_fallback is False and rows[0].model == "m"
     names = [p["area"] for p in rows[0].content["priorities"]]
     assert "Upper push" in names
     push = next(p for p in rows[0].content["priorities"] if p["area"] == "Upper push")
     assert push["gym"] == ["Bench press"] and push["home"] == ["Push-up"]
+
+    # A new week allows a new call.
+    refresh_priorities(
+        db_session, user=seeded_user, llm=llm, model_label="m", today=TODAY + timedelta(days=7)
+    )
+    assert llm.calls == 2
 
 
 def test_llm_failure_falls_back_to_the_ranking(db_session: Session, seeded_user: User) -> None:
@@ -259,6 +265,63 @@ def test_llm_failure_falls_back_to_the_ranking(db_session: Session, seeded_user:
     assert row.is_fallback is True and row.model is None
     push = next(p for p in row.content["priorities"] if p["area"] == "Upper push")
     assert push["reason"].startswith("Chest: last trained 10 days ago")
+
+
+def test_failed_llm_call_can_be_retried(db_session: Session, seeded_user: User) -> None:
+    _seed(db_session, seeded_user, TODAY - timedelta(days=10))
+    refresh_priorities(
+        db_session, user=seeded_user, llm=FakeLLM(fail=True), model_label="m", today=TODAY
+    )
+    llm = FakeLLM()
+
+    row = refresh_priorities(db_session, user=seeded_user, llm=llm, model_label="m", today=TODAY)
+
+    assert llm.calls == 1
+    assert row.is_fallback is False and row.model == "m"
+
+
+def test_nothing_ranked_makes_no_llm_call(db_session: Session, seeded_user: User) -> None:
+    _seed(db_session, seeded_user, TODAY - timedelta(days=10))
+    with patch("family_assistant.exercise.priorities.rank_areas", return_value=[]):
+        llm = FakeLLM()
+        row = refresh_priorities(
+            db_session, user=seeded_user, llm=llm, model_label="m", today=TODAY
+        )
+    assert row is None and llm.calls == 0
+
+
+def test_card_follows_new_logs_without_another_llm_call(
+    db_session: Session, seeded_user: User
+) -> None:
+    _seed(db_session, seeded_user, TODAY - timedelta(days=10))
+    before = training_card(db_session, user=seeded_user, today=TODAY)
+    assert before["ai_used"] is False
+    push = next(p for p in before["content"]["priorities"] if p["area"] == "Upper push")
+    assert push["reason"].startswith("Chest: last trained 10 days ago")
+
+    llm = FakeLLM()
+    refresh_priorities(db_session, user=seeded_user, llm=llm, model_label="m", today=TODAY)
+    worded = training_card(db_session, user=seeded_user, today=TODAY)
+    assert worded["ai_used"] is True
+    push = next(p for p in worded["content"]["priorities"] if p["area"] == "Upper push")
+    assert "Offline mode" in push["reason"]  # the canned LLM's wording
+
+    bench = db_session.scalars(select(Exercise).where(Exercise.name == "Bench press")).one()
+    create_log(
+        db_session,
+        user=seeded_user,
+        exercise=bench,
+        entry_date=TODAY,
+        sets=3,
+        reps=10,
+        weight=Decimal("50"),
+        distance_km=None,
+        duration_minutes=None,
+        notes=None,
+    )
+    after = training_card(db_session, user=seeded_user, today=TODAY)
+    assert "Upper push" not in [p["area"] for p in after["content"]["priorities"]]
+    assert llm.calls == 1
 
 
 def test_refresh_needs_recent_logs(db_session: Session, seeded_user: User) -> None:
@@ -288,7 +351,9 @@ def test_card_refresh_flow(
     try:
         before = authenticated_client.get("/dashboard").text
         assert "Training this week" in before
-        assert "Press Refresh" in before
+        assert "Upper push" in before  # the ranking shows before any LLM call
+        assert "Get AI tips" in before
+        assert llm.calls == 0
 
         response = authenticated_client.post("/exercise/priorities/refresh", follow_redirects=False)
         assert response.status_code == 303
@@ -296,8 +361,13 @@ def test_card_refresh_flow(
 
         after = authenticated_client.get("/dashboard").text
         assert "Upper push" in after
+        assert "Offline mode" in after
         assert "Gym:</span> Bench press" in after
         assert "Home:</span> Push-up" in after
+        assert "Get AI tips</span>" not in after
+        assert llm.calls == 1
+
+        authenticated_client.post("/exercise/priorities/refresh", follow_redirects=False)
         assert llm.calls == 1
     finally:
         app.dependency_overrides.pop(get_priorities_llm, None)
