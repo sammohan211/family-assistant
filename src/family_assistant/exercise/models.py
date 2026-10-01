@@ -100,9 +100,12 @@ class TrainingWeekSummary(Base):
 class TrainingPriorities(Base):
     """One user's training priorities for one ISO week (PRD §10.16 step 3).
 
-    Written by Refresh on the dashboard card; a second refresh in the same week
-    overwrites it. ``content`` holds the validated LLM answer, or the
-    deterministic ranking when ``is_fallback`` is true.
+    Written by the card's "Get AI tips" button, which calls the LLM at most once
+    per week: once a row has a usable answer (``model`` set, not
+    ``is_fallback``) no further calls are made; a failed attempt may be retried
+    and overwrites it. ``content`` holds the validated LLM answer, or the
+    deterministic ranking when ``is_fallback`` is true. The card itself is
+    rebuilt from the live ranking on every view and only borrows this wording.
     """
 
     __tablename__ = "training_priorities"

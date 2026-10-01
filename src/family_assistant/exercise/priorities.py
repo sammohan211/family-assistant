@@ -1,6 +1,7 @@
 """Weekly training priorities for the dashboard card (PRD §10.16 step 3).
 
-Code decides, the LLM phrases. Pressing Refresh:
+Code decides, the LLM phrases. The card (``training_card``) is rebuilt on
+every dashboard view, without the LLM:
 
 1. reads the weekly summaries (§10.16 step 2) for the last ``HISTORY_WEEKS``
    complete weeks plus the current week so far;
@@ -8,11 +9,15 @@ Code decides, the LLM phrases. Pressing Refresh:
    week vs the user's own average (with a small floor), push/pull and
    upper/lower balance, cardio minutes vs average — and attaches candidate
    catalog exercises split into gym and home;
-3. asks the LLM once to pick 2-3 of those areas and phrase a one-line reason;
-4. validates the answer against the ranking, the muscle vocabulary and the
-   catalog (``validate_answer``), dropping anything invented;
-5. stores the result in ``training_priorities``, or the ranking itself as a
-   fallback (``is_fallback``) when the LLM fails or returns nothing usable.
+3. overlays this week's stored AI wording on the areas still ranked
+   (``merge_card``); other areas keep the ranking's factual reason.
+
+The LLM is called at most once per user per week, by Refresh
+(``refresh_priorities``): it asks the LLM to pick 2-3 areas and phrase a
+one-line reason, validates the answer against the ranking, the muscle
+vocabulary and the catalog (``validate_answer``), and stores it in
+``training_priorities``. Once a week has a stored AI answer, Refresh makes no
+further calls; a failed call (``is_fallback``) may be retried.
 """
 
 import json
@@ -209,13 +214,17 @@ def rank_areas(
     return areas[:MAX_PRIORITIES]
 
 
-def keep_it_up(current: dict) -> str | None:
-    """Exercises this week that met or beat their last session's score."""
-    wins = [
+def _wins(current: dict) -> list[str]:
+    return [
         row["exercise"]
         for row in current["progress"]
         if row["change_pct"] is not None and row["change_pct"] >= 0
     ]
+
+
+def keep_it_up(current: dict) -> str | None:
+    """Exercises this week that met or beat their last session's score."""
+    wins = _wins(current)
     if not wins:
         return None
     return "Matched or beat your last score on " + ", ".join(wins) + "."
@@ -298,11 +307,7 @@ def build_messages(
             }
             for w in [*history, current]
         ],
-        "wins": [
-            row["exercise"]
-            for row in current["progress"]
-            if row["change_pct"] is not None and row["change_pct"] >= 0
-        ],
+        "wins": _wins(current),
     }
     return [
         {"role": "system", "content": _SYSTEM_PROMPT},
@@ -389,13 +394,65 @@ def has_recent_logs(db: DbSession, *, user: User, today: date | None = None) -> 
 def get_priorities(
     db: DbSession, *, user: User, today: date | None = None
 ) -> TrainingPriorities | None:
-    """This week's stored priorities, if Refresh has been pressed."""
+    """This week's stored AI answer (or failed attempt), if Refresh has been pressed."""
     start = week_start(today or date.today())
     return db.scalars(
         select(TrainingPriorities).where(
             TrainingPriorities.user_id == user.id, TrainingPriorities.week_start == start
         )
     ).first()
+
+
+def ai_used(row: TrainingPriorities | None) -> bool:
+    """True once this week's LLM call has produced a usable answer."""
+    return row is not None and row.model is not None and not row.is_fallback
+
+
+def _rank(
+    db: DbSession, *, user: User, today: date
+) -> tuple[list[dict], dict, list[dict[str, Any]]]:
+    start = week_start(today)
+    history = [
+        get_week_summary(db, user=user, start=start - timedelta(days=7 * n), today=today)
+        for n in range(HISTORY_WEEKS, 0, -1)
+    ]
+    current = get_week_summary(db, user=user, start=start, today=today)
+    return history, current, rank_areas(history, current, list_exercises(db))
+
+
+def merge_card(
+    areas: list[dict[str, Any]], current: dict, row: TrainingPriorities | None
+) -> dict[str, Any]:
+    """The card for the current ranking, worded by the stored AI answer where it still fits.
+
+    The AI answer is re-validated against today's ranking, so an area the user
+    has since trained drops out and a newly ranked one shows its factual reason.
+    The AI's "keep it up" line is kept only while the wins it praised are unchanged.
+    """
+    content = fallback_content(areas, current)
+    content["as_of"] = current["as_of"]
+    if not ai_used(row):
+        return content
+    worded = validate_answer(row.content, areas)
+    if worded is not None:
+        by_area = {p["area"]: p for p in worded["priorities"]}
+        content["priorities"] = [by_area.get(p["area"], p) for p in content["priorities"]]
+        if row.content.get("wins") == _wins(current):
+            content["keep_it_up"] = worded["keep_it_up"]
+    return content
+
+
+def training_card(db: DbSession, *, user: User, today: date | None = None) -> dict[str, Any]:
+    """Everything the dashboard card shows. Never calls the LLM."""
+    today = today or date.today()
+    _, current, areas = _rank(db, user=user, today=today)
+    row = get_priorities(db, user=user, today=today)
+    return {
+        "content": merge_card(areas, current, row),
+        "ai_used": ai_used(row),
+        "ai_at": row.generated_at if ai_used(row) else None,
+        "ai_failed": row is not None and row.is_fallback,
+    }
 
 
 def refresh_priorities(
@@ -405,48 +462,47 @@ def refresh_priorities(
     llm: LLMClient,
     model_label: str | None,
     today: date | None = None,
-) -> TrainingPriorities:
-    """Rank, ask the LLM once, validate, and store this week's priorities."""
+) -> TrainingPriorities | None:
+    """Ask the LLM to word this week's priorities, at most once per week.
+
+    Returns the week's row, unchanged when the LLM has already answered this
+    week, or ``None`` when nothing ranks (no call is needed to say "on track").
+    """
     today = today or date.today()
     if not has_recent_logs(db, user=user, today=today):
         raise PrioritiesError("Log some exercise first — there is nothing recent to go on.")
 
-    start = week_start(today)
-    history = [
-        get_week_summary(db, user=user, start=start - timedelta(days=7 * n), today=today)
-        for n in range(HISTORY_WEEKS, 0, -1)
-    ]
-    current = get_week_summary(db, user=user, start=start, today=today)
-    areas = rank_areas(history, current, list_exercises(db))
+    row = get_priorities(db, user=user, today=today)
+    if ai_used(row):
+        return row
+    history, current, areas = _rank(db, user=user, today=today)
+    if not areas:
+        return row
 
     content: dict[str, Any] | None = None
-    if areas:
-        try:
-            raw = llm.chat_json(build_messages(areas, history, current))
-        except Exception:  # httpx errors, JSON decode: fall back, never fail the card
-            logger.warning("training priorities LLM call failed", exc_info=True)
-        else:
-            content = validate_answer(raw, areas)
-    # Fallback only when the LLM was needed and failed; nothing to rank is "on track".
-    is_fallback = bool(areas) and content is None
+    try:
+        raw = llm.chat_json(build_messages(areas, history, current))
+    except Exception:  # httpx errors, JSON decode: fall back, never fail the card
+        logger.warning("training priorities LLM call failed", exc_info=True)
+    else:
+        content = validate_answer(raw, areas)
+    is_fallback = content is None
     if content is None:
         content = fallback_content(areas, current)
     content["as_of"] = current["as_of"]
+    content["wins"] = _wins(current)
+    model = None if is_fallback else model_label
 
-    row = get_priorities(db, user=user, today=today)
     if row is None:
-        row = TrainingPriorities(user_id=user.id, week_start=start)
+        row = TrainingPriorities(user_id=user.id, week_start=week_start(today))
         db.add(row)
-    row.content = content
-    row.model = model_label if areas and not is_fallback else None
-    row.is_fallback = is_fallback
+    row.content, row.model, row.is_fallback = content, model, is_fallback
     try:
         db.commit()
     except IntegrityError:  # a concurrent first refresh won; overwrite it
         db.rollback()
         row = get_priorities(db, user=user, today=today)
-        row.content, row.is_fallback = content, is_fallback
-        row.model = model_label if areas and not is_fallback else None
+        row.content, row.model, row.is_fallback = content, model, is_fallback
         db.commit()
     return row
 

@@ -120,7 +120,7 @@ Two tables: a household-shared **catalog** of named exercises and per-user **log
 
 ### 10.8 Dashboard
 
-Five cards: today's meals; **due household tasks** (overdue + due-today, with one-click Done — added with §10.11); this week's school lunches per kid; open grocery (count + quick-add + first items); the current user's recent assistant activity. AI-generated weekly summary card: phase 2. A **training priorities** card with a Refresh button (§10.16 step 3) spans the top row for users with exercise logs in the last 4 weeks.
+Five cards: today's meals; **due household tasks** (overdue + due-today, with one-click Done — added with §10.11); this week's school lunches per kid; open grocery (count + quick-add + first items); the current user's recent assistant activity. AI-generated weekly summary card: phase 2. A **training priorities** card (§10.16 step 3) spans the top row for users with exercise logs in the last 4 weeks; it updates as you log and gets AI wording at most once a week.
 
 ### 10.9 Blood Pressure Module
 
@@ -175,7 +175,7 @@ Data model: `GlucoseReading` — per-user (`user_id` FK, `ondelete="CASCADE"`), 
 
 ### 10.16 Training Guidance — designed 2026-09-26; steps 1–3 built, step 4 planned
 
-**Goal:** passive weekly hints on what to train. At the start of a week the user presses **Refresh** on a dashboard card and gets 2–3 priorities — body area, muscles, and exercise options split by gym and home. Hints only: no workout plans, no nagging, never medical advice (§5.4). Primary user is one adult; the card is per-user, so the other adult gets their own if they log exercise.
+**Goal:** passive weekly hints on what to train. A dashboard card shows 2–3 priorities — body area, muscles, and exercise options split by gym and home. Hints only: no workout plans, no nagging, never medical advice (§5.4). Primary user is one adult; the card is per-user, so the other adult gets their own if they log exercise.
 
 **Principle — code decides, the LLM phrases** (same pattern as the removed horoscope, §10.12): all numbers, rankings and exercise candidates are computed deterministically; the LLM only selects among them, groups them and writes a one-line reason, and its output is validated against the catalog.
 
@@ -282,9 +282,9 @@ One **TrainingWeekSummary** row per (user, ISO week), holding a JSONB snapshot c
 
 #### Step 3 — Dashboard training-priorities card (LLM)
 
-The card is per-user and shows the stored result for the current ISO week. Before the first refresh of a week, it shows a Refresh prompt. It is hidden for users with no exercise logs in the last 4 weeks.
+The card is per-user and hidden for users with no exercise logs in the last 4 weeks. Steps 1–2 and 6 run on every dashboard view, without the LLM, so the card follows new logs. Steps 3–5 run only when the user presses **Get AI tips**, at most once per week (amended 2026-10-01, see below).
 
-**Pressing Refresh:**
+**Building the card:**
 1. Ensure summaries exist for the **last 4 complete weeks**, plus the current week so far, marked as partial. Including the partial week means a mid-week refresh won't re-suggest something already done on Monday.
 2. **Rank muscles deterministically.** Signals, in rough order:
    - days since last trained
@@ -295,7 +295,7 @@ The card is per-user and shows the stored result for the current ISO week. Befor
    There are no fixed weekly quotas. For each top muscle, collect the matching catalog exercises (primary first) split by `location`.
 3. **One LLM call** through the AI gateway (§16.7), JSON output validated with Pydantic (§19). The input is the summaries, the ranking and the candidate exercises. The output is 2–3 priorities, each with a body area, muscles, a one-line reason, gym options and home options. An optional "keep it up" line is allowed.
 4. **Validate the answer.** Exercise names not in the catalog and muscles not in the vocabulary are dropped. If nothing valid remains, fall back to step 6.
-5. Store the result in **TrainingPriorities** (user, `week_start` unique per user, content JSONB, model, generated_at, `is_fallback`). Refreshing again overwrites it, so there is at most one LLM call per press.
+5. Store the result in **TrainingPriorities** (user, `week_start` unique per user, content JSONB, model, generated_at, `is_fallback`). Once the week has a usable answer, no further LLM calls are made that week.
 6. **Fallback.** If the LLM is unavailable or its output is invalid, the card shows the top of the deterministic ranking with its candidate exercises and no prose.
 
 **As built (2026-09-26, `exercise/priorities.py`, migration `0028`):**
@@ -317,9 +317,15 @@ The card is per-user and shows the stored result for the current ISO week. Befor
   - Every priority carries a factual code-built reason (e.g. "Chest: last trained 9 days ago; 0 of ~6 sets this week"). This is the fallback's text and fills in a missing LLM reason.
   - "Keep it up" lists exercises that met or beat their last score.
 - **Card and routes:**
-  - The card spans the dashboard's top row. Refresh posts to `/exercise/priorities/refresh`.
+  - The card spans the dashboard's top row. Get AI tips posts to `/exercise/priorities/refresh`.
   - A week with nothing to rank shows "on track" and is not a fallback.
   - `USE_MOCK_LLM` uses a canned echo client.
+
+**Amended 2026-10-01 — one LLM call per week (audit fix).** As first built, every Refresh press made an LLM call and the card only changed on Refresh, so the user pressed it after each workout (4 calls in the week of Sep 28). Now:
+- The card is rebuilt from the live ranking on every dashboard view (`training_card`), with no LLM call, so it follows new logs.
+- **Get AI tips** (formerly Refresh) calls the LLM only if the week has no usable AI answer yet. The button disappears once there is one. A failed call (`is_fallback`) may be retried.
+- The stored AI answer is re-validated against the current ranking (`merge_card`). Areas still ranked keep the AI's wording and picks. Areas trained since then drop out. Newly ranked areas show the code-built factual reason. The AI's "keep it up" line is kept only while the wins it praised are unchanged.
+- No migration: an existing row counts as this week's AI answer when `model` is set and `is_fallback` is false.
 
 **Privacy:** each user's card reads only their own logs. Blood Sugar and BP are not inputs (their privacy and advice rules would need their own decision).
 
@@ -403,7 +409,7 @@ Single implicit household; no Household/HouseholdMember/AuditLog entities. Autho
 - **Recipe** (§10.5) — name (unique), meal_type, ingredients (JSONB list of names), optional instructions/notes, coarse nullable calories/protein_g. No FK from plan entries.
 - **MealPlanEntry** — date, meal_type, free-text title, notes, is_favorite, created_by.
 - **LunchPlanEntry** — family_member FK, date, items (JSONB `{name, notes?}` list), notes, packed_status (unsurfaced), created_by.
-- **Exercise** (catalog) + **ExerciseLog** — per §10.7; `work_score` persisted at write time so later body-weight edits don't distort history. Catalog uses fixed-vocabulary primary/secondary muscles + region/modality/location; logs carry `body_weight_used` (§10.16 step 1). **TrainingWeekSummary** (§10.16 step 2): one JSONB snapshot per user per completed ISO week, unique on (user, week). **TrainingPriorities** (§10.16 step 3): one row per user per ISO week, overwritten on Refresh.
+- **Exercise** (catalog) + **ExerciseLog** — per §10.7; `work_score` persisted at write time so later body-weight edits don't distort history. Catalog uses fixed-vocabulary primary/secondary muscles + region/modality/location; logs carry `body_weight_used` (§10.16 step 1). **TrainingWeekSummary** (§10.16 step 2): one JSONB snapshot per user per completed ISO week, unique on (user, week). **TrainingPriorities** (§10.16 step 3): one row per user per ISO week holding that week's single AI answer (a failed attempt may be retried and overwrites it).
 - **BloodPressureReading** — per §10.9; `map_value` persisted, category derived on read.
 - **GlucoseReading** — per §10.15; per-user like BloodPressureReading, but reachable only by one designated owner (route-level check + hidden nav entry) — the app's first whole-module single-user restriction rather than ownership scoping.
 - **Hike** — per §10.10; `speed_kmh` persisted.
