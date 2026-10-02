@@ -4,8 +4,8 @@
 # Runs on the VPS (deployed to /root/db-backup.sh, fired by cron at 03:00).
 # Dumps the DB, gzips it, and only promotes the file if it passes a size
 # sanity check, so a truncated/empty dump can never overwrite or rotate out a
-# good one. The off-box copy is handled separately by an rsync cron on the
-# home desktop (see OPERATIONS.md "Off-box safety").
+# good one. The off-box copy is pulled separately from the laptop with
+# scripts/pull-backups.sh (see OPERATIONS.md "Backups").
 set -euo pipefail
 
 REPO="${REPO:-$HOME/family-assistant}"
