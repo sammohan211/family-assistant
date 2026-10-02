@@ -100,11 +100,14 @@ gunzip -c <dump>.sql.gz | docker compose exec -T postgres psql -U family_assista
 
 Restore into an *empty* DB: `docker compose down -v` → `up -d` → restore → then migrations. Rehearse safely with a throwaway DB (`createdb restore_test` → restore there → check counts → `dropdb restore_test`).
 
-**Off-box copy:** dumps live on the VPS disk, so they don't survive losing the whole server. Occasionally, from the laptop:
+**Off-box copy:** dumps live on the VPS disk, so they don't survive losing the whole server. Occasionally (weekly-ish, and before risky changes), from the laptop:
 
 ```bash
-rsync -avz root@<vps>:/root/backups/ ~/family-backups/
+./scripts/pull-backups.sh           # pull all dumps + a dated config snapshot to ~/family-backups/
+./scripts/pull-backups.sh --fresh   # take a new dump on the VPS first
 ```
+
+It never deletes local files, so the laptop keeps history the VPS has rotated out (deploy/manual dumps share the 14-file rotation, so the VPS can hold under a week after a busy stretch). It verifies the newest dump and saves `.env` (secrets — mode 600), `Caddyfile` and `sites/` under `~/family-backups/config/<date>/`. Override the target with `VPS=`/`DEST=` env vars.
 
 Plus an occasional Hetzner snapshot (console or `hcloud server create-image --type snapshot`) as a whole-server net.
 
@@ -145,7 +148,7 @@ The model is `OPENROUTER_MODEL` in `.env`; change it → `docker compose up -d a
 ├── Caddyfile             # this app's site + `import sites/*.caddy` (multi-tenant edge, PRD §17.10)
 ├── sites/                # tenant site blocks (untracked; README explains)
 ├── alembic/versions/     # migrations
-├── scripts/              # deploy.sh, doctor.sh, rollback.sh, db-backup.sh, seed_*.py
+├── scripts/              # deploy.sh, doctor.sh, rollback.sh, db-backup.sh, pull-backups.sh, seed_*.py
 ├── src/family_assistant/ # app code
 └── tests/
 ```
