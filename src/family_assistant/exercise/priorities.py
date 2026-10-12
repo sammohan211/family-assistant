@@ -420,6 +420,30 @@ def _rank(
     return history, current, rank_areas(history, current, list_exercises(db))
 
 
+def _done(current: dict) -> dict[str, Any]:
+    """What the week's AI answer was based on, to tell later if it went stale."""
+    return {
+        "strength_sets": current["strength_sets"],
+        "cardio_minutes": current["cardio_minutes"]["total"],
+    }
+
+
+def _still_fits(answered: dict[str, Any], done: dict[str, Any] | None, current: dict) -> bool:
+    """True while nothing the AI wrote about has been trained since it answered.
+
+    Its reasons ("you haven't trained your legs this week") and picks go stale
+    once any of its muscles (or, for cardio, the minutes) move. Answers stored
+    without a snapshot can't be checked, so they count as stale.
+    """
+    if done is None:
+        return False
+    if answered["area"] == CARDIO:
+        return current["cardio_minutes"]["total"] == done["cardio_minutes"]
+    return all(
+        current["strength_sets"][m] == done["strength_sets"].get(m) for m in answered["muscles"]
+    )
+
+
 def merge_card(
     areas: list[dict[str, Any]], current: dict, row: TrainingPriorities | None
 ) -> dict[str, Any]:
@@ -427,6 +451,8 @@ def merge_card(
 
     The AI answer is re-validated against today's ranking, so an area the user
     has since trained drops out and a newly ranked one shows its factual reason.
+    An area still ranked keeps the AI's wording and picks only while none of the
+    muscles the AI wrote about has been trained since (``_still_fits``).
     The AI's "keep it up" line is kept only while the wins it praised are unchanged.
     """
     content = fallback_content(areas, current)
@@ -435,7 +461,13 @@ def merge_card(
         return content
     worded = validate_answer(row.content, areas)
     if worded is not None:
-        by_area = {p["area"]: p for p in worded["priorities"]}
+        answered = {p.get("area"): p for p in row.content.get("priorities", [])}
+        done = row.content.get("done")
+        by_area = {
+            p["area"]: p
+            for p in worded["priorities"]
+            if _still_fits(answered[p["area"]], done, current)
+        }
         content["priorities"] = [by_area.get(p["area"], p) for p in content["priorities"]]
         if row.content.get("wins") == _wins(current):
             content["keep_it_up"] = worded["keep_it_up"]
@@ -491,6 +523,7 @@ def refresh_priorities(
         content = fallback_content(areas, current)
     content["as_of"] = current["as_of"]
     content["wins"] = _wins(current)
+    content["done"] = _done(current)
     model = None if is_fallback else model_label
 
     if row is None:

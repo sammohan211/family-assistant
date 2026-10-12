@@ -15,7 +15,9 @@ from family_assistant.exercise.models import Exercise, ExerciseLog, TrainingPrio
 from family_assistant.exercise.priorities import (
     CannedPrioritiesLLM,
     PrioritiesError,
+    _done,
     _options,
+    merge_card,
     rank_areas,
     refresh_priorities,
     training_card,
@@ -134,6 +136,70 @@ def test_cardio_below_usual_minutes_is_suggested() -> None:
     cardio = next(a for a in rank_areas(history, current, CATALOG) if a["area"] == "Cardio")
     assert cardio["home"] == ["Rowing machine"]
     assert cardio["reason"] == "0 of ~60 cardio minutes this week."
+
+
+def _ai_row(priorities: list[dict], done: dict | None) -> TrainingPriorities:
+    content = {"priorities": priorities, "keep_it_up": None, "wins": []}
+    if done is not None:
+        content["done"] = done
+    return TrainingPriorities(content=content, model="m", is_fallback=False)
+
+
+def test_ai_wording_dropped_once_its_muscles_are_trained() -> None:
+    # The AI answered on Monday morning, before any training this week.
+    _, monday = _weeks(_steady_logs())
+    row = _ai_row(
+        [
+            {
+                "area": "Upper push",
+                "muscles": ["chest", "triceps", "front_delts"],
+                "reason": "You haven't trained your chest this week.",
+                "gym": ["Bench press"],
+                "home": ["Push-up"],
+            },
+            {
+                "area": "Lower",
+                "muscles": ["glutes", "quads"],
+                "reason": "Legs are waiting for you.",
+                "gym": ["Goblet squat"],
+                "home": ["Goblet squat"],
+            },
+        ],
+        _done(monday),
+    )
+    # A short bench session and a row later: Upper push still ranks (front
+    # delts), but "you haven't trained your chest" is no longer true. Lower is
+    # untouched.
+    logs = [*_steady_logs(), _log(100, BENCH, MON, sets=2), _log(101, ROWER, MON, minutes=20)]
+    history, current = _weeks(logs)
+    areas = rank_areas(history, current, CATALOG)
+
+    card = {p["area"]: p for p in merge_card(areas, current, row)["priorities"]}
+
+    assert card["Upper push"]["reason"].startswith("Front delts: never trained")
+    assert card["Lower"]["reason"] == "Legs are waiting for you."
+
+
+def test_ai_wording_without_snapshot_is_not_trusted() -> None:
+    history, current = _weeks(_steady_logs())
+    areas = rank_areas(history, current, CATALOG)
+    lower = next(a for a in areas if a["area"] == "Lower")
+    row = _ai_row(
+        [
+            {
+                "area": "Lower",
+                "muscles": lower["muscles"],
+                "reason": "Old wording.",
+                "gym": lower["gym"],
+                "home": lower["home"],
+            }
+        ],
+        None,
+    )
+
+    card = {p["area"]: p for p in merge_card(areas, current, row)["priorities"]}
+
+    assert card["Lower"]["reason"] == lower["reason"]
 
 
 def test_validate_answer_drops_invented_names_and_areas() -> None:
