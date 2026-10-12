@@ -349,6 +349,16 @@ CATALOG: list[tuple[str, str, str, str, list[str], list[str], str, Decimal]] = [
     ),
     ("Treadmill", "lower", "cardio", "gym", ["calves"], [], "timed", Decimal("1.000")),
     (
+        "Elliptical",
+        "lower",
+        "cardio",
+        "gym",
+        ["quads", "glutes", "hamstrings"],
+        [],
+        "timed",
+        Decimal("1.000"),
+    ),
+    (
         "StairMaster",
         "lower",
         "cardio",
