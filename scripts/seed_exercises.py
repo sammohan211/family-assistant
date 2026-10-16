@@ -318,6 +318,16 @@ CATALOG: list[tuple[str, str, str, str, list[str], list[str], str, Decimal]] = [
         Decimal("1.000"),
     ),
     (
+        "Bodyweight squat",
+        "lower",
+        "strength",
+        "both",
+        ["quads", "glutes"],
+        ["hamstrings", "adductors"],
+        "bodyweight_fraction",
+        Decimal("0.650"),
+    ),
+    (
         "Romanian Dead Lift",
         "lower",
         "strength",
