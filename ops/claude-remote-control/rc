@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Manage the always-on Claude Remote Control sessions, one per repo in ~/repos.
+#   rc list                       repos on the server and whether each is on
+#   rc on <repo>                  start its session (and start it at boot)
+#   rc off <repo>                 stop it (stopping the repo you are talking from ends that session)
+#   rc restart <repo>
+#   rc attach <repo>              see its screen (Ctrl-a d to leave it running)
+#   rc add <github-name> <repo>   clone a repo, code only; then rc on <repo>
+set -euo pipefail
+repos="$HOME/repos"
+unit() { echo "claude-rc@$1.service"; }
+need_repo() { [ -d "$repos/$1/.git" ] || { echo "No repo $repos/$1. Try: rc list" >&2; exit 1; }; }
+case "${1:-list}" in
+  list)
+    for d in "$repos"/*/; do
+      r=$(basename "$d")
+      printf "%-24s %s\n" "$r" "$(systemctl --user is-active "$(unit "$r")" 2>/dev/null || true)"
+    done ;;
+  on)      need_repo "$2"; systemctl --user enable --now "$(unit "$2")"; echo "$2 is on." ;;
+  off)     systemctl --user disable --now "$(unit "$2")"; echo "$2 is off." ;;
+  restart) need_repo "$2"; systemctl --user restart "$(unit "$2")"; echo "$2 restarted." ;;
+  attach)  exec tmux -L "claude-$2" attach -t claude ;;
+  add)
+    [ $# -eq 3 ] || { echo "usage: rc add <github-name> <repo-folder>" >&2; exit 1; }
+    gh repo clone "sammohan211/$2" "$repos/$3"
+    echo "Cloned (code only). The first start needs the trust question answered:"
+    echo "  rc on $3, then rc attach $3, answer y, Ctrl-a d" ;;
+  *) sed -n '2,9p' "$0"; exit 1 ;;
+esac

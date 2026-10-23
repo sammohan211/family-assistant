@@ -139,6 +139,10 @@ The model is `OPENROUTER_MODEL` in `.env`; change it → `docker compose up -d a
 - **Disk filling** — `docker system prune` (removes only unused images/cache); check `/root/backups` rotation; `df -h`.
 - **Caddy site changes not taking effect** — see PRD §17.10 (validate + reload; single-file bind-mount inode gotcha).
 
+## Claude Remote Control (user `sam`)
+
+The box also runs always-on Claude Code sessions for the phone app, one per repo, as the unprivileged user `sam` (no sudo, no `docker` group, so it can't touch this stack). Setup, the `rc` command and gotchas: `ops/claude-remote-control/README.md`. After changing anything in that folder, run `ops/claude-remote-control/install.sh` from the laptop.
+
 ## Reference: layout
 
 ```
@@ -148,6 +152,7 @@ The model is `OPENROUTER_MODEL` in `.env`; change it → `docker compose up -d a
 ├── Caddyfile             # this app's site + `import sites/*.caddy` (multi-tenant edge, PRD §17.10)
 ├── sites/                # tenant site blocks (untracked; README explains)
 ├── alembic/versions/     # migrations
+├── ops/claude-remote-control/ # phone Claude sessions for user `sam` (not part of the stack)
 ├── scripts/              # deploy.sh, doctor.sh, rollback.sh, db-backup.sh, pull-backups.sh, seed_*.py
 ├── src/family_assistant/ # app code
 └── tests/
