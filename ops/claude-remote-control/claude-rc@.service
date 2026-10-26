@@ -1,0 +1,21 @@
+[Unit]
+Description=Claude Code Remote Control for %i (in tmux)
+
+[Service]
+Type=forking
+WorkingDirectory=%h/repos/%i
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# Each repo gets its own tmux server (-L), so the tmux process belongs to this service:
+# with a shared server, the second repo's session would live in the first repo's service.
+# Sessions are named after the repo in the app. One is opened in advance so the repo shows up
+# in the app's session list (without it, nothing is listed until you start a session there).
+ExecStart=/usr/bin/tmux -L claude-%i new-session -d -s claude %h/.local/bin/claude remote-control --remote-control-session-name-prefix %i --spawn=same-dir
+# Note Claude's pid, end the tmux session, then wait for Claude to exit: a new one started
+# before then refuses to run in this folder. The "-" ignores errors after a crash.
+ExecStop=-/bin/sh -c 'p=$$(tmux -L claude-%i display-message -p -t claude "#{pane_pid}" 2>/dev/null); tmux -L claude-%i kill-server 2>/dev/null; while [ -n "$$p" ] && kill -0 $$p 2>/dev/null; do sleep 1; done'
+TimeoutStopSec=30
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=default.target
