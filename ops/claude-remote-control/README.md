@@ -46,6 +46,7 @@ About 385 MB per repo, because each opens one session in advance. With the stack
 ## Gotchas
 
 - **Each repo needs its own tmux server** (`tmux -L claude-<repo>`). With a shared server, the second repo's session lives inside the first repo's service, so systemd decides the second one died and keeps restarting it.
+- **Stale session pointer.** Claude saves the repo's session in `~/.claude/projects/-home-sam-repos-<Repo>/bridge-pointer.json` and resumes it on the next start. If that session was archived or ended in the app, the start shows `Session failed: Process exited with error cse_…` with the same ID every time, and nothing appears in the app even though `rc list` says active. The service's `ExecStartPost` catches this: it moves the pointer to `bridge-pointer.json.failed` and fails the start, so the session is back about 30 s later as a fresh one.
 - **Restart race.** A new `claude remote-control` refuses with "This folder is already served by a terminal `claude remote-control` on this device" while the old one is still exiting (~2 s). `ExecStop` waits for Claude's pid to exit.
 - **Hard crash (`kill -9`).** Claude can't sign off, so the "already served" record stays on Anthropic's side for about 2½ minutes. The service retries every 30 s and is back within ~3 minutes.
 - **Keep the advance session.** With `--no-create-session-in-dir`, the repo doesn't appear in the app's session list at all.
