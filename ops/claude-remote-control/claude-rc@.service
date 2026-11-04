@@ -10,6 +10,12 @@ Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 # Sessions are named after the repo in the app. One is opened in advance so the repo shows up
 # in the app's session list (without it, nothing is listed until you start a session there).
 ExecStart=/usr/bin/tmux -L claude-%i new-session -d -s claude %h/.local/bin/claude remote-control --remote-control-session-name-prefix %i --spawn=same-dir
+# Claude keeps a bridge-pointer.json per repo and resumes that session on the next start. If the
+# session is gone (archived or ended in the app), the start shows "Session failed:" and nothing
+# appears in the app, on every restart. Watch the screen for 15 s (it shows "Connected" first and
+# the failure ~3 s later, so "Connected" proves nothing); on that error, move the pointer aside and
+# fail the start, so Restart= brings it back 30 s later with a fresh session.
+ExecStartPost=/bin/sh -c 'p=$$(printf %%s "%h/repos/%i" | sed "s/[^A-Za-z0-9]/-/g"); p="%h/.claude/projects/$$p/bridge-pointer.json"; for n in $$(seq 15); do sleep 1; s=$$(tmux -L claude-%i capture-pane -p -J -t claude -S - 2>/dev/null) || exit 0; case "$$s" in *"Session failed:"*) [ -f "$$p" ] && mv -f "$$p" "$$p.failed"; echo "Session failed to resume; moved $$p aside, restarting fresh"; exit 1;; esac; done'
 # Note Claude's pid, end the tmux session, then wait for Claude to exit: a new one started
 # before then refuses to run in this folder. The "-" ignores errors after a crash.
 ExecStop=-/bin/sh -c 'p=$$(tmux -L claude-%i display-message -p -t claude "#{pane_pid}" 2>/dev/null); tmux -L claude-%i kill-server 2>/dev/null; while [ -n "$$p" ] && kill -0 $$p 2>/dev/null; do sleep 1; done'
