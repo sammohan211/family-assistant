@@ -107,7 +107,7 @@ Restore into an *empty* DB: `docker compose down -v` → `up -d` → restore →
 ./scripts/pull-backups.sh --fresh   # take a new dump on the VPS first
 ```
 
-It never deletes local files, so the laptop keeps history the VPS has rotated out (deploy/manual dumps share the 14-file rotation, so the VPS can hold under a week after a busy stretch). It verifies the newest dump and saves `.env` (secrets — mode 600), `Caddyfile` and `sites/` under `~/family-backups/config/<date>/`. Override the target with `VPS=`/`DEST=` env vars.
+It keeps the newest 7 dumps and 2 config snapshots on the laptop and deletes older ones (`KEEP_DUMPS=`/`KEEP_CONFIGS=` to change), only after the newest dump passes its check. Run it at least weekly: deploy/manual dumps share the VPS's 14-file rotation, so the VPS can hold under a week after a busy stretch. It verifies the newest dump and saves `.env` (secrets — mode 600), `Caddyfile` and `sites/` under `~/family-backups/config/<date>/`. Override the target with `VPS=`/`DEST=` env vars.
 
 Plus an occasional Hetzner snapshot (console or `hcloud server create-image --type snapshot`) as a whole-server net.
 

@@ -3,7 +3,9 @@
 #
 # Pulls every DB dump from the VPS (/root/backups/) into a local folder, plus a
 # dated snapshot of the config a rebuild needs (.env, Caddyfile, sites/).
-# Never deletes local files, so the laptop keeps history the VPS has rotated out.
+# Keeps the newest KEEP_DUMPS dumps (default 7) and KEEP_CONFIGS config
+# snapshots (default 2) and deletes older ones, only after the newest dump
+# passes its check.
 #
 #   ./scripts/pull-backups.sh           # pull what's there
 #   ./scripts/pull-backups.sh --fresh   # take a new dump on the VPS first
@@ -13,6 +15,8 @@ VPS="${VPS:-family-assistant}"                  # ssh host alias (see ~/.ssh/con
 REMOTE_REPO="${REMOTE_REPO:-/root/family-assistant}"
 REMOTE_BACKUPS="${REMOTE_BACKUPS:-/root/backups}"
 DEST="${DEST:-$HOME/family-backups}"
+KEEP_DUMPS="${KEEP_DUMPS:-7}"
+KEEP_CONFIGS="${KEEP_CONFIGS:-2}"
 
 if [ "${1:-}" = "--fresh" ]; then
   echo "== Taking a fresh dump on $VPS"
@@ -40,4 +44,9 @@ chmod 700 "$DEST/config"
 rsync -a "$VPS:$REMOTE_REPO/.env" "$VPS:$REMOTE_REPO/Caddyfile" "$VPS:$REMOTE_REPO/sites" "$CONF/"
 chmod 600 "$CONF/.env"
 
-echo "== Done: $(ls -1 "$DEST"/*.sql.gz | wc -l) dumps in $DEST"
+# Retention. Names sort by date (family_assistant_YYYYMMDD_HHMM, config/YYYYMMDD).
+echo "== Keeping newest $KEEP_DUMPS dumps and $KEEP_CONFIGS config snapshots"
+ls -1 "$DEST"/family_assistant_*.sql.gz | sort -r | tail -n +$((KEEP_DUMPS + 1)) | xargs -r rm -f --
+ls -1d "$DEST"/config/*/ | sort -r | tail -n +$((KEEP_CONFIGS + 1)) | xargs -r rm -rf --
+
+echo "== Done: $(ls -1 "$DEST"/*.sql.gz | wc -l) dumps, $(ls -1d "$DEST"/config/*/ | wc -l) configs in $DEST"
