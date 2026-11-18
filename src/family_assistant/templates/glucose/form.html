@@ -22,7 +22,7 @@
 
   {% set date_val = form_data.date if 'date' in form_data else (reading.date.isoformat() if reading else '') %}
   {% set time_val = form_data.reading_time if 'reading_time' in form_data else (reading.reading_time.strftime('%H:%M') if reading and reading.reading_time else '') %}
-  {% set value_val = form_data.value_mg_dl if 'value_mg_dl' in form_data else (reading.value_mg_dl|string if reading else '') %}
+  {% set value_val = form_data.value_mmol_l if 'value_mmol_l' in form_data else (reading.value_mmol_l|string if reading else '') %}
   {% set context_val = form_data.context if 'context' in form_data else (reading.context if reading else '') %}
   {% set notes_val = form_data.notes if 'notes' in form_data else (reading.notes if reading and reading.notes else '') %}
 
@@ -45,9 +45,9 @@
     </div>
 
     <div>
-      <label for="value_mg_dl" class="block text-sm font-medium text-gray-700">Reading</label>
-      <input id="value_mg_dl" name="value_mg_dl" type="number" min="20" max="600" step="1" required
-             value="{{ value_val }}" placeholder="mg/dL"
+      <label for="value_mmol_l" class="block text-sm font-medium text-gray-700">Reading (mmol/L)</label>
+      <input id="value_mmol_l" name="value_mmol_l" type="number" inputmode="decimal" min="1.1" max="33.3" step="0.1" required
+             value="{{ value_val }}" placeholder="e.g. 5.6"
              class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2.5 shadow-sm focus:border-accent focus:ring-accent">
     </div>
 

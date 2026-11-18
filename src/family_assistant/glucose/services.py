@@ -43,23 +43,24 @@ _CATEGORIES = (
 )
 
 
-def classify(value_mg_dl: int, context: str) -> tuple[str, str]:
-    """Return (label, tone) for a reading. Thresholds depend on context:
+def classify(value_mmol_l: Decimal, context: str) -> tuple[str, str]:
+    """Return (label, tone) for a reading in mmol/L. Thresholds follow
+    Diabetes Canada and depend on context:
 
-    fasting: normal <100, elevated 100-125, high 126+.
-    after_meal / random: normal <140, elevated 140-199, high 200+ (random
+    fasting: normal <6.1, elevated 6.1-6.9, high 7.0+.
+    after_meal / random: normal <7.8, elevated 7.8-11.0, high 11.1+ (random
     borrows the after-meal scale — the standard reference range for an
     unqualified "random glucose" reading).
     """
     if context == "fasting":
-        if value_mg_dl >= 126:
+        if value_mmol_l >= Decimal("7.0"):
             return _CATEGORIES[0]
-        if value_mg_dl >= 100:
+        if value_mmol_l >= Decimal("6.1"):
             return _CATEGORIES[1]
         return _CATEGORIES[2]
-    if value_mg_dl >= 200:
+    if value_mmol_l >= Decimal("11.1"):
         return _CATEGORIES[0]
-    if value_mg_dl >= 140:
+    if value_mmol_l >= Decimal("7.8"):
         return _CATEGORIES[1]
     return _CATEGORIES[2]
 
@@ -87,12 +88,12 @@ def get_reading(db: DbSession, reading_id: int) -> GlucoseReading | None:
     return db.get(GlucoseReading, reading_id)
 
 
-def create_reading(db, *, user, entry_date, reading_time, value_mg_dl, context, notes):
+def create_reading(db, *, user, entry_date, reading_time, value_mmol_l, context, notes):
     reading = GlucoseReading(
         user_id=user.id,
         date=entry_date,
         reading_time=reading_time,
-        value_mg_dl=value_mg_dl,
+        value_mmol_l=value_mmol_l,
         context=context,
         notes=notes.strip() if notes else None,
     )
@@ -102,13 +103,13 @@ def create_reading(db, *, user, entry_date, reading_time, value_mg_dl, context, 
     return reading
 
 
-def update_reading(db, *, reading_id, entry_date, reading_time, value_mg_dl, context, notes):
+def update_reading(db, *, reading_id, entry_date, reading_time, value_mmol_l, context, notes):
     reading = db.get(GlucoseReading, reading_id)
     if reading is None:
         return None
     reading.date = entry_date
     reading.reading_time = reading_time
-    reading.value_mg_dl = value_mg_dl
+    reading.value_mmol_l = value_mmol_l
     reading.context = context
     reading.notes = notes.strip() if notes else None
     db.commit()
@@ -135,7 +136,7 @@ def week_start(reference: date) -> date:
     return reference - timedelta(days=reference.weekday())
 
 
-def _avg(values: list[int]) -> Decimal | None:
+def _avg(values: list[Decimal]) -> Decimal | None:
     if not values:
         return None
     raw = Decimal(sum(values)) / Decimal(len(values))
@@ -177,7 +178,7 @@ def trends(db: DbSession, *, user: User, weeks: int = 12) -> TrendSummary:
     by_context: dict[str, list[GlucoseReading]] = {c: [] for c in CONTEXTS}
 
     for r in readings:
-        label, tone = classify(r.value_mg_dl, r.context)
+        label, tone = classify(r.value_mmol_l, r.context)
         tone_counts[tone] = tone_counts.get(tone, 0) + 1
         label_by_tone[tone] = label
         by_week.setdefault(week_start(r.date), []).append(r)
@@ -187,7 +188,7 @@ def trends(db: DbSession, *, user: User, weeks: int = 12) -> TrendSummary:
         WeeklyGlucose(
             week_start=ws,
             count=len(group),
-            avg_value=_avg([r.value_mg_dl for r in group]),
+            avg_value=_avg([r.value_mmol_l for r in group]),
         )
         for ws, group in sorted(by_week.items(), reverse=True)[:weeks]
     ]
@@ -196,7 +197,7 @@ def trends(db: DbSession, *, user: User, weeks: int = 12) -> TrendSummary:
         ContextAverage(
             context=c,
             label=CONTEXT_LABELS[c],
-            avg_value=_avg([r.value_mg_dl for r in group]),
+            avg_value=_avg([r.value_mmol_l for r in group]),
             count=len(group),
         )
         for c, group in by_context.items()
@@ -211,7 +212,7 @@ def trends(db: DbSession, *, user: User, weeks: int = 12) -> TrendSummary:
         {
             "date": r.date.isoformat(),
             "time": r.reading_time.strftime("%H:%M") if r.reading_time else None,
-            "value": r.value_mg_dl,
+            "value": float(r.value_mmol_l),
             "context": r.context,
             "notes": r.notes or "",
         }
@@ -220,7 +221,7 @@ def trends(db: DbSession, *, user: User, weeks: int = 12) -> TrendSummary:
 
     return TrendSummary(
         count=len(readings),
-        avg_value=_avg([r.value_mg_dl for r in readings]),
+        avg_value=_avg([r.value_mmol_l for r in readings]),
         latest=readings[0] if readings else None,
         category_counts=category_counts,
         context_averages=context_averages,

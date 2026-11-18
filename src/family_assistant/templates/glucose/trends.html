@@ -32,7 +32,7 @@
   <div class="grid gap-4 sm:grid-cols-3 mb-6">
     <div class="rounded-lg border border-gray-200 bg-white p-5">
       <p class="text-sm text-gray-500">Latest</p>
-      <p class="text-3xl font-semibold tabular-nums mt-1">{{ summary.latest.value_mg_dl }}</p>
+      <p class="text-3xl font-semibold tabular-nums mt-1">{{ summary.latest.value_mmol_l }}</p>
       {% if latest_category %}
       <span class="mt-2 inline-block text-xs font-medium px-2 py-1 rounded-full {{ tone_badge[latest_category[1]] }}">
         {{ latest_category[0] }}
@@ -44,8 +44,8 @@
     </div>
     <div class="rounded-lg border border-gray-200 bg-white p-5">
       <p class="text-sm text-gray-500">Average ({{ summary.count }} readings)</p>
-      <p class="text-3xl font-semibold tabular-nums mt-1">{{ "%g"|format(summary.avg_value) }}</p>
-      <p class="mt-1 text-xs text-gray-500">mg/dL, all contexts</p>
+      <p class="text-3xl font-semibold tabular-nums mt-1">{{ "%.1f"|format(summary.avg_value) }}</p>
+      <p class="mt-1 text-xs text-gray-500">mmol/L, all contexts</p>
     </div>
     <div class="rounded-lg border border-gray-200 bg-white p-5">
       <p class="text-sm text-gray-500">By category</p>
@@ -67,7 +67,7 @@
       <li class="rounded-md bg-gray-50 p-3">
         <p class="text-xs text-gray-500">{{ c.label }}</p>
         <p class="text-lg font-semibold tabular-nums">
-          {{ "%g"|format(c.avg_value) if c.avg_value is not none else '—' }}
+          {{ "%.1f"|format(c.avg_value) if c.avg_value is not none else '—' }}
         </p>
         <p class="text-xs text-gray-500">{{ c.count }} reading{{ 's' if c.count != 1 else '' }}</p>
       </li>
@@ -81,7 +81,7 @@
         <tr>
           <th class="px-4 py-2 text-left font-medium text-gray-600">Week of</th>
           <th class="px-4 py-2 text-right font-medium text-gray-600">Readings</th>
-          <th class="px-4 py-2 text-right font-medium text-gray-600">Avg mg/dL</th>
+          <th class="px-4 py-2 text-right font-medium text-gray-600">Avg mmol/L</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-200">
@@ -89,7 +89,7 @@
         <tr>
           <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ w.week_start.strftime('%b %-d, %Y') }}</td>
           <td class="px-4 py-2 text-right tabular-nums text-gray-600">{{ w.count }}</td>
-          <td class="px-4 py-2 text-right tabular-nums font-medium">{{ "%g"|format(w.avg_value) }}</td>
+          <td class="px-4 py-2 text-right tabular-nums font-medium">{{ "%.1f"|format(w.avg_value) }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -127,13 +127,13 @@
         options: {
           scales: {
             x: { type: 'time', time: { unit: 'day' }, title: { display: true, text: 'Date' } },
-            y: { title: { display: true, text: 'mg/dL' } },
+            y: { title: { display: true, text: 'mmol/L' } },
           },
           plugins: {
             tooltip: {
               callbacks: {
                 label: function (item) {
-                  const base = `${item.dataset.label}: ${item.raw.y} mg/dL`;
+                  const base = `${item.dataset.label}: ${item.raw.y} mmol/L`;
                   return item.raw.notes ? [base, item.raw.notes] : base;
                 },
               },
