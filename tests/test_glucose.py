@@ -3,6 +3,7 @@ trends, and the owner-restricted routes (404 for anyone but the designated
 owner, per PRD §10.15/§13)."""
 
 from datetime import date, time
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -27,16 +28,19 @@ OWNER_EMAIL = "owner@example.com"
 
 
 def test_classify_fasting_thresholds() -> None:
-    assert classify(95, "fasting")[0] == "Normal"
-    assert classify(110, "fasting")[0] == "Elevated"
-    assert classify(130, "fasting")[0] == "High"
+    assert classify(Decimal("5.3"), "fasting")[0] == "Normal"
+    assert classify(Decimal("6.0"), "fasting")[0] == "Normal"
+    assert classify(Decimal("6.1"), "fasting")[0] == "Elevated"
+    assert classify(Decimal("6.9"), "fasting")[0] == "Elevated"
+    assert classify(Decimal("7.0"), "fasting")[0] == "High"
 
 
 def test_classify_after_meal_and_random_share_scale() -> None:
     for context in ("after_meal", "random"):
-        assert classify(120, context)[0] == "Normal"
-        assert classify(160, context)[0] == "Elevated"
-        assert classify(210, context)[0] == "High"
+        assert classify(Decimal("6.7"), context)[0] == "Normal"
+        assert classify(Decimal("7.8"), context)[0] == "Elevated"
+        assert classify(Decimal("11.0"), context)[0] == "Elevated"
+        assert classify(Decimal("11.1"), context)[0] == "High"
 
 
 # ---------------------------------------------------------------------------
@@ -50,11 +54,11 @@ def test_create_and_list(db_session: Session, seeded_user: User) -> None:
         user=seeded_user,
         entry_date=date(2024, 11, 9),
         reading_time=time(7, 0),
-        value_mg_dl=95,
+        value_mmol_l=Decimal("5.3"),
         context="fasting",
         notes="oatmeal",
     )
-    assert reading.value_mg_dl == 95
+    assert reading.value_mmol_l == Decimal("5.3")
     assert list_user_readings(db_session, user=seeded_user) == [reading]
 
 
@@ -64,7 +68,7 @@ def test_trends_aggregates_by_context(db_session: Session, seeded_user: User) ->
         user=seeded_user,
         entry_date=date(2024, 11, 11),
         reading_time=None,
-        value_mg_dl=95,
+        value_mmol_l=Decimal("5.3"),
         context="fasting",
         notes=None,
     )
@@ -73,7 +77,7 @@ def test_trends_aggregates_by_context(db_session: Session, seeded_user: User) ->
         user=seeded_user,
         entry_date=date(2024, 11, 11),
         reading_time=None,
-        value_mg_dl=155,
+        value_mmol_l=Decimal("8.6"),
         context="after_meal",
         notes="pasta",
     )
@@ -81,8 +85,8 @@ def test_trends_aggregates_by_context(db_session: Session, seeded_user: User) ->
     assert summary.count == 2
     assert summary.latest is not None and summary.latest.context == "after_meal"
     by_context = {c.context: c for c in summary.context_averages}
-    assert by_context["fasting"].avg_value == 95
-    assert by_context["after_meal"].avg_value == 155
+    assert by_context["fasting"].avg_value == Decimal("5.3")
+    assert by_context["after_meal"].avg_value == Decimal("8.6")
     assert len(summary.weekly) == 1
     assert summary.weekly[0].count == 2
     assert len(summary.chart_points) == 2
@@ -147,7 +151,7 @@ def test_owner_list_and_create_flow(
         data={
             "date": "2024-11-09",
             "reading_time": "07:00",
-            "value_mg_dl": "95",
+            "value_mmol_l": "5.3",
             "context": "fasting",
             "notes": "oatmeal",
         },
@@ -156,7 +160,7 @@ def test_owner_list_and_create_flow(
     assert resp.status_code == 303
     readings = list_user_readings(db_session, user=owner_user)
     assert len(readings) == 1
-    assert readings[0].value_mg_dl == 95
+    assert readings[0].value_mmol_l == Decimal("5.3")
 
     assert owner_client.get("/glucose/trends").status_code == 200
 
@@ -164,11 +168,36 @@ def test_owner_list_and_create_flow(
 def test_create_rejects_invalid_context(owner_client: TestClient) -> None:
     resp = owner_client.post(
         "/glucose",
-        data={"date": "2024-11-09", "value_mg_dl": "95", "context": "bogus"},
+        data={"date": "2024-11-09", "value_mmol_l": "5.3", "context": "bogus"},
         follow_redirects=False,
     )
     assert resp.status_code == 400
     assert "context" in resp.text.lower()
+
+
+def test_create_rounds_reading_to_one_decimal(
+    owner_client: TestClient, db_session: Session, owner_user: User
+) -> None:
+    resp = owner_client.post(
+        "/glucose",
+        data={"date": "2024-11-09", "value_mmol_l": "5.66", "context": "random"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    readings = list_user_readings(db_session, user=owner_user)
+    assert readings[0].value_mmol_l == Decimal("5.7")
+
+
+@pytest.mark.parametrize("value", ["", "abc", "nan", "1e30", "1.0", "33.4", "95"])
+def test_create_rejects_bad_reading(owner_client: TestClient, value: str) -> None:
+    """95 is a plausible mg/dL value typed out of habit — out of range in mmol/L."""
+    resp = owner_client.post(
+        "/glucose",
+        data={"date": "2024-11-09", "value_mmol_l": value, "context": "random"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+    assert "Reading is required." in resp.text or "Reading must be" in resp.text
 
 
 def test_delete_removes_reading(
@@ -179,7 +208,7 @@ def test_delete_removes_reading(
         user=owner_user,
         entry_date=date(2024, 11, 9),
         reading_time=None,
-        value_mg_dl=100,
+        value_mmol_l=Decimal("5.6"),
         context="random",
         notes=None,
     )

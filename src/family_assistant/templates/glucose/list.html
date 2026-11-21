@@ -30,7 +30,7 @@
       <thead class="bg-gray-50">
         <tr>
           <th class="px-4 py-2 text-left font-medium text-gray-600">When</th>
-          <th class="px-4 py-2 text-right font-medium text-gray-600">mg/dL</th>
+          <th class="px-4 py-2 text-right font-medium text-gray-600">mmol/L</th>
           <th class="px-4 py-2 text-left font-medium text-gray-600">Context</th>
           <th class="px-4 py-2 text-left font-medium text-gray-600">Category</th>
           <th class="px-4 py-2 text-left font-medium text-gray-600">Notes</th>
@@ -47,7 +47,7 @@
             {% endif %}
           </td>
           <td class="px-4 py-2 text-right font-medium tabular-nums whitespace-nowrap">
-            {{ reading.value_mg_dl }}
+            {{ reading.value_mmol_l }}
           </td>
           <td class="px-4 py-2 whitespace-nowrap text-gray-600">{{ context_labels[reading.context] }}</td>
           <td class="px-4 py-2 whitespace-nowrap">

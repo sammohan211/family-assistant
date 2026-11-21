@@ -11,6 +11,7 @@ is UX only — ``require_owner`` is the real gate.
 """
 
 from datetime import date, datetime, time
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
@@ -35,6 +36,10 @@ from family_assistant.glucose.services import (
 )
 from family_assistant.settings import get_settings
 from family_assistant.templating import templates
+
+# Accepted reading range in mmol/L (roughly what a home glucometer can display).
+READING_MIN = Decimal("1.1")
+READING_MAX = Decimal("33.3")
 
 
 def require_owner(user: Annotated[User, Depends(require_user)]) -> User:
@@ -76,19 +81,21 @@ def _parse_time(value: str) -> tuple[time | None, str | None]:
         return None, "Time must be HH:MM."
 
 
-def _parse_required_int(
-    raw: str, label: str, *, low: int, high: int
-) -> tuple[int | None, str | None]:
+def _parse_reading(raw: str) -> tuple[Decimal | None, str | None]:
+    """A reading in mmol/L, rounded to one decimal place like a glucometer shows."""
     cleaned = (raw or "").strip()
     if not cleaned:
-        return None, f"{label} is required."
+        return None, "Reading is required."
     try:
-        value = int(cleaned)
-    except ValueError:
-        return None, f"{label} must be a whole number."
-    if not (low <= value <= high):
-        return None, f"{label} must be between {low} and {high}."
-    return value, None
+        value = Decimal(cleaned)
+    except InvalidOperation:
+        return None, "Reading must be a number, e.g. 5.6."
+    if not value.is_finite():
+        return None, "Reading must be a number, e.g. 5.6."
+    # Range-check before rounding: quantize raises on huge inputs like 1e30.
+    if not (READING_MIN <= value <= READING_MAX):
+        return None, f"Reading must be between {READING_MIN} and {READING_MAX} mmol/L."
+    return value.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP), None
 
 
 def _parse_context(raw: str) -> tuple[str | None, str | None]:
@@ -135,7 +142,7 @@ def list_view(
     user: Annotated[User, Depends(require_owner)],
 ) -> Response:
     readings = list_user_readings(db, user=user)
-    rows = [(r, *classify(r.value_mg_dl, r.context)) for r in readings]
+    rows = [(r, *classify(r.value_mmol_l, r.context)) for r in readings]
     return templates.TemplateResponse(
         request,
         "glucose/list.html",
@@ -156,7 +163,7 @@ def trends_view(
 ) -> Response:
     summary = trends(db, user=user)
     latest_category = (
-        classify(summary.latest.value_mg_dl, summary.latest.context) if summary.latest else None
+        classify(summary.latest.value_mmol_l, summary.latest.context) if summary.latest else None
     )
     return templates.TemplateResponse(
         request,
@@ -195,14 +202,14 @@ def _validate_and_save(
     form_data = {
         "date": date_raw,
         "reading_time": time_raw,
-        "value_mg_dl": value_raw,
+        "value_mmol_l": value_raw,
         "context": context_raw,
         "notes": notes,
     }
 
     entry_date, date_error = _parse_date(date_raw)
     reading_time, time_error = _parse_time(time_raw)
-    value, value_error = _parse_required_int(value_raw, "Reading", low=20, high=600)
+    value, value_error = _parse_reading(value_raw)
     context, context_error = _parse_context(context_raw)
 
     error = date_error or time_error or value_error or context_error
@@ -223,7 +230,7 @@ def _validate_and_save(
             user=user,
             entry_date=entry_date,
             reading_time=reading_time,
-            value_mg_dl=value,
+            value_mmol_l=value,
             context=context,
             notes=notes or None,
         )
@@ -233,7 +240,7 @@ def _validate_and_save(
             reading_id=reading.id,
             entry_date=entry_date,
             reading_time=reading_time,
-            value_mg_dl=value,
+            value_mmol_l=value,
             context=context,
             notes=notes or None,
         )
@@ -247,7 +254,7 @@ def create_view(
     user: Annotated[User, Depends(require_owner)],
     date: Annotated[str, Form()] = "",
     reading_time: Annotated[str, Form()] = "",
-    value_mg_dl: Annotated[str, Form()] = "",
+    value_mmol_l: Annotated[str, Form()] = "",
     context: Annotated[str, Form()] = "",
     notes: Annotated[str, Form()] = "",
 ) -> Response:
@@ -258,7 +265,7 @@ def create_view(
         reading=None,
         date_raw=date,
         time_raw=reading_time,
-        value_raw=value_mg_dl,
+        value_raw=value_mmol_l,
         context_raw=context,
         notes=notes,
     )
@@ -285,7 +292,7 @@ def update_view(
     reading_id: int,
     date: Annotated[str, Form()] = "",
     reading_time: Annotated[str, Form()] = "",
-    value_mg_dl: Annotated[str, Form()] = "",
+    value_mmol_l: Annotated[str, Form()] = "",
     context: Annotated[str, Form()] = "",
     notes: Annotated[str, Form()] = "",
 ) -> Response:
@@ -299,7 +306,7 @@ def update_view(
         reading=reading,
         date_raw=date,
         time_raw=reading_time,
-        value_raw=value_mg_dl,
+        value_raw=value_mmol_l,
         context_raw=context,
         notes=notes,
     )

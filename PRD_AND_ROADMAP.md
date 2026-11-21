@@ -150,7 +150,7 @@ Shipped 2026-06-29 (migration 0024, PR #2) at `/projects` — per-user, private.
 
 ### 10.15 Blood Sugar Module
 
-Shipped 2026-09-20 (migration `0025`). Per-user glucose reading log at `/glucose`, mirroring the BP module's shape (§10.9): date, **optional time** (kept optional, matching BP — friction reduction matters more than precision, and the context tag already carries most of the "when in the day" signal), reading value in **mg/dL only** (required — no mmol/L support; US convention, matches the owner's glucometer), a reading-context tag, optional free-text notes (per-reading, same as BP — this is what the chart tooltip surfaces, e.g. what was eaten).
+Shipped 2026-09-20 (migration `0025`). Per-user glucose reading log at `/glucose`, mirroring the BP module's shape (§10.9): date, **optional time** (kept optional, matching BP — friction reduction matters more than precision, and the context tag already carries most of the "when in the day" signal), reading value in **mmol/L only**, one decimal place (required; the Canadian convention. Shipped as mg/dL, switched 2026-11-18 by migration `0030`, which converted existing readings at mg/dL ÷ 18), a reading-context tag, optional free-text notes (per-reading, same as BP — this is what the chart tooltip surfaces, e.g. what was eaten).
 
 **Context tags — three, each with UI helper subtext so picking one is unambiguous:**
 - `fasting` — "No food or drink (except water) for 8+ hours, typically first thing in the morning"
@@ -158,12 +158,14 @@ Shipped 2026-09-20 (migration `0025`). Per-user glucose reading log at `/glucose
 - `random` — "Any other time — spot-check, bedtime, etc."
 
 **Category label — context-aware, unlike BP's single fixed scale** (fasting and post-meal have genuinely different normal ranges, so one scale would mislead): derived on read, shown as a badge, descriptive only, never advice, same posture as BP (§5.4).
-- `fasting`: normal <100, elevated 100–125, high 126+
-- `after_meal` and `random`: normal <140, elevated 140–199, high 200+ (random borrows the after-meal scale — the standard ADA reference for an unqualified "random glucose" reading)
+- `fasting`: normal <6.1, elevated 6.1–6.9, high 7.0+
+- `after_meal` and `random`: normal <7.8, elevated 7.8–11.0, high 11.1+ (random borrows the after-meal scale — the standard reference for an unqualified "random glucose" reading)
+
+Thresholds follow Diabetes Canada (switched from the ADA mg/dL scale along with the units; the fasting "elevated" floor is 6.1, where ADA's equivalent is 5.6).
 
 **Medication/insulin dose: explicitly out of scope** — reading + context + notes only, consistent with the medical-records non-goal (§5.4); anything ad hoc can go in the notes field.
 
-**In-app charting at `/glucose/trends`** (Chart.js + the date-fns adapter, via CDN — the app's first charting library, fits the existing CDN-only frontend, no bundler): a scatter chart of readings over time (x = date/time, y = mg/dL), one series per context tag (fasting/after_meal/random, distinct colors), tooltip on each point showing its note text. Chosen over exporting to an external tool (Sheets/Excel) specifically because this module's privacy motivation (owner-only) would be undercut by round-tripping the data through a third-party spreadsheet. Alongside the chart: latest reading, overall average, category distribution, per-context averages, per-ISO-week averages — parallel to `/bp/trends`.
+**In-app charting at `/glucose/trends`** (Chart.js + the date-fns adapter, via CDN — the app's first charting library, fits the existing CDN-only frontend, no bundler): a scatter chart of readings over time (x = date/time, y = mmol/L), one series per context tag (fasting/after_meal/random, distinct colors), tooltip on each point showing its note text. Chosen over exporting to an external tool (Sheets/Excel) specifically because this module's privacy motivation (owner-only) would be undercut by round-tripping the data through a third-party spreadsheet. Alongside the chart: latest reading, overall average, category distribution, per-context averages, per-ISO-week averages — parallel to `/bp/trends`.
 
 **Restricted to a single specific user — not just private-per-user like BP/Hikes, but invisible and unreachable to the other adult entirely.** This is the app's first whole-module single-user restriction, a deliberate, narrow departure from §13's "no roles, both adults identical" permissions model. **Owner is hardcoded to `settings.user1_email`** (no dedicated setting — avoids unneeded config surface for a single fixed owner). Implementation, built fresh (no prior precedent for whole-module restriction — see §13):
 
